@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+    {% block script %}{% endblock %}
+</head>
+<body>
+    <center>
+        <h1>用户信息管理</h1>
+        <a href="{% url 'indexusers' %}">浏览信息</a>
+        <a href="{% url 'addusers' %}">添加信息</a>
+        {% block content %}{% endblock %}
+    </center>
+</body>
+</html>

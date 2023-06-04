@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title>Image_View</title>
+</head>
+<body>
+<form action="{% url 'image_show' %}" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form }}
+    <input type="submit" value="提交">
+</form>
+<br><br><br>
+<h1>image_list</h1>
+<ul>
+{% for mymodel in mymodels %}
+<!--    <li>-->
+<!--<h3>{{ mymodel.name }}</h3>-->
+<!--        {% if mymodel.image %}-->
+<!--        <img src="{{ MEDIA_URL }}{{ mymodel.name }}">-->
+<!--        {% endif %}-->
+<!--    </li>-->
+<img src="media/{{ MEDIA_URL }}{{ mymodel.image }}" alt="{{ mymodel.image }}">
+<!--<img src="{{ file_path }}" alt="{{ mymodel.image }}">-->
+{% endfor %}
+</ul>
+</body>
+</html>
