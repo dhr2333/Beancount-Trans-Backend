@@ -1,6 +1,3 @@
-import time
-
-
 def my_middleware(get_response):
     print("init被调用")
 

@@ -1,6 +1,9 @@
 .idea
 /media/
-/static/
+/static/*
+Pipfile.lock
+Pipfile
+docker-compose.yaml
 
 # __pycache
 /__pycache__/

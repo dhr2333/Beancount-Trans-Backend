@@ -9,6 +9,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from rest_framework import generics
 
+from mydemo import settings
 from .models import Expense_Map, Assets_Map
 from .serializers import ExpenseMapSerializer, AssetsMapSerializer
 
@@ -37,7 +38,6 @@ def wechat_expend(data, key_list):
 
 
 def alipay_expend(data, key_list):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
     expend = ""
     type = data[3]
     if type == "转账收款到余额宝":
@@ -64,7 +64,6 @@ def alipay_expend(data, key_list):
 
 
 def get_expend(data):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]    for key in key_list:
     expend = ""
     # 获取数据库中key的所有值，将其处理为列表
     if data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
@@ -114,7 +113,6 @@ def wechat_account(data, key_list):
 
 
 def alipay_account(data, key_list):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
     account = ""
     type = data[3]
     if type == "转账收款到余额宝":
@@ -141,7 +139,6 @@ def alipay_account(data, key_list):
 
 
 def get_account(data):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
     account = ""
     key = data[6]
     if "&" in key:  # 该判断用于解决支付宝中"&[红包]"导致无法被匹配的问题
@@ -172,7 +169,6 @@ def get_account(data):
 
 
 def get_payee(data):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
     # 初始数值为data[2]
     # 获取数据库中数据与object和commodity进行对比
     # 如果数据库中数据在object或comdodity中，获取数据库中的payee
@@ -208,29 +204,9 @@ def get_payee(data):
                     if payee == "/":
                         payee = data[1]
                 return payee  # 这里直接返回是为了防止object和commodity被多次匹配导致结果被更新
-            # else:
-            #     if payee == "/" and data[9] == "wechat":
-            #         payee = data[1]
     return payee
-    #     payee = expend_instance.payee
-    #     if payee == "" and data[9] == "alipay":
-    #         payee = data[2]
-    #     else:
-    #         payee = data[1]
-    # if payee == "" and data[9] == "wechat":
-    #     payee = data[1]
-    # elif payee == "" and data[9] == "alipay":
-    #     payee = data[2]
-    # else:
-    #     payee = data[1]
-    # return payee
-
-    # if payee == "/":  # 一般都是各账户间转账，例如零钱->零钱通，银行->零钱通，零钱通->银行等
-    #     payee = data[1]
-
 
 def get_notes(data):
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
     notes = data[3]
     if data[4] == "/":
         notes = data[1]
@@ -314,10 +290,11 @@ def beancount_outfile(data):
                 continue
             mouth = shiji[5:7]
             year = shiji[0:4]
-            with open(
-                    "/home/daihaorui/Local/GitHub/Manager/Code/Python/study/project" + "/Assets" + "/beans" + "/" + year + "/" + mouth + ".bean",
-                    mode='a') as file:
-                file.write(shiji)
+            # os.path.dirname(settings.BASE_DIR) 获取当前文件所在的Django项目的根目录的父目录（将解析后的数据存放于该项目的同级目录Assets）
+            print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
+            # with open(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean",
+            #           mode='a') as file:
+            #     file.write(shiji)
         else:
             continue
 

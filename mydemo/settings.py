@@ -9,8 +9,14 @@ https://docs.djangoproject.com/en/4.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
-import os.path
+import os
 from pathlib import Path
+
+
+def env_to_bool(env, default):
+    str_val = os.environ.get(env)
+    return default if str_val is None else str_val == 'True'
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,10 +26,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_to_bool('DJANGO_DEBUG', True)
 
 ALLOWED_HOSTS = ['*']
 
@@ -87,11 +93,11 @@ DATABASES = {
         # 'ENGINE': 'django.db.backends.sqlite3',  # 默认
         # 'NAME': BASE_DIR / 'db.sqlite3',  # 默认
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'test',
-        'USER': 'root',
-        'PASSWORD': 'x4@JM!Kv5zzPomeQ',
-        'HOST': '127.0.0.1',
-        'PORT': '33306',
+        'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'test',
+        'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
+        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'x4@JM!Kv5zzPomeQ',
+        'HOST': os.environ.get('TRANS_MYSQL_HOST') or '127.0.0.1',
+        'PORT': os.environ.get('TRANS_MYSQL_PORT') or '33306',
         'TIME_ZONE': 'Asia/Shanghai',
     }
 }
@@ -102,10 +108,11 @@ CACHES = {
         # 'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': f'redis://127.0.0.1:36379/1',
         'OPTIONS': {
-            'password': os.environ.get("DJANGO_REDIS_PASSWORD"),
+            'password': os.environ.get("Trans_REDIS_PASSWORD"),
         },
     },
 }
+
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 # Password validation
@@ -129,9 +136,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'zh-hans'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Shanghai'
 
 USE_I18N = True
 
@@ -140,6 +147,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
+STATIC_ROOT = os.path.join(BASE_DIR, 'collectedstatic')
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static')
