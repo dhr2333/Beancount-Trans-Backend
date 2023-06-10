@@ -3,6 +3,7 @@
 /static/*
 Pipfile.lock
 Pipfile
+collectedstatic
 docker-compose.yaml
 
 # __pycache

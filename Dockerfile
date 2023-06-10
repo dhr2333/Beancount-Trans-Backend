@@ -7,4 +7,6 @@ ADD . .
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt && pip install gunicorn[gevent]
 
-ENTRYPOINT  ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+RUN chmod +x /code/beancount-trans/bin/docker_start.sh
+ENTRYPOINT ["/code/beancount-trans/bin/docker_start.sh"]

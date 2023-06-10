@@ -226,7 +226,7 @@ class UserDetailView(View):
 #             return HttpResponse("no files for upload!")
 #         else:
 #             # 打开特定的文件进行二进制的写操作;
-#             file_path = os.path.join("static", File.name)
+#             file_path = os.path.join("collectedstatic", File.name)
 #             with open(file_path, 'wb+') as f:
 #                 # 分块写入文件;
 #                 for chunk in File.chunks():

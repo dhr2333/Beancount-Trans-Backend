@@ -291,10 +291,10 @@ def beancount_outfile(data):
             mouth = shiji[5:7]
             year = shiji[0:4]
             # os.path.dirname(settings.BASE_DIR) 获取当前文件所在的Django项目的根目录的父目录（将解析后的数据存放于该项目的同级目录Assets）
-            print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
-            # with open(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean",
-            #           mode='a') as file:
-            #     file.write(shiji)
+            # print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
+            with open(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean",
+                      mode='a') as file:
+                file.write(shiji)
         else:
             continue
 
