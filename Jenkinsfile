@@ -14,11 +14,13 @@ pipeline {
             // }
         }
         stage('Build') {
+            echo 'hello'
             // steps {
             //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
             // }
         }
         stage('Deploy') {
+            echo 'hello'
             // steps {  // 192.168.254.23为kubernetes集群的master节点
             //     sshPublisher(publishers: [sshPublisherDesc(configName: '192.168.254.23', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''JAR_DIRECTORY=\'/usr/local/wlhiot/jenkins/svr/wlh-electric-0.0.1-SNAPSHOT.jar\'
             //     DOCKERFILE_DIRECTORY=\'/usr/local/wlhiot/container/docker/project/ebox/svr\'
@@ -37,14 +39,16 @@ pipeline {
             //     execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '/svr', remoteDirectorySDF: false, removePrefix: 'wlh-electric/target/', sourceFiles: 'wlh-electric/target/wlh-electric-0.0.1-SNAPSHOT.jar')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: true)])
             // }  // 先用自由风格的方式写完正常跑后再一步一步调整为Pipeline方式，无数次的测试和调整，放宽心
         }        
-        // stage('env') {
+        stage('env') {
+            echo 'hello'
         //     steps {
         //         echo 'This is a sonar step' 
         //         def sonarqubeScannerHome = tool name: 'sonar-scanner'
         //         echo sonarqubeScannerHome
         //     }
-        // }
+        }
         stage('sonarqube'){
+            echo 'hello'
             // steps {  // Jenkins下载sonarqube插件(包含sonarqube服务及sonar-scanner扫描器)后能通过sonar-scanner命令来自动监测
             //     // script {
             //     //     scannerHome = tool "sonar-scanner"
@@ -64,6 +68,7 @@ pipeline {
             // }
         }
         stage('Web Test') {  // 自己编写的Web测试
+            echo 'hello'
             // steps {
             //     sh '''#!/bin/bash
             //     /bin/sleep 120
