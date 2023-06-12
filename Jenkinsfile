@@ -53,8 +53,9 @@ pipeline {
         //     }
         }
         stage('sonarqube'){
-            echo 'hello'
-            // steps {  // Jenkins下载sonarqube插件(包含sonarqube服务及sonar-scanner扫描器)后能通过sonar-scanner命令来自动监测
+            steps{
+                echo 'hello'
+            }            // steps {  // Jenkins下载sonarqube插件(包含sonarqube服务及sonar-scanner扫描器)后能通过sonar-scanner命令来自动监测
             //     // script {
             //     //     scannerHome = tool "sonar-scanner"
             //     //     echo "${scannerHome}"
@@ -95,6 +96,8 @@ pipeline {
     }
     post {  // 不管构建结果，都执行以下步骤
         success{  // 构建成功时
+            echo 'hello'
+
             // dingtalk(  // 调用钉钉机器人输出
             //     robot: '86fa9893-5ae9-4e5e-b653-73fba6323e4e',
             //     type: 'MARKDOWN',
@@ -103,6 +106,7 @@ pipeline {
             //     )
         }
         failure{
+            echo 'hello'
             // emailext attachLog: true, body: '$DEFAULT_CONTENT', postsendScript: '$DEFAULT_POSTSEND_SCRIPT', presendScript: '$DEFAULT_PRESEND_SCRIPT', recipientProviders: [developers(), requestor()], replyTo: '$DEFAULT_REPLYTO', subject: '$DEFAULT_SUBJECT', to: 'daihaorui@wlhiot.com'  // 调用邮件输出
         }
     }
