@@ -14,13 +14,17 @@ pipeline {
             // }
         }
         stage('Build') {
-            echo 'hello'
+            steps{
+                echo 'hello'
+            }
             // steps {
             //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
             // }
         }
         stage('Deploy') {
-            echo 'hello'
+            steps{
+                echo 'hello'
+            }
             // steps {  // 192.168.254.23为kubernetes集群的master节点
             //     sshPublisher(publishers: [sshPublisherDesc(configName: '192.168.254.23', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''JAR_DIRECTORY=\'/usr/local/wlhiot/jenkins/svr/wlh-electric-0.0.1-SNAPSHOT.jar\'
             //     DOCKERFILE_DIRECTORY=\'/usr/local/wlhiot/container/docker/project/ebox/svr\'
@@ -40,8 +44,9 @@ pipeline {
             // }  // 先用自由风格的方式写完正常跑后再一步一步调整为Pipeline方式，无数次的测试和调整，放宽心
         }        
         stage('env') {
-            echo 'hello'
-        //     steps {
+            steps{
+                echo 'hello'
+            }        //     steps {
         //         echo 'This is a sonar step' 
         //         def sonarqubeScannerHome = tool name: 'sonar-scanner'
         //         echo sonarqubeScannerHome
@@ -68,8 +73,9 @@ pipeline {
             // }
         }
         stage('Web Test') {  // 自己编写的Web测试
-            echo 'hello'
-            // steps {
+            steps{
+                echo 'hello'
+            }            // steps {
             //     sh '''#!/bin/bash
             //     /bin/sleep 120
             //     cd /var/jenkins_home/mount/pytest/project/ebox/test/
@@ -79,6 +85,9 @@ pipeline {
             // }
         }
         stage('Allure Report') {  // 输出测试报告
+            steps{
+                echo 'hello'
+            }
             // steps {
             //     allure includeProperties: false, jdk: 'JDK8', report: 'allure-reports', results: [[path: 'wlh-electric/target/allure-results']]
             // }
