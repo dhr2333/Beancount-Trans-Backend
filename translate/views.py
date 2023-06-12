@@ -206,6 +206,7 @@ def get_payee(data):
                 return payee  # 这里直接返回是为了防止object和commodity被多次匹配导致结果被更新
     return payee
 
+
 def get_notes(data):
     notes = data[3]
     if data[4] == "/":
@@ -292,11 +293,62 @@ def beancount_outfile(data):
             year = shiji[0:4]
             # os.path.dirname(settings.BASE_DIR) 获取当前文件所在的Django项目的根目录的父目录（将解析后的数据存放于该项目的同级目录Assets）
             # print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
-            with open(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean",
-                      mode='a') as file:
+            file = os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean"
+            createdir(file)
+            with open(file, mode='a') as file:
                 file.write(shiji)
         else:
             continue
+
+
+def createdir(file_path):
+    file_list = [
+        "00.bean",
+        "01-expenses.bean",
+        "02-expenses.bean",
+        "03-expenses.bean",
+        "04-expenses.bean",
+        "05-expenses.bean",
+        "06-expenses.bean",
+        "07-expenses.bean",
+        "08-expenses.bean",
+        "09-expenses.bean",
+        "10-expenses.bean",
+        "11-expenses.bean",
+        "12-expenses.bean",
+        "cycle.bean",
+        "event.bean",
+        "income.bean",
+        "invoice.bean",
+        "price.bean",
+        "time.bean"
+    ]
+    insert_contents = '''include "01-expenses.bean"
+include "02-expenses.bean"
+include "03-expenses.bean"
+include "04-expenses.bean"
+include "05-expenses.bean"
+include "06-expenses.bean"
+include "07-expenses.bean"
+include "09-expenses.bean"
+include "10-expenses.bean"
+include "11-expenses.bean"
+include "12-expenses.bean"
+include "cycle.bean"
+include "event.bean"
+include "income.bean"
+include "invoice.bean"
+include "price.bean"
+include "time.bean"'''
+    dir_path = os.path.split(file_path)
+    if not os.path.isdir(dir_path):
+        os.makedirs(dir_path)
+        for file_name in file_list:  # 该for循环用于创建按年划分的所有文件
+            createfile = os.path.join(dir_path, file_name)
+            open(createfile, 'w').close()
+            if file_name == "00.bean":  # 00.bean文件会include其他文件来让beancount正确识别
+                with open(createfile, 'w') as f:
+                    f.write(insert_contents)
 
 
 # 支付宝
@@ -342,7 +394,7 @@ def wechatpay(reader):  # 返回的列表具体的值注释在该函数
         type = row[1]  # 交易类型（微信通过该字段判断各账户间转账，支付宝通过该字段判断分类(但分类并不准，推荐忽略)）
         object = row[2]  # 交易对方
         commodity = row[3]  # 商品（支付宝通过该字段判断各账户间转账）
-        balance = row[4]  # 收支(收入/支出/\//不计收支)
+        balance = row[4]  # 收支(收入/支出/不计收支)
         amount = row[5]  # 金额(￥10.00/10.00)
         way = row[6]  # 支付方式
         status = "交易成功"  # 交易状态(支付宝账单中存在很多其他状态，但处理的时候只会处理"交易成功"的数据，其他数据丢弃)

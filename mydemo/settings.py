@@ -93,11 +93,11 @@ DATABASES = {
         # 'ENGINE': 'django.db.backends.sqlite3',  # 默认
         # 'NAME': BASE_DIR / 'db.sqlite3',  # 默认
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'test',
+        'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
         'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
-        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'x4@JM!Kv5zzPomeQ',
+        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'xxx',
         'HOST': os.environ.get('TRANS_MYSQL_HOST') or '127.0.0.1',
-        'PORT': os.environ.get('TRANS_MYSQL_PORT') or '33306',
+        'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
         'TIME_ZONE': 'Asia/Shanghai',
     }
 }
