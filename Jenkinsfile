@@ -14,8 +14,8 @@ pipeline {
             // }
         }
         stage('Build') {
-            steps{
-                echo 'hello'
+            script {
+                def app = docker.build("my-container")
             }
             // steps {
             //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
