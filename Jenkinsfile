@@ -21,9 +21,9 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
-                    // docker.withRegistry('unix:///var/run/docker.sock', 'docker-hub-credentials') {
-                    //     def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                    docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
+                    // docker.withRegistry('unix:///var/run/docker.sock', 'credentialsId: f3d77277-2cf3-4907-9bbd-6a81a5692e3b') {
+                    //     def customImage = docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
                     //     customImage.push()
                     // }
                 }
@@ -34,7 +34,12 @@ pipeline {
         }
         stage('Deploy') {
             steps{
-                echo 'hello'
+                script{
+                    docker.withRegistry('unix:///var/run/docker.sock', 'credentialsId: f3d77277-2cf3-4907-9bbd-6a81a5692e3b') {
+                        def customImage = docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
+                        customImage.push()
+                    }
+                }
             }
             // steps {  // 192.168.254.23为kubernetes集群的master节点
             //     sshPublisher(publishers: [sshPublisherDesc(configName: '192.168.254.23', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''JAR_DIRECTORY=\'/usr/local/wlhiot/jenkins/svr/wlh-electric-0.0.1-SNAPSHOT.jar\'
