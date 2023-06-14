@@ -21,10 +21,11 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    docker.withRegistry('unix:///var/run/docker.sock', 'docker-hub-credentials') {
-                        def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
-                        customImage.push()
-                    }
+                    docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                    // docker.withRegistry('unix:///var/run/docker.sock', 'docker-hub-credentials') {
+                    //     def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                    //     customImage.push()
+                    // }
                 }
             }
             // steps {
