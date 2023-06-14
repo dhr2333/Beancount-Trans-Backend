@@ -20,6 +20,7 @@ pipeline {
                         def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
                         customImage.push()
                     }
+                }
             }
             // steps {
             //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
