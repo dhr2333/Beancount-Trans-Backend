@@ -13,6 +13,11 @@ pipeline {
             //     }
             // }
         }
+       stage('Test') {
+            steps{
+                echo 'hello'
+            }        
+       }
         stage('Build') {
             steps {
                 script {
@@ -23,9 +28,9 @@ pipeline {
                     // }
                 }
             }
-        //     // steps {
-        //     //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
-        //     // }
+            // steps {
+            //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
+            // }
         }
         stage('Deploy') {
             steps{
