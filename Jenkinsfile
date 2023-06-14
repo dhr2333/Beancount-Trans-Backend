@@ -26,7 +26,7 @@ pipeline {
         //     // steps {
         //     //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
         //     // }
-        // }
+        }
         stage('Deploy') {
             steps{
                 echo 'hello'
