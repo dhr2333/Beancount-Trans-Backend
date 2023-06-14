@@ -13,11 +13,6 @@ pipeline {
             //     }
             // }
         }
-       stage('Test') {
-            steps{
-                echo 'hello'
-            }        
-       }
         // stage('Build') {
         //     steps {
         //         script {
