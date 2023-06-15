@@ -21,25 +21,23 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                    def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
                 }
                     // docker.withRegistry('unix:///var/run/docker.sock', 'credentialsId: f3d77277-2cf3-4907-9bbd-6a81a5692e3b') {
                     //     def customImage = docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
                     //     customImage.push()
                     // }
             }
-            // steps {
-            //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
-            // }
         }
         stage('Push Docker Image') {
             steps{
                 script {
                     docker.withRegistry('https://harbor.dhr2333.cn:8080', 'credentialsId: a4a1bb2f-ee2a-4476-bc0f-f0b8df584cd1') {
-                        dockerImage.push()
+                        customImage.push()
                     }
                 }
             }
+        }
             // steps {  // 192.168.254.23为kubernetes集群的master节点
             //     sshPublisher(publishers: [sshPublisherDesc(configName: '192.168.254.23', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''JAR_DIRECTORY=\'/usr/local/wlhiot/jenkins/svr/wlh-electric-0.0.1-SNAPSHOT.jar\'
             //     DOCKERFILE_DIRECTORY=\'/usr/local/wlhiot/container/docker/project/ebox/svr\'
@@ -57,7 +55,6 @@ pipeline {
             //     kubectl apply -f $YAML_DIRECTORY''',
             //     execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '/svr', remoteDirectorySDF: false, removePrefix: 'wlh-electric/target/', sourceFiles: 'wlh-electric/target/wlh-electric-0.0.1-SNAPSHOT.jar')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: true)])
             // }  // 先用自由风格的方式写完正常跑后再一步一步调整为Pipeline方式，无数次的测试和调整，放宽心
-        }        
         stage('env') {
             steps{
                 echo 'hello'
