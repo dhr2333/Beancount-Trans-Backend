@@ -35,7 +35,7 @@ pipeline {
         stage('Push Docker Image') {
             steps{
                 script {
-                    docker.withDockerRegistry('https://harbor.dhr2333.cn:8080', 'credentialsId: a4a1bb2f-ee2a-4476-bc0f-f0b8df584cd1') {
+                    docker.withRegistry('https://harbor.dhr2333.cn:8080', 'credentialsId: a4a1bb2f-ee2a-4476-bc0f-f0b8df584cd1') {
                         dockerImage.push()
                     }
                 }
