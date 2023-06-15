@@ -29,6 +29,7 @@ docker pull harbor.dhr2333.cn:8080/library/beancount-trans:20230614''', execTime
                 echo 'Start Service'
             }
         }
+    }
     post {  // 不管构建结果，都执行以下步骤
         success{  // 构建成功时
             echo 'hello'
