@@ -18,26 +18,25 @@ pipeline {
                 echo 'hello'
             }        
        }
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
+                    docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                }
                     // docker.withRegistry('unix:///var/run/docker.sock', 'credentialsId: f3d77277-2cf3-4907-9bbd-6a81a5692e3b') {
                     //     def customImage = docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
                     //     customImage.push()
                     // }
-                }
             }
             // steps {
             //     sh "mvn -B -pl wlh-electric -am clean package"  // 调用maven打包
             // }
         }
-        stage('Deploy') {
+        stage('Push Docker Image') {
             steps{
                 script{
-                    docker.withRegistry('unix:///var/run/docker.sock', 'credentialsId: f3d77277-2cf3-4907-9bbd-6a81a5692e3b') {
-                        def customImage = docker.build("harbor.dhr2333.cn/library/beancount-trans:20230614")
-                        customImage.push()
+                    docker.withRegistry('https://harbor.dhr2333.cn:8080', 'credentialsId: a4a1bb2f-ee2a-4476-bc0f-f0b8df584cd1') {
+                        dockerImage.push()
                     }
                 }
             }
