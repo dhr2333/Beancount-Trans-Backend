@@ -12,18 +12,12 @@ pipeline {
                 echo 'hello'
             }        
        }
-        stage('Build Docker Image') {
+        stage('Build Image and Push') {
             steps {
                 script {
-                    docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
-                }
-            }
-        }
-        stage('Push Docker Image') {
-            steps{
-                script {
                     docker.withRegistry('http://harbor.dhr2333.cn:8080', 'a4a1bb2f-ee2a-4476-bc0f-f0b8df584cd1') {
-                        dockerImage.push()
+                        def customImage = docker.build("harbor.dhr2333.cn:8080/library/beancount-trans:20230614")
+                        customImage.push()
                     }
                 }
             }
