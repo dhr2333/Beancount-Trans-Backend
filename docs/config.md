@@ -6,8 +6,8 @@
 | -------------------- | :----------------------------------------------------------- | ------------------------------------------------------------ |
 | DJANGO_DEBUG         | True                                                         |                                                              |
 | DJANGO_SECRET_KEY    | django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf | 请务必修改，建议[随机生成](https://www.random.org/passwords/?num=5&len=24&format=html&rnd=new) |
-| TRANS_MYSQL_DATABASE | test                                                         |                                                              |
+| TRANS_MYSQL_DATABASE | beancount-trans                                                         |                                                              |
 | TRANS_MYSQL_USER     | root                                                         |                                                              |
-| TRANS_MYSQL_PASSWORD | x4@JM!Kv5zzPomeQ                                             |                                                              |
+| TRANS_MYSQL_PASSWORD | root                                             |                                                              |
 | TRANS_MYSQL_HOST     | 127.0.0.1                                                    |                                                              |
-| TRANS_MYSQL_PORT     | 33306                                                        |                                                              |
+| TRANS_MYSQL_PORT     | 3306                                                        |                                                              |

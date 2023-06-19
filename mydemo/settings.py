@@ -95,7 +95,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
         'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
-        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'xxx',
+        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',
         'HOST': os.environ.get('TRANS_MYSQL_HOST') or '127.0.0.1',
         'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
         'TIME_ZONE': 'Asia/Shanghai',

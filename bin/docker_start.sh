@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 NAME="beancount-trans" # Name of the application
 #DJANGODIR=/code/beancount-trans # Django project directory
-DJANGODIR=/home/daihaorui/Local/GitHub/Manager/Project/Beancount-Trans-Backend
+DJANGODIR=/code/beancount-trans
 USER=root # the user to run as
 GROUP=root # the group to run as
 NUM_WORKERS=1 # how many worker processes should Gunicorn spawn
