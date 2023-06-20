@@ -12,8 +12,8 @@ services:
     container_name: beancount-trans-backend
     restart: always
     command: bash -c 'sh /code/beancount-trans/bin/docker_start.sh'
-    ports:
-      - 38002:8000
+    # ports:
+    #   - 38002:8000
     volumes:
       - ../Beancount-Trans-Assets:/code/Assets
     environment:
@@ -41,7 +41,7 @@ services:
       --max_connections=1000
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_general_ci
-      --default-authentication-plugin=mysql_native_password    
+      --default-authentication-plugin=mysql_native_password
   beancount-trans-assets:
     image: harbor.dhr2333.cn:8080/library/beancount:latest
     container_name: beancount-trans-assets

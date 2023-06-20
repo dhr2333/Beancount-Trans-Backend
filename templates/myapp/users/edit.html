@@ -6,22 +6,22 @@ Edit
 <h3>编辑用户信息</h3>
 <form action="{% url 'updateusers' %}" method="post">
     {% csrf_token %}
-    <input type="hidden" name="id" value="{{users.id}}">
-    <table width="280" border="0">
+    <input name="id" type="hidden" value="{{users.id}}">
+    <table border="0" width="280">
         <tr>
             <td>姓名:</td>
-            <td><input type="text" name="name" value="{{users.name}}"></td>
+            <td><input name="name" type="text" value="{{users.name}}"></td>
         </tr>
         <tr>
             <td>年龄:</td>
-            <td><input type="text" name="age" value="{{users.age}}"></td>
+            <td><input name="age" type="text" value="{{users.age}}"></td>
         </tr>
         <tr>
             <td>电话:</td>
-            <td><input type="text" name="phone" value="{{users.phone}}"></td>
+            <td><input name="phone" type="text" value="{{users.phone}}"></td>
         </tr>
         <tr>
-            <td colspan="2" align="center">
+            <td align="center" colspan="2">
                 <input type="submit" value="修改">
                 <input type="reset" value="重置">
             </td>

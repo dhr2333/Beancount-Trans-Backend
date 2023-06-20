@@ -24,7 +24,9 @@ def wechat_expend(data, key_list):
             if key in data[2]:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
-                return expend
+            else:
+                expend = "Assets:Other"
+            return expend
     elif type == "零钱通转出":
         expend = "Assets:Savings:Web:WechatFund"
     elif type == "转入零钱通":
@@ -34,6 +36,8 @@ def wechat_expend(data, key_list):
             if key in result:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
+            else:
+                expend = "Assets:Other"
     return expend
 
 
@@ -52,6 +56,8 @@ def alipay_expend(data, key_list):
             if key in result:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
+            else:
+                expend = "Assets:Other"
     elif type == "余额宝-转出到银行卡":
         expend = "Assets:Savings:Web:AliFund"
     elif type == "充值-普通充值":
@@ -96,7 +102,7 @@ def wechat_account(data, key_list):
                 account_instance = Assets_Map.objects.get(key=key)
                 account = account_instance.income
                 return account
-        account = "Assets:Savings:Other"
+        account = "Assets:Other"
     elif type == "零钱充值":
         account = "Assets:Savings:Web:WechatPay"
     elif type == "零钱通转出":
@@ -106,7 +112,9 @@ def wechat_account(data, key_list):
             if key in result:
                 account_instance = Assets_Map.objects.get(key=key)
                 account = account_instance.income
-                return account
+            else:
+                account = "Assets:Other"
+            return account
     elif type == "转入零钱通":
         account = "Assets:Savings:Web:WechatFund"
     return account
@@ -129,6 +137,8 @@ def alipay_account(data, key_list):
             if key in result:
                 account_instance = Assets_Map.objects.get(key=key)
                 account = account_instance.income
+            else:
+                account = "Assets:Other"
     elif type == "充值-普通充值":
         account = "Assets:Savings:Web:AliPay"  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif type == "提现-实时提现":
@@ -293,7 +303,8 @@ def beancount_outfile(data):
             year = shiji[0:4]
             # os.path.dirname(settings.BASE_DIR) 获取当前文件所在的Django项目的根目录的父目录（将解析后的数据存放于该项目的同级目录Assets）
             # print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
-            file = os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean"
+            file = os.path.dirname(
+                settings.BASE_DIR) + "/Beancount-Trans-Assets" + "/" + year + "/" + mouth + "-expenses.bean"
             createdir(file)
             with open(file, mode='a') as file:
                 file.write(shiji)
@@ -340,9 +351,14 @@ include "income.bean"
 include "invoice.bean"
 include "price.bean"
 include "time.bean"'''
-    dir_path = os.path.split(file_path)
-    if not os.path.isdir(dir_path):
+    dir_path = os.path.split(file_path)[0]  # 获取账单的绝对路径，例如 */Beancount-Trans/Beancount-Trans-Assets/2023
+    dir_name = os.path.basename(dir_path)
+    if not os.path.isdir(dir_path):  # 判断年份账单是否存在，若不存在则创建目录并在main.bean中include该目录
         os.makedirs(dir_path)
+        insert_include = f'\ninclude "{dir_name}/00.bean"'
+        main_file = os.path.dirname(dir_path) + "/main.bean"
+        with open(main_file, 'a') as main:
+            main.write(insert_include)
         for file_name in file_list:  # 该for循环用于创建按年划分的所有文件
             createfile = os.path.join(dir_path, file_name)
             open(createfile, 'w').close()
