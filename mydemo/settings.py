@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_filters',
+    'coreapi',
     'corsheaders',
     'myapp',
     'translate',
@@ -58,7 +60,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'middleware.my_middleware',
 ]
 # CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
 CORS_ORIGIN_WHITELIST = [
@@ -90,8 +91,6 @@ WSGI_APPLICATION = 'mydemo.wsgi.application'
 
 DATABASES = {
     'default': {
-        # 'ENGINE': 'django.db.backends.sqlite3',  # 默认
-        # 'NAME': BASE_DIR / 'db.sqlite3',  # 默认
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
         'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
@@ -105,10 +104,9 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        # 'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': f'redis://127.0.0.1:36379/1',
         'OPTIONS': {
-            'password': os.environ.get("Trans_REDIS_PASSWORD"),
+            'password': os.environ.get("Trans_REDIS_PASSWORD") or 'root',
         },
     },
 }
@@ -160,3 +158,29 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',
+    ),
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '10000/minute',
+        'user': '10000/minute'
+    },
+    'DEFAULT_FILTER_BACKENDS': (
+        'django_filters.rest_framework.DjangoFilterBackend',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
+    'PAGE_SIZE': 100,
+    'EXCEPTION_HANDLER': 'exceptions.custom_exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
+}

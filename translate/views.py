@@ -7,7 +7,13 @@ from datetime import datetime
 import chardet
 from django.http import HttpResponse
 from django.shortcuts import render
-from rest_framework import generics
+from rest_framework import generics, filters
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
 
 from mydemo import settings
 from .models import Expense_Map, Assets_Map
@@ -462,6 +468,12 @@ class ExpenseMapDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class AssetsMapList(generics.ListCreateAPIView):
+    """
+    get:
+    返回所有账户信息
+    post:
+    新建账户映射
+    """
     queryset = Assets_Map.objects.all()
     serializer_class = AssetsMapSerializer
 
@@ -469,3 +481,45 @@ class AssetsMapList(generics.ListCreateAPIView):
 class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Assets_Map.objects.all()
     serializer_class = AssetsMapSerializer
+
+
+class LargeResultsSetPagination(PageNumberPagination):
+    page_size = 50
+    page_query_param = 'page'
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
+class ExpenseMapViewSet(ModelViewSet):
+    """
+    list:
+    返回支出映射列表数据
+    retrieve:
+    返回支出映射详情数据
+    latest:
+    返回最新的支出映射数据
+    read:
+    修改支出映射
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+    queryset = Expense_Map.objects.all()
+    serializer_class = ExpenseMapSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['key', 'payee']
+    ordering_fields = ['id', 'key']
+    pagination_class = LargeResultsSetPagination
+
+    @action(methods=['get'], detail=False)
+    def latest(self, request):
+        expense = Expense_Map.objects.latest('id')
+        serializer = self.get_serializer(expense)
+        return Response(serializer.data)
+
+    @action(methods=['put'], detail=True)
+    def order(self, request, pk):
+        expense = self.get_object()
+        expense.payee_order = request.data.get('payee_order')
+        expense.save()
+        serializer = self.get_serializer(expense)
+        return Response(serializer.data)
