@@ -45,7 +45,6 @@ INSTALLED_APPS = [
     'django_filters',
     'coreapi',
     'corsheaders',
-    'myapp',
     'translate',
     'rest_framework',
 ]
@@ -104,15 +103,22 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': f'redis://127.0.0.1:36379/0',
+        'OPTIONS': {
+            'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
+        },
+    },
+    'session': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': f'redis://127.0.0.1:36379/1',
         'OPTIONS': {
-            'password': os.environ.get("Trans_REDIS_PASSWORD") or 'root',
+            'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
     },
 }
 
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-SESSION_CACHE_ALIAS = "default"
+SESSION_CACHE_ALIAS = "session"
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
 
@@ -181,6 +187,54 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
     'PAGE_SIZE': 100,
-    'EXCEPTION_HANDLER': 'exceptions.custom_exception_handler',
+    'EXCEPTION_HANDLER': 'mydemo.utils.exceptions.custom_exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'root': {
+        'level': 'INFO',
+        'handlers': ['console', 'log_file'],
+    },
+    'formatters': {
+        'verbose': {
+            'format': '[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d %(module)s] %(message)s',
+        },
+        'simple': {
+            'format': '%(levelname)s [%(name)s.%(funcName)s:%(lineno)d %(module)s] %(message)s',
+        }
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
+        },
+    },
+    'handlers': {
+        'log_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs/brancount-trans.log'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'verbose',
+        },
+        'console': {
+            'level': 'DEBUG',
+            'filters': ['require_debug_true'],
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple'
+        },
+    },
+    'loggers': {
+        'beancount-trans': {
+            'handlers': ['log_file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    }
 }

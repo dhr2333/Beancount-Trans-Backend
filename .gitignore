@@ -4,11 +4,15 @@
 Pipfile.lock
 Pipfile
 collectedstatic
+/conf/prod.py
+logs/*.log
+static/*
 
 # __pycache
-/__pycache__/
-/myapp/__pycache__/
-/myapp/migrations/__pycache__/
-/mydemo/__pycache__/
+__pycache__/
+myapp/__pycache__/
+myapp/migrations/__pycache__/
+mydemo/__pycache__/
 translate/__pycache__/
 translate/migrations/__pycache__/
+conf/__pycache_/

@@ -11,11 +11,11 @@ from rest_framework import generics, filters
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from mydemo import settings
+from conf import dev
 from .models import Expense_Map, Assets_Map
 from .serializers import ExpenseMapSerializer, AssetsMapSerializer
 
@@ -502,7 +502,7 @@ class ExpenseMapViewSet(ModelViewSet):
     修改支出映射
     """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Expense_Map.objects.all()
     serializer_class = ExpenseMapSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
