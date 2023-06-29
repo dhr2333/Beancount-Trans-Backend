@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from conf import dev
+from mydemo import settings
 from .models import Expense_Map, Assets_Map
 from .serializers import ExpenseMapSerializer, AssetsMapSerializer
 
@@ -483,11 +483,11 @@ class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AssetsMapSerializer
 
 
-class LargeResultsSetPagination(PageNumberPagination):
-    page_size = 50
-    page_query_param = 'page'
-    page_size_query_param = 'page_size'
-    max_page_size = 50
+# class LargeResultsSetPagination(PageNumberPagination):
+#     page_size = 200
+#     page_query_param = 'page'
+#     page_size_query_param = 'page_size'
+#     max_page_size = 200
 
 
 class ExpenseMapViewSet(ModelViewSet):
@@ -508,7 +508,7 @@ class ExpenseMapViewSet(ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['key', 'payee']
     ordering_fields = ['id', 'key']
-    pagination_class = LargeResultsSetPagination
+    # pagination_class = LargeResultsSetPagination
 
     @action(methods=['get'], detail=False)
     def latest(self, request):

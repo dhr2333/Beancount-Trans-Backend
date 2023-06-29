@@ -4,7 +4,6 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('translate', '0012_delete_file_delete_mycmodel_and_more'),
     ]

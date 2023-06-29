@@ -103,14 +103,14 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f'redis://127.0.0.1:36379/0',
+        'LOCATION':  f'redis://127.0.0.1:36379/0' or str(os.environ.get("TRANS_REDIS_URL")) + "0",
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
     },
     'session': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f'redis://127.0.0.1:36379/1',
+        'LOCATION': f'redis://127.0.0.1:36379/1' or str(os.environ.get("TRANS_REDIS_URL")) + "1",
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
@@ -185,8 +185,8 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
-    'PAGE_SIZE': 100,
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
+    # 'PAGE_SIZE': 200,
     'EXCEPTION_HANDLER': 'mydemo.utils.exceptions.custom_exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
 }

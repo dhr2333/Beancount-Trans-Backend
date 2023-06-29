@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('translate', '0011_expense_map_payee_order_alter_assets_map_key_and_more'),
     ]
