@@ -7,15 +7,15 @@ from datetime import datetime
 import chardet
 from django.http import HttpResponse
 from django.shortcuts import render
+from mydemo import settings
 from rest_framework import generics, filters
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from django.db.models import Max
 
-from mydemo import settings
 from .models import Expense_Map, Assets_Map
 from .serializers import ExpenseMapSerializer, AssetsMapSerializer
 
@@ -30,6 +30,7 @@ def wechat_expend(data, key_list):
             if key in data[2]:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
+                return expend
             else:
                 expend = "Assets:Other"
             return expend
@@ -42,6 +43,7 @@ def wechat_expend(data, key_list):
             if key in result:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
+                return expend
             else:
                 expend = "Assets:Other"
     return expend
@@ -62,6 +64,7 @@ def alipay_expend(data, key_list):
             if key in result:
                 expend_instance = Assets_Map.objects.get(key=key)
                 expend = expend_instance.income
+                return expend
             else:
                 expend = "Assets:Other"
     elif type == "余额宝-转出到银行卡":
@@ -118,6 +121,7 @@ def wechat_account(data, key_list):
             if key in result:
                 account_instance = Assets_Map.objects.get(key=key)
                 account = account_instance.income
+                return account
             else:
                 account = "Assets:Other"
             return account
@@ -143,6 +147,7 @@ def alipay_account(data, key_list):
             if key in result:
                 account_instance = Assets_Map.objects.get(key=key)
                 account = account_instance.income
+                return account
             else:
                 account = "Assets:Other"
     elif type == "充值-普通充值":
@@ -166,6 +171,8 @@ def get_account(data):
             account_instance = Assets_Map.objects.get(key=key)
             account = account_instance.income
             return account
+        elif key == "" and data[9] == "alipay":  # 第三方平台到支付宝的收入
+            account = "Assets:Savings:Web:AliPay"
         else:
             if '(' in key and ')' in key:
                 digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分
@@ -208,18 +215,47 @@ def get_payee(data):
             payee = match.group(1)
     else:
         # for循环获取所有值，并与payee进行比对
-        for key in key_list:
-            if key in payee or key in data[3]:
-                expend_instance = Expense_Map.objects.get(key=key)
-                payee = expend_instance.payee
-                if payee == "" and data[9] == "alipay":
-                    payee = data[2]
-                    return payee
-                elif payee == "" and data[9] == "wechat":
-                    payee = data[2]
-                    if payee == "/":
-                        payee = data[1]
-                return payee  # 这里直接返回是为了防止object和commodity被多次匹配导致结果被更新
+        # expend_list = []
+        # for key in key_list:
+        #     if key in payee or key in data[3]:
+        #         expend_object = Expense_Map.objects.get(key=key)
+        #         expend_list.append(expend_object)
+        # try:
+        #     expend_instance = max(expend_list, key=lambda x: x.payee_order)
+        #     print("expend_list = ", expend_list, "expend_instance = ", expend_instance)
+        # except:
+        #     print("列表为空或payee_order 属性不存在")
+        # if expend_instance.payee is not None:
+        #     payee = expend_instance.payee
+        # if payee == "" and data[9] == "alipay":
+        #     payee = data[2]
+        #     return payee
+        # elif payee == "" and data[9] == "wechat":
+        #     payee = data[2]
+        #     if payee == "/":
+        #         payee = data[1]
+        # return payee  # 这里直接返回是为了防止object和commodity被多次匹配导致结果被更新
+
+        # for key in key_list:
+        #     if key in payee or key in data[3]:
+        matching_keys = [k for k in key_list if k in payee]
+        max_order = None
+        for matching_key in matching_keys:
+            expend_instance = Expense_Map.objects.filter(key__contains=matching_key).aggregate(max_order=Max('payee_order'))
+            matching_max_order = expend_instance['max_order']
+            if matching_max_order is not None and (max_order is None or matching_max_order > max_order):
+                max_order = matching_max_order
+                expend_instance = Expense_Map.objects.filter(key__contains=matching_key, payee_order=max_order).first()
+                if expend_instance is not None:
+                    payee = expend_instance.payee
+        if payee == "" and data[9] == "alipay":
+            payee = data[2]
+            return payee
+        elif payee == "" and data[9] == "wechat":
+            payee = data[2]
+            if payee == "/":
+                payee = data[1]
+        return payee
     return payee
 
 
@@ -295,7 +331,7 @@ def beancount_outfile(data):
             if row[2] == "兴全基金管理有限公司" or row[6] == "亲情卡(凯义(王凯义))":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
                 continue
             entry = format(row)
-            shiji = "{0} * \"{1}\" \"{2}\"\n    {3} {4}{5} \n    {6} {7}{8}\n\n".format(
+            shiji = "{0} * \"{1}\" \"{2}\"\n    {3} {4}{5}\n    {6} {7}{8}\n\n".format(
                 entry["date"], entry["payee"], entry["notes"], entry["expend"], entry["expend_fuhao"], entry["money"],
                 entry["account"], entry["account_fuhao"], entry["money"])
             if entry["notes"] == "零钱提现":
@@ -508,6 +544,7 @@ class ExpenseMapViewSet(ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['key', 'payee']
     ordering_fields = ['id', 'key']
+
     # pagination_class = LargeResultsSetPagination
 
     @action(methods=['get'], detail=False)
