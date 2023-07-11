@@ -1,33 +1,33 @@
 version: '3'
 
 services:
-#  beancount-trans-frontend:
-#    image: harbor.dhr2333.cn:8080/library/beancount-trans-frontend:latest
-#    container_name: beancount-trans-frontend
-#    restart: always
-#    ports:
-#      - "38001:80"
-#  beancount-trans-backend:
-#    image: harbor.dhr2333.cn:8080/library/beancount-trans-backend:latest
-#    container_name: beancount-trans-backend
-#    restart: always
-#    command: bash -c 'sh /code/beancount-trans/bin/docker_start.sh'
-#    ports:
-#      - "38000:8000"
-#      - "38002:8002"
-#    volumes:
-#      - ../Beancount-Trans-Assets:/code/Beancount-Trans-Assets
-#    environment:
-#      - DJANGO_DEBUG=False
-#      - TRANS_MYSQL_DATABASE=beancount-trans
-#      - TRANS_MYSQL_USER=root
-#      - TRANS_MYSQL_PASSWORD=root
-#      - TRANS_MYSQL_HOST=beancount-trans-mysql
-#      - TRANS_MYSQL_PORT=3306
-#      - TRANS_REDIS_URL=redis://beancount-trans-redis:6379/
-#      - TRANS_REDIS_PASSWORD=lCs6UMzirdFOuUEj8tIP
-#    depends_on:
-#      - beancount-trans-mysql
+  beancount-trans-frontend:
+      image: harbor.dhr2333.cn:8080/library/beancount-trans-frontend:latest
+      container_name: beancount-trans-frontend
+      restart: always
+      ports:
+        - "38001:80"
+  beancount-trans-backend:
+      image: harbor.dhr2333.cn:8080/library/beancount-trans-backend:latest
+      container_name: beancount-trans-backend
+      restart: always
+      command: bash -c 'sh /code/beancount-trans/bin/docker_start.sh'
+      ports:
+        - "38000:8000"
+        - "38002:8002"
+      volumes:
+        - ../Beancount-Trans-Assets:/code/Beancount-Trans-Assets
+      environment:
+        - DJANGO_DEBUG=False
+        - TRANS_MYSQL_DATABASE=beancount-trans
+        - TRANS_MYSQL_USER=root
+        - TRANS_MYSQL_PASSWORD=root
+        - TRANS_MYSQL_HOST=beancount-trans-mysql
+        - TRANS_MYSQL_PORT=3306
+        - TRANS_REDIS_URL=redis://beancount-trans-redis:6379/
+        - TRANS_REDIS_PASSWORD=lCs6UMzirdFOuUEj8tIP
+      depends_on:
+        - beancount-trans-mysql
   beancount-trans-mysql:
     image: harbor.dhr2333.cn:8080/library/mysql:8.0.26
     container_name: beancount-trans-mysql

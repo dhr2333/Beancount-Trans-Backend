@@ -1,12 +1,11 @@
 .idea
 /media/
-/static/*
 Pipfile.lock
 Pipfile
 collectedstatic
 /conf/prod.py
 logs/*.log
-static/*
+static
 
 # __pycache
 __pycache__/

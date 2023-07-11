@@ -5,17 +5,17 @@ import tempfile
 from datetime import datetime
 
 import chardet
+from django.db.models import Max
 from django.http import HttpResponse
 from django.shortcuts import render
-from mydemo import settings
 from rest_framework import generics, filters
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
-from django.db.models import Max
 
+from mydemo import settings
 from .models import Expense_Map, Assets_Map
 from .serializers import ExpenseMapSerializer, AssetsMapSerializer
 
@@ -202,6 +202,7 @@ def get_payee(data):
     #    如果是小商家，获取data[2]即可
     #    如果是"/"，获取data[1]
     payee = data[2]
+    notes = data[3]
     key_list = list(Expense_Map.objects.values_list('key', flat=True))
     if data[4] == "/" and data[9] == "wechat":  # 一般微信好友转账，如妈妈->我
         payee = data[6][:4]
@@ -209,44 +210,23 @@ def get_payee(data):
         payee = payee[2:]
     elif data[1] == "转账-退款":
         payee = "退款"
+    elif data[1] == "微信红包-退款":
+        payee = "退款"
     elif '(' in payee and ')' in payee and data[9] == "alipay":
         match = re.search(r'\((.*?)\)', payee)  # 提取 account 中的数字部分
         if match:
             payee = match.group(1)
     else:
-        # for循环获取所有值，并与payee进行比对
-        # expend_list = []
-        # for key in key_list:
-        #     if key in payee or key in data[3]:
-        #         expend_object = Expense_Map.objects.get(key=key)
-        #         expend_list.append(expend_object)
-        # try:
-        #     expend_instance = max(expend_list, key=lambda x: x.payee_order)
-        #     print("expend_list = ", expend_list, "expend_instance = ", expend_instance)
-        # except:
-        #     print("列表为空或payee_order 属性不存在")
-        # if expend_instance.payee is not None:
-        #     payee = expend_instance.payee
-        # if payee == "" and data[9] == "alipay":
-        #     payee = data[2]
-        #     return payee
-        # elif payee == "" and data[9] == "wechat":
-        #     payee = data[2]
-        #     if payee == "/":
-        #         payee = data[1]
-        # return payee  # 这里直接返回是为了防止object和commodity被多次匹配导致结果被更新
-
-        # for key in key_list:
-        #     if key in payee or key in data[3]:
-        matching_keys = [k for k in key_list if k in payee]
+        matching_keys = [k for k in key_list if k in payee or k in notes]  # 获取所有匹配的key,用于判断优先级
         max_order = None
         for matching_key in matching_keys:
-            expend_instance = Expense_Map.objects.filter(key__contains=matching_key).aggregate(max_order=Max('payee_order'))
+            expend_instance = Expense_Map.objects.filter(key__contains=matching_key).aggregate(
+                max_order=Max('payee_order'))
             matching_max_order = expend_instance['max_order']
             if matching_max_order is not None and (max_order is None or matching_max_order > max_order):
                 max_order = matching_max_order
                 expend_instance = Expense_Map.objects.filter(key__contains=matching_key, payee_order=max_order).first()
-                if expend_instance is not None:
+                if expend_instance is not None and expend_instance.payee is not None:
                     payee = expend_instance.payee
         if payee == "" and data[9] == "alipay":
             payee = data[2]

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 import os
+import sys
 from pathlib import Path
 
 
@@ -20,6 +21,8 @@ def env_to_bool(env, default):
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))
+
 # BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Quick-start development settings - unsuitable for production
@@ -31,7 +34,10 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_to_bool('DJANGO_DEBUG', True)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173"
+]
 
 # Application definition
 
@@ -50,6 +56,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -57,13 +64,14 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
 ]
 # CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
 CORS_ORIGIN_WHITELIST = [
+    "http://127.0.0.1:5173",
     "http://localhost:5173"
 ]
+CORS_ALLOW_CREDENTIALS = True  # 跨域时允许携带cookie
 
 ROOT_URLCONF = 'mydemo.urls'
 
@@ -103,7 +111,7 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION':  f'redis://127.0.0.1:36379/0' or str(os.environ.get("TRANS_REDIS_URL")) + "0",
+        'LOCATION': f'redis://127.0.0.1:36379/0' or str(os.environ.get("TRANS_REDIS_URL")) + "0",
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
