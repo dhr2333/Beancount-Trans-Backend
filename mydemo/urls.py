@@ -16,9 +16,22 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.documentation import include_docs_urls
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView
+)
+
+from .views import get_csrf_token
 
 urlpatterns = [
+    path('api/', include('users.urls')),
     path('admin/', admin.site.urls),
     path('translate/', include('translate.urls')),
     path('docs/', include_docs_urls(title='Beancount-Trans')),
+    # path('api/auth/', include('rest_framework.urls', namespace='rest_framework')),  # DRF 提供的一系列身份认证的接口，用于在页面中认证身份
+    # path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
+    # path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
+    # path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
+    # path('api/get_csrf_token/', get_csrf_token, name='token_verify')
 ]

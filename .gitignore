@@ -2,7 +2,7 @@
 /media/
 Pipfile.lock
 Pipfile
-collectedstatic
+collectstatic
 /conf/prod.py
 logs/*.log
 static

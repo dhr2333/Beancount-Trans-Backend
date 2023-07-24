@@ -9,9 +9,7 @@ from django.db.models import Max
 from django.http import HttpResponse
 from django.shortcuts import render
 from rest_framework import generics, filters
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
@@ -328,6 +326,7 @@ def beancount_outfile(data):
             file = os.path.dirname(
                 settings.BASE_DIR) + "/Beancount-Trans-Assets" + "/" + year + "/" + mouth + "-expenses.bean"
             createdir(file)
+            # print(json.JSONEncoder(shiji))
             with open(file, mode='a') as file:
                 file.write(shiji)
         else:
@@ -517,8 +516,8 @@ class ExpenseMapViewSet(ModelViewSet):
     read:
     修改支出映射
     """
-    authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    # authentication_classes = [IsAuthenticatedOrReadOnly]
+    # permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Expense_Map.objects.all()
     serializer_class = ExpenseMapSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]

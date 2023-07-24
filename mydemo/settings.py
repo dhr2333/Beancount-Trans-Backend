@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/4.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
+import datetime
 import os
 import sys
 from pathlib import Path
@@ -21,7 +22,7 @@ def env_to_bool(env, default):
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))
+sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))  # 系统的导包路径
 
 # BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -36,7 +37,10 @@ DEBUG = env_to_bool('DJANGO_DEBUG', True)
 
 ALLOWED_HOSTS = [
     "http://127.0.0.1:5173",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "http://127.0.0.1:38001",
+    "http://localhost:38001",
+    "*",
 ]
 
 # Application definition
@@ -53,6 +57,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'translate',
     'rest_framework',
+    'rest_framework_simplejwt',
+    'users.apps.UsersConfig'
 ]
 
 MIDDLEWARE = [
@@ -66,12 +72,43 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.common.CommonMiddleware',
 ]
-# CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
+CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
 CORS_ORIGIN_WHITELIST = [
     "http://127.0.0.1:5173",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "http://127.0.0.1:38001",
+    "http://localhost:38001"  # 38001为Fount docker端口
+]
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:38001",
+    "http://localhost:38001"
 ]
 CORS_ALLOW_CREDENTIALS = True  # 跨域时允许携带cookie
+CORS_ALLOW_METHODS = (
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+    'VIEW',
+)
+CORS_ALLOW_HEADERS = (
+    # '*',该通配符无效
+    'XMLHttpRequest',
+    'X_FILENAME',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'Pragma',
+)
 
 ROOT_URLCONF = 'mydemo.urls'
 
@@ -159,7 +196,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'collectedstatic')
+STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
@@ -174,18 +211,19 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-        'rest_framework.permissions.AllowAny',
-    ),
-    'DEFAULT_THROTTLE_CLASSES': (
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle'
-    ),
+    # 'DEFAULT_AUTHENTICATION_CLASSES': (
+    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
+    #     'rest_framework.authentication.BasicAuthentication',
+    #     'rest_framework.authentication.SessionAuthentication',
+    # ),
+    # 'DEFAULT_PERMISSION_CLASSES': (
+    #     'rest_framework.permissions.AllowAny',
+    #     # 'rest_framework.permissions.IsAuthenticated',
+    # ),
+    # 'DEFAULT_THROTTLE_CLASSES': (
+    #     'rest_framework.throttling.AnonRateThrottle',
+    #     'rest_framework.throttling.UserRateThrottle'
+    # ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': '10000/minute',
         'user': '10000/minute'
@@ -197,6 +235,10 @@ REST_FRAMEWORK = {
     # 'PAGE_SIZE': 200,
     'EXCEPTION_HANDLER': 'mydemo.utils.exceptions.custom_exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
+}
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(minutes=30),  # token有效时长
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=1)  # token刷新后的有效时间
 }
 
 LOGGING = {
@@ -246,3 +288,5 @@ LOGGING = {
         },
     }
 }
+
+AUTH_USER_MODEL = "users.User"
