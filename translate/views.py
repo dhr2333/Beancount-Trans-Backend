@@ -472,30 +472,30 @@ def analyze(request):
     return render(request, "translate/trans.html", context)
 
 
-class ExpenseMapList(generics.ListCreateAPIView):
-    queryset = Expense_Map.objects.all()
-    serializer_class = ExpenseMapSerializer
+# class ExpenseMapList(generics.ListCreateAPIView):
+#     queryset = Expense_Map.objects.all()
+#     serializer_class = ExpenseMapSerializer
 
 
-class ExpenseMapDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Expense_Map.objects.all()
-    serializer_class = ExpenseMapSerializer
+# class ExpenseMapDetail(generics.RetrieveUpdateDestroyAPIView):
+#     queryset = Expense_Map.objects.all()
+#     serializer_class = ExpenseMapSerializer
 
 
-class AssetsMapList(generics.ListCreateAPIView):
-    """
-    get:
-    返回所有账户信息
-    post:
-    新建账户映射
-    """
-    queryset = Assets_Map.objects.all()
-    serializer_class = AssetsMapSerializer
-
-
-class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Assets_Map.objects.all()
-    serializer_class = AssetsMapSerializer
+# class AssetsMapList(generics.ListCreateAPIView):
+#     """
+#     get:
+#     返回所有账户信息
+#     post:
+#     新建账户映射
+#     """
+#     queryset = Assets_Map.objects.all()
+#     serializer_class = AssetsMapSerializer
+#
+#
+# class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
+#     queryset = Assets_Map.objects.all()
+#     serializer_class = AssetsMapSerializer
 
 
 # class LargeResultsSetPagination(PageNumberPagination):
@@ -509,12 +509,18 @@ class ExpenseMapViewSet(ModelViewSet):
     """
     list:
     返回支出映射列表数据
+    create:
+    创建一条新的支出映射数据
     retrieve:
     返回支出映射详情数据
     latest:
     返回最新的支出映射数据
-    read:
-    修改支出映射
+    update:
+    更新指定条目支出映射
+    delete:
+    删除指定支出映射条目
+    order:
+    修改商家优先级接口
     """
     # authentication_classes = [IsAuthenticatedOrReadOnly]
     # permission_classes = [IsAuthenticatedOrReadOnly]
@@ -539,3 +545,23 @@ class ExpenseMapViewSet(ModelViewSet):
         expense.save()
         serializer = self.get_serializer(expense)
         return Response(serializer.data)
+
+
+class AssetsMapViewSet(ModelViewSet):
+    """
+    list:
+    返回收入映射列表数据
+    retrieve:
+    返回收入映射详情数据
+    latest:
+    返回最新的收入映射数据
+    read:
+    修改收入映射
+    """
+    # authentication_classes = [IsAuthenticatedOrReadOnly]
+    # permission_classes = [IsAuthenticatedOrReadOnly]
+    queryset = Assets_Map.objects.all()
+    serializer_class = AssetsMapSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['full']
+    ordering_fields = ['id', 'full']
