@@ -6,8 +6,8 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.prod')
-    # os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mydemo.settings')
+    # os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.prod')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mydemo.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

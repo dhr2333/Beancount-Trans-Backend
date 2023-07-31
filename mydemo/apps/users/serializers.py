@@ -1,7 +1,9 @@
 import re
 
+from django.contrib.auth.models import Group
 from rest_framework import serializers
 
+from translate.models import Expense
 from .models import User
 
 
@@ -51,3 +53,18 @@ class CreateUserSerializer(serializers.ModelSerializer):
         user.set_password(password)  # 对密码进行加密
         user.save()
         return user
+
+
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    expense = serializers.HyperlinkedRelatedField(many=True, view_name='expense-detail', read_only=True)
+    assets = serializers.HyperlinkedRelatedField(many=True, view_name='assets-detail', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id','url', 'username','email','mobile', 'expense', 'assets']
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = "__all__"

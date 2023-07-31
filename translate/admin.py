@@ -1,10 +1,10 @@
 # Register your models here.
 from django.contrib import admin
 
-from .models import Expense_Map
+from .models import Expense
 
 
-@admin.register(Expense_Map)
+@admin.register(Expense)
 class ExpenseMapAdmin(admin.ModelAdmin):
     list_display = ('key', 'payee', 'payee_order', 'expend', 'tag', 'classification')
     list_per_page = 100

@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path
-from rest_framework.routers import DefaultRouter
 
 from . import views
 
@@ -13,7 +12,7 @@ urlpatterns = [
                   # path("map/assets/<int:pk>", views.AssetsMapDetail.as_view(), name="assetsdetail"),
               ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-router = DefaultRouter()
-router.register("map/expense", views.ExpenseMapViewSet)
-router.register("map/assets", views.AssetsMapViewSet)
-urlpatterns += router.urls
+# router = DefaultRouter()
+# router.register("map/expense", views.ExpenseMapViewSet)
+# router.register("map/assets", views.AssetsMapViewSet)
+# urlpatterns += router.urls

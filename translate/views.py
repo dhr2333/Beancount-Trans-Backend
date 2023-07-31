@@ -8,14 +8,9 @@ import chardet
 from django.db.models import Max
 from django.http import HttpResponse
 from django.shortcuts import render
-from rest_framework import generics, filters
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
 
 from mydemo import settings
-from .models import Expense_Map, Assets_Map
-from .serializers import ExpenseMapSerializer, AssetsMapSerializer
+from .models import Expense, Assets
 
 
 def wechat_expend(data, key_list):
@@ -26,7 +21,7 @@ def wechat_expend(data, key_list):
     elif type == "零钱充值":
         for key in key_list:
             if key in data[2]:
-                expend_instance = Assets_Map.objects.get(key=key)
+                expend_instance = Assets.objects.get(key=key)
                 expend = expend_instance.income
                 return expend
             else:
@@ -39,7 +34,7 @@ def wechat_expend(data, key_list):
         result = data[1][index + 2:]  # 取来自之后的所有数据，例如"建设银行(5522)"
         for key in key_list:
             if key in result:
-                expend_instance = Assets_Map.objects.get(key=key)
+                expend_instance = Assets.objects.get(key=key)
                 expend = expend_instance.income
                 return expend
             else:
@@ -60,7 +55,7 @@ def alipay_expend(data, key_list):
         result = data[6]
         for key in key_list:
             if key in result:
-                expend_instance = Assets_Map.objects.get(key=key)
+                expend_instance = Assets.objects.get(key=key)
                 expend = expend_instance.income
                 return expend
             else:
@@ -80,11 +75,11 @@ def get_expend(data):
     expend = ""
     # 获取数据库中key的所有值，将其处理为列表
     if data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
-        key_list = Expense_Map.objects.values_list('key', flat=True)
+        key_list = Expense.objects.values_list('key', flat=True)
         # for循环获取所有值，并与payee进行比对
         for key in key_list:
             if key in data[2] or key in data[3]:
-                expend_instance = Expense_Map.objects.get(key=key)
+                expend_instance = Expense.objects.get(key=key)
                 expend = expend_instance.expend
                 return expend
         if expend == "":
@@ -92,7 +87,7 @@ def get_expend(data):
     elif data[4] == "收入":
         expend = "Income:Other"
     elif data[4] == "/" or data[4] == "不计收支":  # 收/支栏 值为/
-        key_list = Assets_Map.objects.values_list('key', flat=True)
+        key_list = Assets.objects.values_list('key', flat=True)
         if data[9] == "wechat":
             expend = wechat_expend(data, key_list)
         elif data[9] == "alipay":
@@ -106,7 +101,7 @@ def wechat_account(data, key_list):
     if type == "零钱提现":
         for key in key_list:
             if key in data[2]:
-                account_instance = Assets_Map.objects.get(key=key)
+                account_instance = Assets.objects.get(key=key)
                 account = account_instance.income
                 return account
         account = "Assets:Other"
@@ -117,7 +112,7 @@ def wechat_account(data, key_list):
         result = data[1][index + 1:]  # 取来自之后的所有数据，例如"建设银行(5522)"
         for key in key_list:
             if key in result:
-                account_instance = Assets_Map.objects.get(key=key)
+                account_instance = Assets.objects.get(key=key)
                 account = account_instance.income
                 return account
             else:
@@ -143,7 +138,7 @@ def alipay_account(data, key_list):
         result = data[6]
         for key in key_list:
             if key in result:
-                account_instance = Assets_Map.objects.get(key=key)
+                account_instance = Assets.objects.get(key=key)
                 account = account_instance.income
                 return account
             else:
@@ -163,10 +158,10 @@ def get_account(data):
     if "&" in key:  # 该判断用于解决支付宝中"&[红包]"导致无法被匹配的问题
         sub_strings = key.split("&")
         key = sub_strings[0]
-    key_list = Assets_Map.objects.values_list('key', flat=True)
+    key_list = Assets.objects.values_list('key', flat=True)
     if data[4] == "收入" or data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
         if key in key_list:
-            account_instance = Assets_Map.objects.get(key=key)
+            account_instance = Assets.objects.get(key=key)
             account = account_instance.income
             return account
         elif key == "" and data[9] == "alipay":  # 第三方平台到支付宝的收入
@@ -176,7 +171,7 @@ def get_account(data):
                 digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分
                 # 判断提取到的数字是否在列表中
                 if digits in key_list:
-                    account_instance = Assets_Map.objects.get(key=digits)
+                    account_instance = Assets.objects.get(key=digits)
                     account = account_instance.income
                     return account
                 else:
@@ -201,7 +196,7 @@ def get_payee(data):
     #    如果是"/"，获取data[1]
     payee = data[2]
     notes = data[3]
-    key_list = list(Expense_Map.objects.values_list('key', flat=True))
+    key_list = list(Expense.objects.values_list('key', flat=True))
     if data[4] == "/" and data[9] == "wechat":  # 一般微信好友转账，如妈妈->我
         payee = data[6][:4]
     elif data[1] == "微信红包（单发）":
@@ -218,12 +213,12 @@ def get_payee(data):
         matching_keys = [k for k in key_list if k in payee or k in notes]  # 获取所有匹配的key,用于判断优先级
         max_order = None
         for matching_key in matching_keys:
-            expend_instance = Expense_Map.objects.filter(key__contains=matching_key).aggregate(
+            expend_instance = Expense.objects.filter(key__contains=matching_key).aggregate(
                 max_order=Max('payee_order'))
             matching_max_order = expend_instance['max_order']
             if matching_max_order is not None and (max_order is None or matching_max_order > max_order):
                 max_order = matching_max_order
-                expend_instance = Expense_Map.objects.filter(key__contains=matching_key, payee_order=max_order).first()
+                expend_instance = Expense.objects.filter(key__contains=matching_key, payee_order=max_order).first()
                 if expend_instance is not None and expend_instance.payee is not None:
                     payee = expend_instance.payee
         if payee == "" and data[9] == "alipay":
@@ -470,98 +465,3 @@ def analyze(request):
     title = "trans"
     context = {"title": title}
     return render(request, "translate/trans.html", context)
-
-
-# class ExpenseMapList(generics.ListCreateAPIView):
-#     queryset = Expense_Map.objects.all()
-#     serializer_class = ExpenseMapSerializer
-
-
-# class ExpenseMapDetail(generics.RetrieveUpdateDestroyAPIView):
-#     queryset = Expense_Map.objects.all()
-#     serializer_class = ExpenseMapSerializer
-
-
-# class AssetsMapList(generics.ListCreateAPIView):
-#     """
-#     get:
-#     返回所有账户信息
-#     post:
-#     新建账户映射
-#     """
-#     queryset = Assets_Map.objects.all()
-#     serializer_class = AssetsMapSerializer
-#
-#
-# class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
-#     queryset = Assets_Map.objects.all()
-#     serializer_class = AssetsMapSerializer
-
-
-# class LargeResultsSetPagination(PageNumberPagination):
-#     page_size = 200
-#     page_query_param = 'page'
-#     page_size_query_param = 'page_size'
-#     max_page_size = 200
-
-
-class ExpenseMapViewSet(ModelViewSet):
-    """
-    list:
-    返回支出映射列表数据
-    create:
-    创建一条新的支出映射数据
-    retrieve:
-    返回支出映射详情数据
-    latest:
-    返回最新的支出映射数据
-    update:
-    更新指定条目支出映射
-    delete:
-    删除指定支出映射条目
-    order:
-    修改商家优先级接口
-    """
-    # authentication_classes = [IsAuthenticatedOrReadOnly]
-    # permission_classes = [IsAuthenticatedOrReadOnly]
-    queryset = Expense_Map.objects.all()
-    serializer_class = ExpenseMapSerializer
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['key', 'payee']
-    ordering_fields = ['id', 'key']
-
-    # pagination_class = LargeResultsSetPagination
-
-    @action(methods=['get'], detail=False)
-    def latest(self, request):
-        expense = Expense_Map.objects.latest('id')
-        serializer = self.get_serializer(expense)
-        return Response(serializer.data)
-
-    @action(methods=['put'], detail=True)
-    def order(self, request, pk):
-        expense = self.get_object()
-        expense.payee_order = request.data.get('payee_order')
-        expense.save()
-        serializer = self.get_serializer(expense)
-        return Response(serializer.data)
-
-
-class AssetsMapViewSet(ModelViewSet):
-    """
-    list:
-    返回收入映射列表数据
-    retrieve:
-    返回收入映射详情数据
-    latest:
-    返回最新的收入映射数据
-    read:
-    修改收入映射
-    """
-    # authentication_classes = [IsAuthenticatedOrReadOnly]
-    # permission_classes = [IsAuthenticatedOrReadOnly]
-    queryset = Assets_Map.objects.all()
-    serializer_class = AssetsMapSerializer
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['full']
-    ordering_fields = ['id', 'full']

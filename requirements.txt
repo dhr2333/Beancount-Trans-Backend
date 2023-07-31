@@ -1,12 +1,12 @@
 asgiref==3.7.2
 async-timeout==4.0.2
 # backports.zoneinfo==0.2.1  # 该包需要被注释，否则无法被打为镜像
-certifi==2023.5.7
+certifi==2023.7.22
 chardet==5.1.0
 charset-normalizer==3.1.0
 coreapi==2.3.3
 coreschema==0.0.4
-Django==4.2.1
+Django==4.2.3
 django-cors-headers==4.0.0
 django-filter==23.2
 django-redis==5.3.0
@@ -26,3 +26,4 @@ sqlparse==0.4.4
 typing_extensions==4.6.3
 uritemplate==4.1.1
 urllib3==2.0.3
+uWSGI==2.0.21

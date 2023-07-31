@@ -1,18 +1,22 @@
 from django.db import models
 
+from mydemo.models import BaseModel
+from users.models import User
 
 # Create your models here.
 
-class Expense_Map(models.Model):
-    key = models.CharField(max_length=16, unique=True, null=False, help_text="关键字")
+
+class Expense(BaseModel):
+    key = models.CharField(max_length=16, null=False, help_text="关键字")
     payee = models.CharField(max_length=8, null=True, help_text="商家")
     payee_order = models.IntegerField(default=100, help_text="优先级")
     expend = models.CharField(max_length=64, default="Expenses:Other", null=False, help_text="支出账户")
     tag = models.CharField(max_length=16, help_text="标签")
     classification = models.CharField(max_length=16, help_text="归类")
+    owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
 
     class Meta:
-        db_table = 'translate_expense_map'
+        db_table = 'maps_expense'
         verbose_name = '支出映射'
         verbose_name_plural = verbose_name
 
@@ -20,13 +24,14 @@ class Expense_Map(models.Model):
         return self.key
 
 
-class Assets_Map(models.Model):
-    key = models.CharField(max_length=16, unique=True, null=False, help_text="关键字")
+class Assets(BaseModel):
+    key = models.CharField(max_length=16, null=False, help_text="关键字")
     full = models.CharField(max_length=16, null=False, help_text="账户名称")
     income = models.CharField(max_length=64, default="Income:Other", null=False, help_text="收入账户")
+    owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
 
     class Meta:
-        db_table = 'translate_assets_map'
+        db_table = 'maps_assets'
         verbose_name = '收入映射'
         verbose_name_plural = verbose_name
 

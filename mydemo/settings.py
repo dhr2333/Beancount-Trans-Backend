@@ -58,7 +58,8 @@ INSTALLED_APPS = [
     'translate',
     'rest_framework',
     'rest_framework_simplejwt',
-    'users.apps.UsersConfig'
+    'users.apps.UsersConfig',
+    'maps.apps.MapsConfig',
 ]
 
 MIDDLEWARE = [
