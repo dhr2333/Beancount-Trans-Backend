@@ -15,12 +15,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from maps.views import ExpenseViewSet, AssetsViewSet
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
-from users.views import UserViewSet,GroupViewSet
-from maps.views import ExpenseViewSet,AssetsViewSet
-
+from users.views import UserViewSet, GroupViewSet
 
 router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")

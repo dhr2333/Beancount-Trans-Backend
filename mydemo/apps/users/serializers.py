@@ -3,7 +3,6 @@ import re
 from django.contrib.auth.models import Group
 from rest_framework import serializers
 
-from translate.models import Expense
 from .models import User
 
 
@@ -61,7 +60,7 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id','url', 'username','email','mobile', 'expense', 'assets']
+        fields = ['id', 'url', 'username', 'email', 'mobile', 'expense', 'assets']
 
 
 class GroupSerializer(serializers.ModelSerializer):

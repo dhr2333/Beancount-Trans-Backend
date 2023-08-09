@@ -6,7 +6,7 @@ from datetime import datetime
 
 import chardet
 from django.db.models import Max
-from django.http import HttpResponse
+from django.http import JsonResponse
 from django.shortcuts import render
 
 from mydemo import settings
@@ -272,6 +272,7 @@ def format(data):
         account : 账户    Liabilities:CreditCard:Bank:ZhongXin:C6428
     """
     date = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+    time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
     money = get_money(data)
     payee = get_payee(data)
     notes = get_notes(data)
@@ -282,11 +283,13 @@ def format(data):
     if data[4] == "/":
         if commission != "":
             new_money = "{:.2f} CNY".format(float(float(money.split()[0]) - float(commission.split()[0])))
-            return {"date": date, "payee": payee, "notes": notes, "expend": expend, "expend_fuhao": expend_fuhao,
+            return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend,
+                    "expend_fuhao": expend_fuhao,
                     "account": account, "account_fuhao": account_fuhao, "money": money, "new_money": new_money}
-        return {"date": date, "payee": payee, "notes": notes, "expend": expend, "expend_fuhao": expend_fuhao,
+        return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend,
+                "expend_fuhao": expend_fuhao,
                 "account": account, "account_fuhao": account_fuhao, "money": money}
-    return {"date": date, "payee": payee, "notes": notes, "expend": expend, "expend_fuhao": expend_fuhao,
+    return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend, "expend_fuhao": expend_fuhao,
             "account": account, "account_fuhao": account_fuhao, "money": money}
 
 
@@ -299,17 +302,20 @@ def beancount_outfile(data):
         Liabilities:CreditCard:Bank:ZhongXin:C6428 -43.50 CNY
     """
     # [time, type, object, commodity, balance, amount, way, status, notes, bill]
+    shiji_list = []
     for row in data:
         if row[7] == "交易成功":
             if row[2] == "兴全基金管理有限公司" or row[6] == "亲情卡(凯义(王凯义))":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
                 continue
             entry = format(row)
-            shiji = "{0} * \"{1}\" \"{2}\"\n    {3} {4}{5}\n    {6} {7}{8}\n\n".format(
-                entry["date"], entry["payee"], entry["notes"], entry["expend"], entry["expend_fuhao"], entry["money"],
+            shiji = "{0} * \"{1}\" \"{2}\"\n    time: \"{3}\"\n    {4} {5}{6}\n    {7} {8}{9}\n\n".format(
+                entry["date"], entry["payee"], entry["notes"], entry["time"], entry["expend"], entry["expend_fuhao"],
+                entry["money"],
                 entry["account"], entry["account_fuhao"], entry["money"])
             if entry["notes"] == "零钱提现":
-                shiji = "{0} * \"{1}\" \"{2}\"\n    {3} {4}{5} \n    {6} {7}{8}\n    {9}\n\n".format(
-                    entry["date"], entry["payee"], entry["notes"], entry["expend"], entry["expend_fuhao"],
+                shiji = "{0} * \"{1}\" \"{2}\"\n    time: \"{3}\"\n    {4} {5}{6} \n    {7} {8}{9}\n    {10}\n\n".format(
+                    entry["date"], entry["payee"], entry["notes"], entry["time"], entry["expend"],
+                    entry["expend_fuhao"],
                     entry["money"],
                     entry["account"], entry["account_fuhao"], entry["new_money"], "Expenses:Finance:Commission")
             elif entry == {}:
@@ -321,11 +327,12 @@ def beancount_outfile(data):
             file = os.path.dirname(
                 settings.BASE_DIR) + "/Beancount-Trans-Assets" + "/" + year + "/" + mouth + "-expenses.bean"
             createdir(file)
-            # print(json.JSONEncoder(shiji))
+            shiji_list.append(shiji)
             with open(file, mode='a') as file:
                 file.write(shiji)
         else:
             continue
+    return shiji_list
 
 
 def createdir(file_path):
@@ -458,10 +465,12 @@ def analyze(request):
             elif one == "------------------------------------------------------------------------------------":
                 list = alipay(reader)
         # 删除临时文件
-        beancount_outfile(list)
+        format_list = beancount_outfile(list)
+        # json_list = json.dumps(format_list)
         os.unlink(temp.name)
 
-        return HttpResponse("解析成功")
+        # return HttpResponse(json_list, content_type='application/json')
+        return JsonResponse(format_list, safe=False, content_type='application/json')
     title = "trans"
     context = {"title": title}
     return render(request, "translate/trans.html", context)
