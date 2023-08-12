@@ -14,3 +14,17 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
         # Write permissions are only allowed to the owner of the snippet.
         return obj.owner == request.user
+
+
+class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        # 允许管理员对所有对象进行读写
+        if request.user.is_superuser:
+            return True
+
+        # 允许属主对其对象进行读写
+        if obj.owner == request.user:
+            return True
+
+        # 其他用户没有读写权限
+        return False

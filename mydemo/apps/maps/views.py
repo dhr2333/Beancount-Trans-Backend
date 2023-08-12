@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from translate.models import Expense, Assets
-from .permissions import IsOwnerOrReadOnly
+from .permissions import IsOwnerOrAdminReadWriteOnly
 
 
 class ExpenseViewSet(ModelViewSet):
@@ -29,7 +29,7 @@ class ExpenseViewSet(ModelViewSet):
     # permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrAdminReadWriteOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['key', 'payee']
     ordering_fields = ['id', 'key']
@@ -69,7 +69,7 @@ class AssetsViewSet(ModelViewSet):
     # permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Assets.objects.all()
     serializer_class = AssetsSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    permission_classes = [IsOwnerOrAdminReadWriteOnly]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['full']
     ordering_fields = ['id', 'full']

@@ -11,7 +11,7 @@ from django.shortcuts import render
 
 from mydemo import settings
 from .models import Expense, Assets
-
+from mydemo.utils.token import get_token_user_id
 
 def wechat_expend(data, key_list):
     expend = ""
@@ -71,11 +71,13 @@ def alipay_expend(data, key_list):
     return expend
 
 
-def get_expend(data):
+def get_expend(data,ownerid):
     expend = ""
     # 获取数据库中key的所有值，将其处理为列表
     if data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
-        key_list = Expense.objects.values_list('key', flat=True)
+        # TODO
+        key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+        print(key_list)
         # for循环获取所有值，并与payee进行比对
         for key in key_list:
             if key in data[2] or key in data[3]:
@@ -152,13 +154,14 @@ def alipay_account(data, key_list):
     return account
 
 
-def get_account(data):
+def get_account(data,ownerid):
     account = ""
     key = data[6]
     if "&" in key:  # 该判断用于解决支付宝中"&[红包]"导致无法被匹配的问题
         sub_strings = key.split("&")
         key = sub_strings[0]
-    key_list = Assets.objects.values_list('key', flat=True)
+    key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+    print(key_list)
     if data[4] == "收入" or data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
         if key in key_list:
             account_instance = Assets.objects.get(key=key)
@@ -262,7 +265,7 @@ def get_money(data):
     return money
 
 
-def format(data):
+def format(data,owner_id):
     """
         date : 时间       2023-04-28
         money : 金额      23.00 CNY
@@ -277,8 +280,8 @@ def format(data):
     payee = get_payee(data)
     notes = get_notes(data)
     expend_fuhao, account_fuhao = get_shouzhi(data[4])
-    expend = get_expend(data)
-    account = get_account(data)
+    expend = get_expend(data,owner_id)
+    account = get_account(data,owner_id)
     commission = data[8][4:]
     if data[4] == "/":
         if commission != "":
@@ -293,7 +296,7 @@ def format(data):
             "account": account, "account_fuhao": account_fuhao, "money": money}
 
 
-def beancount_outfile(data):
+def beancount_outfile(data,owner_id):
     """
         格式化，输出格式
 
@@ -307,7 +310,7 @@ def beancount_outfile(data):
         if row[7] == "交易成功":
             if row[2] == "兴全基金管理有限公司" or row[6] == "亲情卡(凯义(王凯义))":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
                 continue
-            entry = format(row)
+            entry = format(row,owner_id)
             shiji = "{0} * \"{1}\" \"{2}\"\n    time: \"{3}\"\n    {4} {5}{6}\n    {7} {8}{9}\n\n".format(
                 entry["date"], entry["payee"], entry["notes"], entry["time"], entry["expend"], entry["expend_fuhao"],
                 entry["money"],
@@ -447,6 +450,7 @@ def wechatpay(reader):  # 返回的列表具体的值注释在该函数
 def analyze(request):
     """ 解析，上传文件后提取需要的字段 """
     if request.method == "POST":
+        owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)
         content = uploaded_file.read()
         encoding = chardet.detect(content)['encoding']
@@ -465,7 +469,7 @@ def analyze(request):
             elif one == "------------------------------------------------------------------------------------":
                 list = alipay(reader)
         # 删除临时文件
-        format_list = beancount_outfile(list)
+        format_list = beancount_outfile(list,owner_id)
         # json_list = json.dumps(format_list)
         os.unlink(temp.name)
 
