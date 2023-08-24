@@ -1,202 +1,76 @@
 import csv
 import os
 import re
-import tempfile
 from datetime import datetime
 
-import chardet
 from django.db.models import Max
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views import View
 
 from mydemo import settings
-from .models import Expense, Assets
+from mydemo.utils.file import create_temporary_file, init_project_file
 from mydemo.utils.token import get_token_user_id
+from .models import Expense, Assets
+from .utils import *
 
-def wechat_expend(data, key_list):
-    expend = ""
-    type = data[1][:5]  # 获取交易类型，一共就以下四种
-    if type == "零钱提现":
-        expend = "Assets:Savings:Web:WechatPay"
-    elif type == "零钱充值":
-        for key in key_list:
-            if key in data[2]:
-                expend_instance = Assets.objects.get(key=key)
-                expend = expend_instance.income
-                return expend
-            else:
-                expend = "Assets:Other"
-            return expend
-    elif type == "零钱通转出":
-        expend = "Assets:Savings:Web:WechatFund"
-    elif type == "转入零钱通":
-        index = data[1].find("来自")
-        result = data[1][index + 2:]  # 取来自之后的所有数据，例如"建设银行(5522)"
-        for key in key_list:
-            if key in result:
-                expend_instance = Assets.objects.get(key=key)
-                expend = expend_instance.income
-                return expend
-            else:
-                expend = "Assets:Other"
-    return expend
+EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
+INCOME_OTHER = "Income:Other"
+ASSETS_OTHER = "Assets:Other"
+
+WECHATPAY = None  # Assets表中微信零钱的默认值，get_default_assets()函数会对其进行初始化
+WECHATFUND = None
+ALIPAY = None
+ALIFUND = None
+
+BILL_WECHAT = "wechat"  # 用于判断账单类型
+BILL_ALI = "alipay"
 
 
-def alipay_expend(data, key_list):
-    expend = ""
-    type = data[3]
-    if type == "转账收款到余额宝":
-        expend = "Assets:Savings:Web:AliPay"
-    elif type == "余额宝-自动转入":
-        expend = "Assets:Savings:Web:AliPay"
-    elif type == "余额宝-转出到余额":
-        expend = "Assets:Savings:Web:AliFund"
-    elif type == "余额宝-单次转入":
-        result = data[6]
-        for key in key_list:
-            if key in result:
-                expend_instance = Assets.objects.get(key=key)
-                expend = expend_instance.income
-                return expend
-            else:
-                expend = "Assets:Other"
-    elif type == "余额宝-转出到银行卡":
-        expend = "Assets:Savings:Web:AliFund"
-    elif type == "充值-普通充值":
-        expend = "Assets:Other"  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
-    elif type == "提现-实时提现":
-        expend = "Assets:Savings:Web:AliPay"
+def get_default_assets(ownerid):
+    """
+    获取登录账号的资产账户的默认值
+    :param ownerid: 用户id
+    :return: None
+    """
+    default_assets = {
+        "微信零钱": "WECHATPAY",
+        "微信零钱通": "WECHATFUND",
+        "支付宝余额": "ALIPAY",
+        "支付宝余额宝": "ALIFUND"
+    }
+
+    for asset_name, var_name in default_assets.items():
+        asset = Assets.objects.filter(full=asset_name, owner_id=ownerid).first()
+        globals()[var_name] = asset.income if asset else ASSETS_OTHER
+
+
+def get_uuid(data):
+    uuid = None
+    if data[9] == "wechat":
+        uuid = data[10].rstrip("\t")
+    elif data[9] == "alipay":
+        uuid = data[10]
+    return uuid
+
+
+def get_amount(data):
+    if data[9] == "alipay":
+        amount = "{:.2f} CNY".format(float(data[5]))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
+    elif data[9] == "wechat":
+        amount = "{:.2f} CNY".format(float(data[5][1:]))  # 微信账单格式为"￥10.00"，需要转换
+    return amount
+
+
+def calculate_commission(total, commission):
+    if commission != "":
+        amount = "{:.2f} CNY".format(float(total.split()[0]) - float(commission.split()[0]))
     else:
-        expend = "Assets:Other"
-    return expend
-
-
-def get_expend(data,ownerid):
-    expend = ""
-    # 获取数据库中key的所有值，将其处理为列表
-    if data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
-        # TODO
-        key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
-        print(key_list)
-        # for循环获取所有值，并与payee进行比对
-        for key in key_list:
-            if key in data[2] or key in data[3]:
-                expend_instance = Expense.objects.get(key=key)
-                expend = expend_instance.expend
-                return expend
-        if expend == "":
-            expend = "Expenses:Other"
-    elif data[4] == "收入":
-        expend = "Income:Other"
-    elif data[4] == "/" or data[4] == "不计收支":  # 收/支栏 值为/
-        key_list = Assets.objects.values_list('key', flat=True)
-        if data[9] == "wechat":
-            expend = wechat_expend(data, key_list)
-        elif data[9] == "alipay":
-            expend = alipay_expend(data, key_list)
-    return expend
-
-
-def wechat_account(data, key_list):
-    account = ""
-    type = data[1][:5]
-    if type == "零钱提现":
-        for key in key_list:
-            if key in data[2]:
-                account_instance = Assets.objects.get(key=key)
-                account = account_instance.income
-                return account
-        account = "Assets:Other"
-    elif type == "零钱充值":
-        account = "Assets:Savings:Web:WechatPay"
-    elif type == "零钱通转出":
-        index = data[1].find("到")
-        result = data[1][index + 1:]  # 取来自之后的所有数据，例如"建设银行(5522)"
-        for key in key_list:
-            if key in result:
-                account_instance = Assets.objects.get(key=key)
-                account = account_instance.income
-                return account
-            else:
-                account = "Assets:Other"
-            return account
-    elif type == "转入零钱通":
-        account = "Assets:Savings:Web:WechatFund"
-    return account
-
-
-def alipay_account(data, key_list):
-    account = ""
-    type = data[3]
-    if type == "转账收款到余额宝":
-        account = "Assets:Savings:Web:AliFund"
-    elif type == "余额宝-自动转入":
-        account = "Assets:Savings:Web:AliFund"
-    elif type == "余额宝-转出到余额":
-        account = "Assets:Savings:Web:AliPay"
-    elif type == "余额宝-单次转入":
-        account = "Assets:Savings:Web:AliFund"
-    elif type == "余额宝-转出到银行卡":
-        result = data[6]
-        for key in key_list:
-            if key in result:
-                account_instance = Assets.objects.get(key=key)
-                account = account_instance.income
-                return account
-            else:
-                account = "Assets:Other"
-    elif type == "充值-普通充值":
-        account = "Assets:Savings:Web:AliPay"  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
-    elif type == "提现-实时提现":
-        account = "Assets:Other"  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
-    else:
-        account = "Assets:Other"
-    return account
-
-
-def get_account(data,ownerid):
-    account = ""
-    key = data[6]
-    if "&" in key:  # 该判断用于解决支付宝中"&[红包]"导致无法被匹配的问题
-        sub_strings = key.split("&")
-        key = sub_strings[0]
-    key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
-    print(key_list)
-    if data[4] == "收入" or data[4] == "支出":  # 收/支栏 值为"收入"或"支出"
-        if key in key_list:
-            account_instance = Assets.objects.get(key=key)
-            account = account_instance.income
-            return account
-        elif key == "" and data[9] == "alipay":  # 第三方平台到支付宝的收入
-            account = "Assets:Savings:Web:AliPay"
-        else:
-            if '(' in key and ')' in key:
-                digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分
-                # 判断提取到的数字是否在列表中
-                if digits in key_list:
-                    account_instance = Assets.objects.get(key=digits)
-                    account = account_instance.income
-                    return account
-                else:
-                    return "Assets:Other"
-    elif data[4] == "/" or data[4] == "不计收支":  # 收/支栏 值为/
-        if data[9] == "wechat":
-            account = wechat_account(data, key_list)
-        elif data[9] == "alipay":
-            account = alipay_account(data, key_list)
-    return account
+        amount = total
+    return amount
 
 
 def get_payee(data):
-    # 初始数值为data[2]
-    # 获取数据库中数据与object和commodity进行对比
-    # 如果数据库中数据在object或comdodity中，获取数据库中的payee
-    #    如果数据库中的payee为空
-    #      微信则获取data[1]
-    #      支付宝则获取data[2]
-    # 如果数据库中数据不在object或comdodity中（例如"/"或者小商家）
-    #    如果是小商家，获取data[2]即可
-    #    如果是"/"，获取data[1]
     payee = data[2]
     notes = data[3]
     key_list = list(Expense.objects.values_list('key', flat=True))
@@ -236,245 +110,328 @@ def get_payee(data):
 
 
 def get_notes(data):
-    notes = data[3]
-    if data[4] == "/":
+    notes = None
+    if data[9] == "wecaht" and data[4] == "/":
         notes = data[1]
+    else:
+        notes = data[3]
     return notes
 
 
 def get_shouzhi(shouzhi):
-    expend_fuhao = ""
-    account_fuhao = ""
-    if shouzhi == "收入":
-        expend_fuhao = "-"
-        account_fuhao = "+"
-    elif shouzhi == "支出":
-        expend_fuhao = "+"
-        account_fuhao = "-"
-    elif shouzhi == "/" or shouzhi == "不计收支":
-        expend_fuhao = "-"
-        account_fuhao = "+"
-    return expend_fuhao, account_fuhao
+    expend_sign = None
+    account_sign = None
+    if shouzhi == "支出":
+        expend_sign = "+"
+        account_sign = "-"
+    elif shouzhi == "收入":
+        expend_sign = "-"
+        account_sign = "+"
+    elif shouzhi in ["/", "不计收支"]:
+        expend_sign = "-"
+        account_sign = "+"
+    return expend_sign, account_sign
 
 
-def get_money(data):
-    try:
-        money = "{:.2f} CNY".format(float(data[5]))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
-    except ValueError:
-        money = "{:.2f} CNY".format(float(data[5][1:]))  # 微信账单格式为"￥10.00"，需要转换
-    return money
+class GetExpense:
+    def __init__(self, data):
+        self.key_list = None
+        self.type = None
+        self.expend = EXPENSES_OTHER
+        self.bill = data[9]
+        self.balance = data[4]
+
+    def initialize_type(self, data):
+        if self.bill == BILL_WECHAT:
+            self.type = data[1][:5]
+        elif self.bill == BILL_ALI:
+            self.type = data[3]
+
+    def initialize_key_list(self, ownerid):
+        if self.balance == "支出":
+            self.key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+        elif self.balance == "收入":
+            self.key_list = None
+        elif self.balance == "/" or self.balance == "不计收支":
+            self.key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+
+    def get_expense(self, data, ownerid):
+        self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
+        self.initialize_type(data)
+        expend = self.expend
+
+        if self.balance == "支出":
+            for key in self.key_list:
+                if key in data[2] or key in data[3]:
+                    expend_instance = Expense.objects.get(key=key)
+                    expend = expend_instance.expend
+                    return expend
+            expend = EXPENSES_OTHER
+        elif self.balance == "收入":
+            expend = INCOME_OTHER
+        elif self.balance == "/" or self.balance == "不计收支":
+            if self.bill == BILL_WECHAT:
+                expend = self.wechatpay_expense(data)
+            elif self.bill == BILL_ALI:
+                expend = self.alipay_expense(data)
+        return expend
+
+    def wechatpay_expense(self, data):
+        expend = "Unknown-WechatPay"
+
+        if self.type == "零钱提现":
+            expend = WECHATPAY
+        elif self.type == "零钱充值":
+            for key in self.key_list:
+                if key in data[2]:
+                    expend_instance = Assets.objects.get(key=key)
+                    expend = expend_instance.income
+                    return expend
+            expend = ASSETS_OTHER
+        elif self.type == "零钱通转出":
+            expend = WECHATFUND
+        elif self.type == "转入零钱通":
+            index = data[1].find("来自")
+            result = data[1][index + 2:]  # 取来自之后的所有数据，例如"建设银行(5522)"
+            for key in self.key_list:
+                if key in result:
+                    expend_instance = Assets.objects.get(key=key)
+                    expend = expend_instance.income
+                    return expend
+            expend = ASSETS_OTHER
+        return expend
+
+    def alipay_expense(self, data):
+        expend = "Unknown-AliPay"
+
+        if self.type == "转账收款到余额宝":
+            expend = ALIPAY
+        elif self.type == "余额宝-自动转入":
+            expend = ALIPAY
+        elif self.type == "余额宝-转出到余额":
+            expend = ALIFUND
+        elif self.type == "余额宝-单次转入":
+            result = data[6]
+            for key in self.key_list:
+                if key in result:
+                    expend_instance = Assets.objects.get(key=key)
+                    expend = expend_instance.income
+                    return expend
+                else:
+                    expend = ASSETS_OTHER
+        elif self.type == "余额宝-转出到银行卡":
+            expend = ALIFUND
+        elif self.type == "充值-普通充值":
+            expend = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
+        elif self.type == "提现-实时提现":
+            expend = ALIPAY
+        else:
+            expend = ASSETS_OTHER
+        return expend
 
 
-def format(data,owner_id):
+class GetAccount:
+    def __init__(self, data):
+        self.key = None
+        self.key_list = None
+        self.type = None
+        self.account = ASSETS_OTHER
+        self.bill = data[9]
+        self.balance = data[4]
+
+    def initialize_type(self, data):
+        if self.bill == BILL_WECHAT:
+            self.type = data[1][:5]
+        elif self.bill == BILL_ALI:
+            self.type = data[3]
+
+    def initialize_key_list(self, ownerid):
+        self.key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+
+    def initialize_key(self, data):
+        self.key = data[6]
+        if "&" in self.key:  # 该判断用于解决支付宝中"&[红包]"导致无法被匹配的问题
+            sub_strings = self.key.split("&")
+            self.key = sub_strings[0]
+
+    def get_account(self, data, ownerid):
+        self.initialize_key(data)
+        self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
+        self.initialize_type(data)
+        account = self.account
+        key = self.key
+        # print("get_account(self, data, ownerid) = ",self.key_list)
+
+        if self.balance == "收入" or self.balance == "支出":  # 收/支栏 值为"收入"或"支出"
+            if key in self.key_list:
+                # account_instance = Assets.objects.get(key=key)
+                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                account = account_instance.income
+                return account
+            elif key == "" and self.bill == BILL_ALI:  # 第三方平台到支付宝的收入
+                account = ALIPAY
+            else:
+                if '(' in key and ')' in key:
+                    digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分
+                    # 判断提取到的数字是否在列表中
+                    if digits in self.key_list:
+                        # print("digits = ", digits,"self.key_list = ", self.key_list)
+                        account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
+                        # print("account_instance = ", account_instance)
+                        account = account_instance.income
+                        return account
+                    else:
+                        return ASSETS_OTHER
+        elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
+            if self.bill == BILL_WECHAT:
+                account = self.wechatpay_account(data, ownerid)
+            elif self.bill == BILL_ALI:
+                account = self.alipay_account(data, ownerid)
+        return account
+
+    def wechatpay_account(self, data, ownerid):
+        if self.type == "零钱提现":
+            for key in self.key_list:
+                if key in data[2]:
+                    account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    account = account_instance.income
+                    return account
+            account = ASSETS_OTHER
+        elif self.type == "零钱充值":
+            account = WECHATPAY
+        elif self.type == "零钱通转出":
+            index = data[1].find("到")
+            result = data[1][index + 1:]  # 取来自之后的所有数据，例如"建设银行(5522)"
+            for key in self.key_list:
+                if key in result:
+                    account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    account = account_instance.income
+                    return account
+            account = ASSETS_OTHER
+        elif self.type == "转入零钱通":
+            account = WECHATFUND
+        return account
+
+    def alipay_account(self, data, ownerid):
+        if self.type == "转账收款到余额宝":
+            account = ALIFUND
+        elif self.type == "余额宝-自动转入":
+            account = ALIFUND
+        elif self.type == "余额宝-转出到余额":
+            account = ALIPAY
+        elif self.type == "余额宝-单次转入":
+            account = ALIFUND
+        elif self.type == "余额宝-转出到银行卡":
+            result = data[6]
+            for key in self.key_list:
+                if key in result:
+                    account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    account = account_instance.income
+                    return account
+            account = ASSETS_OTHER
+        elif self.type == "充值-普通充值":
+            account = ALIPAY  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
+        elif self.type == "提现-实时提现":
+            # TODO
+            # 可以利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配income
+            account = ASSETS_OTHER  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
+        else:
+            account = ASSETS_OTHER
+        return account
+
+
+def format(data, owner_id):
     """
-        date : 时间       2023-04-28
-        money : 金额      23.00 CNY
-        payee : 收款方    浙江古茗
-        notes : 备注      商品详情
-        expend : 支付方式  Expenses:Food:DrinkFruit
-        account : 账户    Liabilities:CreditCard:Bank:ZhongXin:C6428
+        date : 日期         2023-04-28
+        time : 时间         09:03:00
+        uuid : 交易单号     1000039801202211266356238708041
+        amount : 金额        23.00 CNY
+        payee : 收款方      浙江古茗
+        notes : 备注        商品详情
+        expend : 支付方式   Expenses:Food:DrinkFruit
+        account : 账户      Liabilities:CreditCard:Bank:ZhongXin:C6428
     """
     date = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
     time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
-    money = get_money(data)
+    uuid = get_uuid(data)
+    amount = get_amount(data)
     payee = get_payee(data)
     notes = get_notes(data)
-    expend_fuhao, account_fuhao = get_shouzhi(data[4])
-    expend = get_expend(data,owner_id)
-    account = get_account(data,owner_id)
+    expend_sign, account_sign = get_shouzhi(data[4])
+    expend = GetExpense(data).get_expense(data, owner_id)
+    account = GetAccount(data).get_account(data, owner_id)
     commission = data[8][4:]
     if data[4] == "/":
-        if commission != "":
-            new_money = "{:.2f} CNY".format(float(float(money.split()[0]) - float(commission.split()[0])))
-            return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend,
-                    "expend_fuhao": expend_fuhao,
-                    "account": account, "account_fuhao": account_fuhao, "money": money, "new_money": new_money}
-        return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend,
-                "expend_fuhao": expend_fuhao,
-                "account": account, "account_fuhao": account_fuhao, "money": money}
-    return {"date": date, "time": time, "payee": payee, "notes": notes, "expend": expend, "expend_fuhao": expend_fuhao,
-            "account": account, "account_fuhao": account_fuhao, "money": money}
+        actual_amount = calculate_commission(amount, commission)
+        return {"date": date, "time": time, "uuid": uuid, "payee": payee, "notes": notes, "expend": expend,
+                "expend_sign": expend_sign,
+                "account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
+    return {"date": date, "time": time, "uuid": uuid, "payee": payee, "notes": notes, "expend": expend,
+            "expend_sign": expend_sign,
+            "account": account, "account_sign": account_sign, "amount": amount}
 
 
-def beancount_outfile(data,owner_id):
+def beancount_outfile(data, owner_id: int, write=False):
+    """对账单数据进行过滤并格式化
+
+    Args:
+        data (file): 账单数据
+        owner_id (int): 用户id
+        write (bool, optional): 是否写入，默认为False
+
+    Returns:
+        list: 格式化后的账单数据
     """
-        格式化，输出格式
-
-        2023-04-29 * "浙江古茗" "商品详情"
-        Expenses:Food:DrinkFruit 43.50 CNY
-        Liabilities:CreditCard:Bank:ZhongXin:C6428 -43.50 CNY
-    """
-    # [time, type, object, commodity, balance, amount, way, status, notes, bill]
-    shiji_list = []
+    instance_list = []
     for row in data:
-        if row[7] == "交易成功":
-            if row[2] == "兴全基金管理有限公司" or row[6] == "亲情卡(凯义(王凯义))":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
-                continue
-            entry = format(row,owner_id)
-            shiji = "{0} * \"{1}\" \"{2}\"\n    time: \"{3}\"\n    {4} {5}{6}\n    {7} {8}{9}\n\n".format(
-                entry["date"], entry["payee"], entry["notes"], entry["time"], entry["expend"], entry["expend_fuhao"],
-                entry["money"],
-                entry["account"], entry["account_fuhao"], entry["money"])
-            if entry["notes"] == "零钱提现":
-                shiji = "{0} * \"{1}\" \"{2}\"\n    time: \"{3}\"\n    {4} {5}{6} \n    {7} {8}{9}\n    {10}\n\n".format(
-                    entry["date"], entry["payee"], entry["notes"], entry["time"], entry["expend"],
-                    entry["expend_fuhao"],
-                    entry["money"],
-                    entry["account"], entry["account_fuhao"], entry["new_money"], "Expenses:Finance:Commission")
-            elif entry == {}:
-                continue
-            mouth = shiji[5:7]
-            year = shiji[0:4]
-            # os.path.dirname(settings.BASE_DIR) 获取当前文件所在的Django项目的根目录的父目录（将解析后的数据存放于该项目的同级目录Assets）
-            # print(os.path.dirname(settings.BASE_DIR) + "/Assets" + "/" + year + "/" + mouth + "-expenses.bean")
-            file = os.path.dirname(
-                settings.BASE_DIR) + "/Beancount-Trans-Assets" + "/" + year + "/" + mouth + "-expenses.bean"
-            createdir(file)
-            shiji_list.append(shiji)
-            with open(file, mode='a') as file:
-                file.write(shiji)
-        else:
+        if row[7] != "交易成功":
             continue
-    return shiji_list
+        if row[2] == "兴全基金管理有限公司" or row[6] == "亲情卡(凯义(王凯义))":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
+            continue
+        entry = format(row, owner_id)
+        if entry == {}:
+            continue
+        elif entry["notes"] == "零钱提现":
+            instance = \
+                f"{entry['date']} * \"{entry['payee']}\" \"{entry['notes']}\"\n\
+    time: \"{entry['time']}\"\n\
+    uuid: \"{entry['uuid']}\"\n\
+    {entry['expend']} {entry['expend_sign']}{entry['amount']}\n\
+    {entry['account']} {entry['account_sign']}{entry['actual_amount']}\n\
+    Expenses:Finance:Commission\n\n"
+        else:
+            instance = \
+                f"{entry['date']} * \"{entry['payee']}\" \"{entry['notes']}\"\n\
+    time: \"{entry['time']}\"\n\
+    uuid: \"{entry['uuid']}\"\n\
+    {entry['expend']} {entry['expend_sign']}{entry['amount']}\n\
+    {entry['account']} {entry['account_sign']}{entry['amount']}\n\n"
+        instance_list.append(instance)
+        if write:
+            mouth, year = instance[5:7], instance[0:4]
+            file = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year,
+                                f"{mouth}-expenses.bean")
+            init_project_file(file)
+            with open(file, mode='a') as file:
+                file.write(instance)
+    return instance_list
 
 
-def createdir(file_path):
-    file_list = [
-        "00.bean",
-        "01-expenses.bean",
-        "02-expenses.bean",
-        "03-expenses.bean",
-        "04-expenses.bean",
-        "05-expenses.bean",
-        "06-expenses.bean",
-        "07-expenses.bean",
-        "08-expenses.bean",
-        "09-expenses.bean",
-        "10-expenses.bean",
-        "11-expenses.bean",
-        "12-expenses.bean",
-        "cycle.bean",
-        "event.bean",
-        "income.bean",
-        "invoice.bean",
-        "price.bean",
-        "time.bean"
-    ]
-    insert_contents = '''include "01-expenses.bean"
-include "02-expenses.bean"
-include "03-expenses.bean"
-include "04-expenses.bean"
-include "05-expenses.bean"
-include "06-expenses.bean"
-include "07-expenses.bean"
-include "09-expenses.bean"
-include "10-expenses.bean"
-include "11-expenses.bean"
-include "12-expenses.bean"
-include "cycle.bean"
-include "event.bean"
-include "income.bean"
-include "invoice.bean"
-include "price.bean"
-include "time.bean"'''
-    dir_path = os.path.split(file_path)[0]  # 获取账单的绝对路径，例如 */Beancount-Trans/Beancount-Trans-Assets/2023
-    dir_name = os.path.basename(dir_path)
-    if not os.path.isdir(dir_path):  # 判断年份账单是否存在，若不存在则创建目录并在main.bean中include该目录
-        os.makedirs(dir_path)
-        insert_include = f'\ninclude "{dir_name}/00.bean"'
-        main_file = os.path.dirname(dir_path) + "/main.bean"
-        with open(main_file, 'a') as main:
-            main.write(insert_include)
-        for file_name in file_list:  # 该for循环用于创建按年划分的所有文件
-            createfile = os.path.join(dir_path, file_name)
-            open(createfile, 'w').close()
-            if file_name == "00.bean":  # 00.bean文件会include其他文件来让beancount正确识别
-                with open(createfile, 'w') as f:
-                    f.write(insert_contents)
-
-
-# 支付宝
-def alipay(reader):
-    row = 0
-    while row < 24:
-        next(reader)
-        row += 1
-    list = []
-    try:
-        for row in reader:
-            # 提取需要的字段
-            time = row[0]  # 交易时间
-            type = row[1]  # 交易类型
-            object = row[2]  # 交易对方
-            commodity = row[4]  # 商品
-            balance = "/" if row[5] == "不计收支" else row[5]  # 收支
-            amount = row[6]  # 金额
-            way = "余额" if row[7] == '                    ' else row[7]  # 支付方式
-            status = row[8]  # 交易状态
-            notes = "/" if row[11] == '                    ' else row[11]  # 备注
-            bill = "alipay"
-            single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill]
-            new_list = []
-            for item in single_list:
-                new_item = item.strip()
-                new_list.append(new_item)
-            list.append(new_list)
-    except UnicodeDecodeError:
-        print(row)
-    return list
-
-
-# 微信
-def wechatpay(reader):  # 返回的列表具体的值注释在该函数
-    row = 0
-    while row < 16:
-        next(reader)
-        row += 1
-    list = []
-    for row in reader:
-        time = row[0]  # 交易时间(2023-03-03 09:03:00)
-        type = row[1]  # 交易类型（微信通过该字段判断各账户间转账，支付宝通过该字段判断分类(但分类并不准，推荐忽略)）
-        object = row[2]  # 交易对方
-        commodity = row[3]  # 商品（支付宝通过该字段判断各账户间转账）
-        balance = row[4]  # 收支(收入/支出/不计收支)
-        amount = row[5]  # 金额(￥10.00/10.00)
-        way = row[6]  # 支付方式
-        status = "交易成功"  # 交易状态(支付宝账单中存在很多其他状态，但处理的时候只会处理"交易成功"的数据，其他数据丢弃)
-        notes = row[10]  # 备注(微信账单中该列为手续费，支付宝账单中全为空)
-        bill = "wechat"  # 账单(用于区分传入的各个账单以调用不同的函数处理)
-        single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill]
-        list.append(single_list)
-    return list
-
-
-def analyze(request):
-    """ 解析，上传文件后提取需要的字段 """
-    if request.method == "POST":
+class AnalyzeView(View):
+    def post(self, request):
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
-        uploaded_file = request.FILES.get('trans', None)
-        content = uploaded_file.read()
-        encoding = chardet.detect(content)['encoding']
-        # 创建临时文件并将内容写入临时文件
-        temp = tempfile.NamedTemporaryFile(delete=False)
-        temp.write(content)
-        temp.flush()
-        # 打开微信账单文件
-        with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
-            # 读取CSV文件
-            reader = csv.reader(csvfile)
-            one = next(reader)[0]
-            # 跳过表头
-            if one == "微信支付账单明细":
-                list = wechatpay(reader)
-            elif one == "------------------------------------------------------------------------------------":
-                list = alipay(reader)
-        # 删除临时文件
-        format_list = beancount_outfile(list,owner_id)
-        # json_list = json.dumps(format_list)
-        os.unlink(temp.name)
+        uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
+        temp, encoding = create_temporary_file(uploaded_file)  # 创建临时文件并获取文件编码
 
-        # return HttpResponse(json_list, content_type='application/json')
+        with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
+            list = get_initials_bill(bill=csv.reader(csvfile))
+        get_default_assets(ownerid=owner_id)
+        format_list = beancount_outfile(list, owner_id, write=False)
+
+        os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')
-    title = "trans"
-    context = {"title": title}
-    return render(request, "translate/trans.html", context)
+
+    def get(self, request):
+        title = "trans"
+        context = {"title": title}
+        return render(request, "translate/trans.html", context)
