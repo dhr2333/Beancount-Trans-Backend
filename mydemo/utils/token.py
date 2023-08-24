@@ -1,4 +1,5 @@
 import jwt
+
 import mydemo.settings as settings
 
 
@@ -16,7 +17,7 @@ def decode_token(token):
         return 'Token过期'
     except jwt.InvalidTokenError:
         return '无效Token'
-    
+
 
 def get_token_user_id(request):
     token = get_token(request)

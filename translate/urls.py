@@ -5,7 +5,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-                  path('trans', views.analyze, name='trans'),
+                  #   path('trans', views.analyze, name='trans'),
+                  #   path('trans', views_test.analyze, name='trans'),
+                  path('trans', views.AnalyzeView.as_view(), name='trans'),
                   # path("map/expense", views.ExpenseMapList.as_view(), name="expense"),
                   # path("map/expense/<int:pk>", views.ExpenseMapDetail.as_view(), name="expensedetail"),
                   # path("map/assets", views.AssetsMapList.as_view(), name="assets"),

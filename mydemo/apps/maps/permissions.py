@@ -29,7 +29,8 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
         # 其他用户没有读写权限
         return False
 
+
 class IsOwner(permissions.BasePermission):
-       def has_object_permission(self, request, view, obj):
-           # 检查对象的创建者是否与请求的用户相同
-           return obj.created_by == request.user
+    def has_object_permission(self, request, view, obj):
+        # 检查对象的创建者是否与请求的用户相同
+        return obj.created_by == request.user

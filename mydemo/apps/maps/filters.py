@@ -1,10 +1,11 @@
 from rest_framework import filters
 
+
 class CurrentUserFilterBackend(filters.BaseFilterBackend):
     def filter_queryset(self, request, queryset, view):
         user = request.user
         owner_id = request.user.id
-        print(user,"'id = ",owner_id)
+        # print(user, "id = ", owner_id)
         if user.is_authenticated:
             return queryset.filter(owner=owner_id)
         else:
