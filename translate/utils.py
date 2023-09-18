@@ -1,3 +1,13 @@
+import logging
+
+transaction_status = {
+    "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
+                  "充值完成", "充值成功", "已收钱", "已退款(￥69.00)"],
+    "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "已关闭", "解冻成功",
+               "信用服务使用成功"]
+}
+
+
 class PaymentStrategy:
     def get_data(self, bill):
         raise NotImplementedError()
@@ -20,14 +30,14 @@ class WeChatPayStrategy(PaymentStrategy):
                 balance = row[4]  # 收支(收入/支出/不计收支)
                 amount = row[5]  # 金额(￥10.00/10.00)
                 way = row[6]  # 支付方式
-                status = "交易成功"  # 交易状态(支付宝账单中存在很多其他状态，但处理的时候只会处理"交易成功"的数据，其他数据丢弃)
+                status = row[7]  # 交易状态(支付宝账单中存在很多其他状态，但处理的时候只会处理"交易成功"的数据，其他数据丢弃)
                 notes = row[10]  # 备注(微信账单中该列为手续费，支付宝账单中全为空)
                 bill = "wechat"  # 账单(用于区分传入的各个账单以调用不同的函数处理)
                 uuid = row[8]  # 交易单号
                 single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill, uuid]
                 list.append(single_list)
         except UnicodeDecodeError:
-            print("error row = ", row)
+            logging.error("error row = ", row)
         return list
 
 
@@ -73,4 +83,5 @@ def get_initials_bill(bill):
         strategy = AliPayStrategy()
     else:
         strategy = None
+        logging.error("当前账单不支持，请检查账单格式是否正确")
     return strategy.get_data(bill)

@@ -10,7 +10,6 @@ from mydemo.models import BaseModel
 class Expense(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     payee = models.CharField(max_length=8, null=True, help_text="商家")
-    payee_order = models.IntegerField(default=100, help_text="优先级")
     expend = models.CharField(max_length=64, default="Expenses:Other", null=False, help_text="支出账户")
     tag = models.CharField(max_length=16, help_text="标签")
     classification = models.CharField(max_length=16, help_text="归类")

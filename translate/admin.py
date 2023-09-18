@@ -6,7 +6,7 @@ from .models import Expense
 
 @admin.register(Expense)
 class ExpenseMapAdmin(admin.ModelAdmin):
-    list_display = ('key', 'payee', 'payee_order', 'expend', 'tag', 'classification')
+    list_display = ('key', 'payee', 'expend', 'tag', 'classification')
     list_per_page = 100
     list_filter = ['payee']
     search_fields = ['key']

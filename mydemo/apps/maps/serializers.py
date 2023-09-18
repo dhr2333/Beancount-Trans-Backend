@@ -4,13 +4,14 @@ from translate.models import Expense, Assets
 
 
 class ExpenseSerializer(serializers.HyperlinkedModelSerializer):
+    payee = serializers.CharField(allow_blank=True, allow_null=True)
     owner = serializers.ReadOnlyField(source='owner.username')
 
     # mobile = serializers.ReadOnlyField(source='owner.mobile')
 
     class Meta:
         model = Expense
-        fields = ['id', 'url', 'owner', 'key', 'payee', 'payee_order', 'expend', 'tag', 'classification']
+        fields = ['id', 'url', 'owner', 'key', 'payee', 'expend', 'tag', 'classification']
 
 
 class AssetsSerializer(serializers.HyperlinkedModelSerializer):
