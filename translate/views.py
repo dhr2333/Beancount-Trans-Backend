@@ -1,7 +1,7 @@
 import csv
 import os
 import re
-from datetime import datetime
+from datetime import datetime, time
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -24,6 +24,13 @@ ALIFUND = None
 
 BILL_WECHAT = "wechat"  # 用于判断账单类型
 BILL_ALI = "alipay"
+
+TIME_BREAKFAST_START = time(6)
+TIME_BREAKFAST_END = time(10)
+TIME_LUNCH_START = time(10)
+TIME_LUNCH_END = time(14)
+TIME_DINNER_START = time(16)
+TIME_DINNER_END = time(20)
 
 
 def get_default_assets(ownerid):
@@ -172,6 +179,7 @@ class GetExpense:
         self.expend = EXPENSES_OTHER
         self.bill = data[9]
         self.balance = data[4]
+        self.time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
 
     def initialize_type(self, data):
         if self.bill == BILL_WECHAT:
@@ -192,13 +200,24 @@ class GetExpense:
         self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
         self.initialize_type(data)
         expend = self.expend
+        foodtime = self.time
 
         if self.balance == "支出":
             matching_keys = [k for k in self.key_list if k in data[2] or k in data[3]]  # 通过列表推导式获取所有匹配的key形成新的列表
             max_order = None
             for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
                 expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
-                if expense_instance:  # 通过Expenses及Payee计算优先级
+                if expense_instance:
+
+                    # 增加早餐中餐午餐判断
+                    if expense_instance.expend == "Expenses:Food" and TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
+                        expense_instance.expend += ":Breakfast"
+                    elif expense_instance.expend == "Expenses:Food" and TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
+                        expense_instance.expend += ":Lunch"
+                    elif expense_instance.expend == "Expenses:Food" and TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
+                        expense_instance.expend += ":Dinner"
+
+                    # 通过Expenses及Payee计算优先级
                     expend_instance_priority = expense_instance.expend.count(":") * 100
                     payee_instance_priority = 50 if expense_instance.payee else 0
                     matching_max_order = expend_instance_priority + payee_instance_priority
@@ -247,7 +266,6 @@ class GetExpense:
             expend = ASSETS_OTHER
         elif self.type == "信用卡还款":
             result = data[2][:data[2].index("还款")]  # 例如"华夏银行信用卡"
-            print(result)
             for full in self.full_list:
                 if result in full:
                     account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
