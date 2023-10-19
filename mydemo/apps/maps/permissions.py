@@ -25,7 +25,7 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
         # 允许属主对其对象进行读写
         if obj.owner == request.user:
             return True
-
+        
         # 其他用户没有读写权限
         return False
 

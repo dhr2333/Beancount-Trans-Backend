@@ -21,6 +21,7 @@ WECHATPAY = None  # Assets表中微信零钱的默认值，get_default_assets()�
 WECHATFUND = None
 ALIPAY = None
 ALIFUND = None
+HUABEI = None
 
 BILL_WECHAT = "wechat"  # 用于判断账单类型
 BILL_ALI = "alipay"
@@ -32,6 +33,9 @@ TIME_LUNCH_END = time(14)
 TIME_DINNER_START = time(16)
 TIME_DINNER_END = time(20)
 
+pattern = {"余额宝": r'^余额宝.*收益发放$',
+           "花呗": r'^花呗主动还款.*账单$'
+}  # 统一管理正则表达式
 
 def get_default_assets(ownerid):
     """
@@ -43,7 +47,8 @@ def get_default_assets(ownerid):
         "微信零钱": "WECHATPAY",
         "微信零钱通": "WECHATFUND",
         "支付宝余额": "ALIPAY",
-        "支付宝余额宝": "ALIFUND"
+        "支付宝余额宝": "ALIFUND",
+        "支付宝花呗": "HUABEI"
     }
 
     for asset_name, var_name in default_assets.items():
@@ -205,6 +210,7 @@ class GetExpense:
         if self.balance == "支出":
             matching_keys = [k for k in self.key_list if k in data[2] or k in data[3]]  # 通过列表推导式获取所有匹配的key形成新的列表
             max_order = None
+            expend_set = set()
             for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
                 expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
                 if expense_instance:
@@ -221,6 +227,7 @@ class GetExpense:
                     expend_instance_priority = expense_instance.expend.count(":") * 100
                     payee_instance_priority = 50 if expense_instance.payee else 0
                     matching_max_order = expend_instance_priority + payee_instance_priority
+                    expend_set.add(expense_instance.expend)
 
                 if matching_max_order is not None and (
                         max_order is None or matching_max_order > max_order):  # 如果匹配到的key的matching_max_order大于max_order，则更新max_order
@@ -230,6 +237,8 @@ class GetExpense:
                 elif matching_max_order is not None and (
                         max_order is None or matching_max_order == max_order):  # 如果最大优先级冲突，则将Expend更新为默认Expend.
                     expend = self.expend
+                    if len(expend_set) == 1:  # 如果所有关键字对应的Expend均一致，则直接调用Expend不使用默认值(Expenses:Other)
+                        expend = expense_instance.expend
             return expend
 
         elif self.balance == "收入":
@@ -299,6 +308,8 @@ class GetExpense:
             expend = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
         elif self.type == "提现-实时提现":
             expend = ALIPAY
+        elif re.match(pattern["花呗"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
+            expend = HUABEI
         elif self.type == "信用卡还款":
             result = data[2] + "信用卡"  # 例如"华夏银行信用卡"
             for full in self.full_list:
@@ -434,7 +445,7 @@ class GetAccount:
                     account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
                     account = account_instance.income
                     return account
-        elif self.type == "信用卡还款":
+        elif self.type == "信用卡还款" or re.match(pattern["花呗"], self.type):
             result = data[6]
             for key in self.key_list:
                 if key in result:
@@ -505,7 +516,7 @@ def beancount_outfile(data, owner_id: int, write=False):
             continue
         if row[9] == BILL_ALI and row[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭"]:
             continue
-        if row[2] == "兴全基金管理有限公司":  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
+        if re.match(pattern["余额宝"], row[3]):  # 忽略余额宝收益，最后做balance结余断言时统一归于基金收益
             continue
         try:
             entry = format(row, owner_id)
@@ -552,7 +563,7 @@ class AnalyzeView(View):
         with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
             list = get_initials_bill(bill=csv.reader(csvfile))
         get_default_assets(ownerid=owner_id)
-        format_list = beancount_outfile(list, owner_id, write=False)
+        format_list = beancount_outfile(list, owner_id, write=True)
 
         os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')
