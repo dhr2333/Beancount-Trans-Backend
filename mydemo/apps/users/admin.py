@@ -1,8 +1,9 @@
 # Register your models here.
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+
 from . import models
 
-from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 # 自定义User表后，admin界面管理User类
 class UserAdmin(DjangoUserAdmin):

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'coreapi',
     'corsheaders',
     'translate',
+    'account',
     'rest_framework',
     'rest_framework_simplejwt',
     'users.apps.UsersConfig',

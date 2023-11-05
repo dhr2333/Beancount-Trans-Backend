@@ -43,6 +43,17 @@ class ExpenseViewSet(ModelViewSet):
     #     print(user)
     #     return Expense.objects.filter(owner=user)
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
+        serializer.is_valid(raise_exception=True)
+
+        if isinstance(request.data, list):
+            Expense.objects.filter(owner_id=self.request.user).delete()
+            serializer.save(owner=self.request.user)
+            return Response(serializer.data)
+        else:
+            return super().create(request, *args, **kwargs)
+
     @action(methods=['get'], detail=False)
     def latest(self, request):
         expense = Expense.objects.latest('id')
@@ -87,6 +98,17 @@ class AssetsViewSet(ModelViewSet):
     # def get_queryset(self):
     #     user = self.request.user
     #     return Assets.objects.filter(owner=user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
+        serializer.is_valid(raise_exception=True)
+
+        if isinstance(request.data, list):
+            Assets.objects.filter(owner_id=self.request.user).delete()
+            serializer.save(owner=self.request.user)
+            return Response(serializer.data)
+        else:
+            return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

@@ -34,8 +34,10 @@ TIME_DINNER_START = time(16)
 TIME_DINNER_END = time(20)
 
 pattern = {"余额宝": r'^余额宝.*收益发放$',
-           "花呗": r'^花呗主动还款.*账单$'
-}  # 统一管理正则表达式
+           "花呗": r'^花呗主动还款.*账单$',
+           "基金": r'.*-卖出至.*'
+           }  # 统一管理正则表达式
+
 
 def get_default_assets(ownerid):
     """
@@ -454,6 +456,14 @@ class GetAccount:
                     return account
                 else:
                     account = ASSETS_OTHER
+        elif re.match(pattern["基金"], self.type):
+            result = data[3][data[3].index("卖出至") + len("卖出至"):]
+            for key in self.key_list:
+                if result in key:
+                    account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    account = account_instance.income
+                    return account
+            account = ASSETS_OTHER
         else:
             account = ASSETS_OTHER  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
         return account
@@ -563,7 +573,7 @@ class AnalyzeView(View):
         with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
             list = get_initials_bill(bill=csv.reader(csvfile))
         get_default_assets(ownerid=owner_id)
-        format_list = beancount_outfile(list, owner_id, write=True)
+        format_list = beancount_outfile(list, owner_id, write=False)
 
         os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')

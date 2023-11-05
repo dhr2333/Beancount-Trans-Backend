@@ -13,17 +13,19 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
 from maps.views import ExpenseViewSet, AssetsViewSet
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
-from users.views import UserViewSet, GroupViewSet
+from users.views import UserViewSet, GroupViewSet, CreateUserView, LoginView
 
 router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")
 router.register(r'assets', AssetsViewSet, basename="assets")
+router.register(r'account', AccountViewSet, basename="account")
 router.register(r'users', UserViewSet, basename="user")
 router.register(r'groups', GroupViewSet, basename="group")
 
@@ -36,6 +38,8 @@ urlpatterns = [
 
     path('translate/', include('translate.urls')),
 
+    path('user/create/', CreateUserView.as_view(), name='create_user'),  # 创建用户
+    path('login/', LoginView.as_view(), name='user_login'),
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
