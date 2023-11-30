@@ -10,7 +10,7 @@ from django.views import View
 from mydemo import settings
 from mydemo.utils.file import create_temporary_file, init_project_file
 from mydemo.utils.token import get_token_user_id
-from .models import Expense, Assets
+from .models import Expense, Assets, Income
 from .utils import *
 
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
@@ -55,7 +55,7 @@ def get_default_assets(ownerid):
 
     for asset_name, var_name in default_assets.items():
         asset = Assets.objects.filter(full=asset_name, owner_id=ownerid).first()
-        globals()[var_name] = asset.income if asset else ASSETS_OTHER
+        globals()[var_name] = asset.assets if asset else ASSETS_OTHER
 
 
 def get_uuid(data):
@@ -184,6 +184,7 @@ class GetExpense:
         self.full_list = None
         self.type = None
         self.expend = EXPENSES_OTHER
+        self.income = INCOME_OTHER
         self.bill = data[9]
         self.balance = data[4]
         self.time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
@@ -198,7 +199,7 @@ class GetExpense:
         if self.balance == "支出":
             self.key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
         elif self.balance == "收入":
-            self.key_list = None
+            self.key_list = Income.objects.filter(owner_id=ownerid).values_list('key', flat=True)
         elif self.balance == "/" or self.balance == "不计收支":
             self.key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
         self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
@@ -207,6 +208,7 @@ class GetExpense:
         self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
         self.initialize_type(data)
         expend = self.expend
+        income = self.income
         foodtime = self.time
 
         if self.balance == "支出":
@@ -244,7 +246,13 @@ class GetExpense:
             return expend
 
         elif self.balance == "收入":
-            expend = INCOME_OTHER
+            matching_keys = [k for k in self.key_list if k in data[2] or k in data[3]]  # 通过列表推导式获取所有匹配的key形成新的列表
+            for matching_key in matching_keys:
+                income_instance = Income.objects.filter(owner_id=ownerid, key=matching_key).first()
+                if income_instance:  # 由于作者的收入来源较少，因此暂时不考虑收入来源的优先级问题，直接返回匹配到的第一个收入来源
+                    return income_instance.income
+            return income
+
         elif self.balance == "/" or self.balance == "不计收支":
             if self.bill == BILL_WECHAT:
                 expend = self.wechatpay_expense(data, ownerid)
@@ -260,8 +268,9 @@ class GetExpense:
         elif self.type == "零钱充值":
             for key in self.key_list:
                 if key in data[2]:
-                    expend_instance = Assets.objects.get(key=key)
-                    expend = expend_instance.income
+                    # expend_instance = Assets.objects.get(key=key)
+                    expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    expend = expend_instance.assets
                     return expend
             expend = ASSETS_OTHER
         elif self.type == "零钱通转出":
@@ -271,8 +280,9 @@ class GetExpense:
             result = data[1][index + 2:]  # 取来自之后的所有数据，例如"建设银行(5522)"
             for key in self.key_list:
                 if key in result:
-                    expend_instance = Assets.objects.get(key=key)
-                    expend = expend_instance.income
+                    # expend_instance = Assets.objects.get(key=key)
+                    expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    expend = expend_instance.assets
                     return expend
             expend = ASSETS_OTHER
         elif self.type == "信用卡还款":
@@ -280,7 +290,7 @@ class GetExpense:
             for full in self.full_list:
                 if result in full:
                     account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
         elif self.type == "购买理财通":
             expend = ASSETS_OTHER
@@ -299,8 +309,9 @@ class GetExpense:
             result = data[6]
             for key in self.key_list:
                 if key in result:
-                    expend_instance = Assets.objects.get(key=key)
-                    expend = expend_instance.income
+                    # expend_instance = Assets.objects.get(key=key)
+                    expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                    expend = expend_instance.assets
                     return expend
                 else:
                     expend = ASSETS_OTHER
@@ -317,7 +328,7 @@ class GetExpense:
             for full in self.full_list:
                 if result in full:
                     expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
-                    expend = expend_instance.income
+                    expend = expend_instance.assets
                     return expend
         else:
             expend = ASSETS_OTHER
@@ -360,7 +371,7 @@ class GetAccount:
         if self.balance == "收入" or self.balance == "支出":  # 收/支栏 值为"收入"或"支出"
             if key in self.key_list:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                account = account_instance.income
+                account = account_instance.assets
                 # return account
             elif key == "" and self.bill == BILL_ALI:  # 第三方平台到支付宝的收入
                 account = ALIPAY
@@ -368,7 +379,7 @@ class GetAccount:
                 digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
                 if digits in self.key_list:  # 判断提取到的数字是否在列表中
                     account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                 else:
                     account = ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
         elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
@@ -385,7 +396,7 @@ class GetAccount:
             for key in self.key_list:
                 if key in data[2]:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
             account = ASSETS_OTHER
         elif self.type == "零钱充值":
@@ -396,7 +407,7 @@ class GetAccount:
             for key in self.key_list:
                 if key in result:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
             account = ASSETS_OTHER
         elif self.type == "转入零钱通":
@@ -406,7 +417,7 @@ class GetAccount:
             for key in self.key_list:
                 if key in result:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
                 else:
                     account = ASSETS_OTHER
@@ -415,7 +426,7 @@ class GetAccount:
             for full in self.full_list:
                 if result in full:
                     account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
         return account
 
@@ -435,24 +446,24 @@ class GetAccount:
             for key in self.key_list:
                 if key in result:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
             account = ASSETS_OTHER
         elif self.type == "充值-普通充值":
             account = ALIPAY  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
-        elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配income
+        elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
             result = data[2] + "储蓄卡"  # 例如"宁波银行储蓄卡"
             for full in self.full_list:
                 if result in full:
                     account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
         elif self.type == "信用卡还款" or re.match(pattern["花呗"], self.type):
             result = data[6]
             for key in self.key_list:
                 if key in result:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
                 else:
                     account = ASSETS_OTHER
@@ -461,7 +472,7 @@ class GetAccount:
             for key in self.key_list:
                 if result in key:
                     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                    account = account_instance.income
+                    account = account_instance.assets
                     return account
             account = ASSETS_OTHER
         else:

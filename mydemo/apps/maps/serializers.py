@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from translate.models import Expense, Assets
+from translate.models import Expense, Assets, Income
 
 
 class ExpenseSerializer(serializers.HyperlinkedModelSerializer):
@@ -11,7 +11,7 @@ class ExpenseSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Expense
-        fields = ['id', 'url', 'owner', 'key', 'payee', 'expend', 'tag', 'classification']
+        fields = ['id', 'url', 'owner', 'key', 'payee', 'expend']
 
 
 class AssetsSerializer(serializers.HyperlinkedModelSerializer):
@@ -21,4 +21,14 @@ class AssetsSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Assets
-        fields = ['id', 'url', 'owner', 'key', 'full', 'income']
+        fields = ['id', 'url', 'owner', 'key', 'full', 'assets']
+
+
+class IncomeSerializer(serializers.HyperlinkedModelSerializer):
+    owner = serializers.ReadOnlyField(source='owner.username')
+
+    # mobile = serializers.ReadOnlyField(source='owner.mobile')
+
+    class Meta:
+        model = Income
+        fields = ['id', 'url', 'owner', 'key', 'payer', 'income']

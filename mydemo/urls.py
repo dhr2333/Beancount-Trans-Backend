@@ -16,7 +16,7 @@ Including another URLconf
 from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
-from maps.views import ExpenseViewSet, AssetsViewSet
+from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
@@ -25,6 +25,7 @@ from users.views import UserViewSet, GroupViewSet, CreateUserView, LoginView
 router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")
 router.register(r'assets', AssetsViewSet, basename="assets")
+router.register(r'income', IncomeViewSet, basename="income")
 router.register(r'account', AccountViewSet, basename="account")
 router.register(r'users', UserViewSet, basename="user")
 router.register(r'groups', GroupViewSet, basename="group")

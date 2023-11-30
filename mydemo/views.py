@@ -1,3 +1,5 @@
+from hashlib import sha256
+
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -11,3 +13,8 @@ def get_csrf_token(request):
     return response
     # response_data = {'csrftoken': token}
     # return JsonResponse(response_data, content_type="application/json,charset=utf-8")
+
+
+def get_sha256(str):
+    m = sha256(str.encode('utf-8'))
+    return m.hexdigest()
