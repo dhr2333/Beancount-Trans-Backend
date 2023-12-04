@@ -111,9 +111,6 @@ class AssetsViewSet(ModelViewSet):
             return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
-
-    def perform_create(self, serializer):
         if Assets.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
@@ -156,9 +153,6 @@ class IncomeViewSet(ModelViewSet):
             return Response(serializer.data)
         else:
             return super().create(request, *args, **kwargs)
-
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
 
     def perform_create(self, serializer):
         if Income.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exists():
