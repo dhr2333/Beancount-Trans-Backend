@@ -16,11 +16,12 @@ cd $DJANGODIR
 export PYTHONPATH=$DJANGODIR:$PYTHONPATH
 #pip install -Ur requirements.txt -i http://pypi.douban.com/simple/  --trusted-host pypi.douban.com && \
 #        pip install gunicorn  -i http://pypi.douban.com/simple/ --trusted-host pypi.douban.com
+
 python manage.py makemigrations && \
-  python manage.py migrate && \
-  python manage.py collectstatic --noinput && \
-  uwsgi --ini conf/uwsgi.ini
-#   && \
+python manage.py migrate && \
+python manage.py collectstatic --noinput && \
+uwsgi --ini conf/uwsgi.ini
+#   && 
 #  python manage.py runserver 0.0.0.0:8000
 # Start your Django Unicorn
 # Programs meant to be run under supervisor should not daemonize themselves (do not use --daemon)
