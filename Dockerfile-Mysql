@@ -1,4 +1,4 @@
-FROM harbor.dhr2333.cn:8080/library/mysql:8.0.26
+FROM mysql:8.0.26 as production-stage
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 
-ADD sql/20231209-Develop.sql /docker-entrypoint-initdb.d/
+COPY sql/20231209-Develop.sql /docker-entrypoint-initdb.d/
