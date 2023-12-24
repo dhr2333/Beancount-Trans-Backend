@@ -122,3 +122,7 @@ class IgnoreData:
 
     def notes(self, data):
         return data["notes"] == "零钱提现"
+
+
+class UnsupportedFileType(Exception):
+    pass

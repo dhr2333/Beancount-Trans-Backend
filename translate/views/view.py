@@ -5,6 +5,7 @@ from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
+from rest_framework import status
 
 from mydemo import settings
 from mydemo.utils.file import create_temporary_file, init_project_file
@@ -24,8 +25,7 @@ def get_initials_bill(bill):
     elif isinstance(first_line, str) and "微信支付账单明细" in first_line:
         strategy = WeChatPayStrategy()
     else:
-        strategy = None
-        logging.error("当前账单不支持，请检查账单格式是否正确")
+        raise UnsupportedFileType("当前账单不支持")
     return strategy.get_data(bill)
 
 
@@ -35,10 +35,13 @@ class AnalyzeView(View):
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
         temp, encoding = create_temporary_file(uploaded_file)  # 创建临时文件并获取文件编码
 
-        with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
-            list = get_initials_bill(bill=csv.reader(csvfile))
-        format_list = beancount_outfile(list, owner_id, write=False)
-
+        try:
+            with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
+                list = get_initials_bill(bill=csv.reader(csvfile))
+            format_list = beancount_outfile(list, owner_id, write=False)
+        except UnsupportedFileType as e:
+            return JsonResponse({'error': str(e)}, status=400)
+            
         os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')
 
