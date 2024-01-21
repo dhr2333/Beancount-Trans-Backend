@@ -6,6 +6,7 @@ collectstatic
 /conf/prod.py
 logs/*.log
 static
+mydemo/settings.py
 
 # __pycache
 __pycache__/

@@ -123,6 +123,9 @@ class IgnoreData:
     def notes(self, data):
         return data["notes"] == "零钱提现"
 
+    def credit_zhaoshang(self, data):
+        if "支付宝" in data[2] or "财付通" in data[2]:
+            return True
 
 class UnsupportedFileType(Exception):
     pass

@@ -8,22 +8,26 @@ from django.views import View
 from rest_framework import status
 
 from mydemo import settings
-from mydemo.utils.file import create_temporary_file, init_project_file
+from mydemo.utils.file import create_temporary_file, init_project_file, pdf_convert_to_csv
 from mydemo.utils.token import get_token_user_id
 from translate.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
 from translate.views.WeChat import *
+from translate.views.Credit_ZhaoShang import *
 
 
 def get_initials_bill(bill):
     """Get the initials of the bill's name."""
     first_line = next(bill)[0]
-    if isinstance(first_line,
-                  str) and "------------------------------------------------------------------------------------" in first_line:
+    year = first_line[:4]
+    if isinstance(first_line, str) and "------------------------------------------------------------------------------------" in first_line:
         strategy = AliPayStrategy()
     elif isinstance(first_line, str) and "微信支付账单明细" in first_line:
         strategy = WeChatPayStrategy()
+    elif isinstance(first_line, str) and "招商银行信用卡账单明细" in first_line:
+        strategy = ZhaoShangStrategy()
+        return strategy.get_data(bill,year)
     else:
         raise UnsupportedFileType("当前账单不支持")
     return strategy.get_data(bill)
@@ -33,7 +37,8 @@ class AnalyzeView(View):
     def post(self, request):
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
-        temp, encoding = create_temporary_file(uploaded_file)  # 创建临时文件并获取文件编码
+        csv_file = pdf_convert_to_csv(uploaded_file)  # 对文件格式进行判断并转换
+        temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
 
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
@@ -65,11 +70,14 @@ def beancount_outfile(data, owner_id: int, write=False):
     ignore_data = IgnoreData(None)
     instance_list = []
     for row in data:
+        # print(row)
         if ignore_data.alipay(row):
             continue
         elif ignore_data.alipay_fund(row):
             continue
         elif ignore_data.wechatpay(row):
+            continue
+        elif ignore_data.credit_zhaoshang(row):
             continue
         try:
             entry = format(row, owner_id)
@@ -105,14 +113,14 @@ def format(data, owner_id):
         account : 账户      Liabilities:CreditCard:Bank:ZhongXin:C6428
     """
     try:
-        date = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
-        time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
+        date = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+        time = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
         uuid = get_uuid(data)
         status = get_status(data)
         amount = get_amount(data)
         payee = GetPayee(data).get_payee(data, owner_id)
         notes = get_notes(data)
-        expend_sign, account_sign = get_shouzhi(data[4])
+        expend_sign, account_sign = get_shouzhi(data)
         expend = GetExpense(data).get_expense(data, owner_id)
         account = GetAccount(data).get_account(data, owner_id)
         commission = data[8][4:]
@@ -158,6 +166,8 @@ class GetAccount:
             self.key = alipay_initalize_key(data)
         elif self.bill == BILL_WECHAT:
             self.key = wechatpay_initalize_key(self, data)
+        elif self.bill == BILL_ZHAOSHANG:
+            self.key = credits_zhaoshang_initalize_key(data)
 
     def get_account(self, data, ownerid):
         self.initialize_key(data)
@@ -176,6 +186,8 @@ class GetAccount:
                 return alipay_get_expense_account(self, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
                 return wechatpay_get_expense_account(self, actual_assets, ownerid)
+            elif self.bill == BILL_ZHAOSHANG:
+                return credits_zhaoshang_get_expense_account(self, actual_assets, ownerid)
         elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
             if self.bill == BILL_ALI:
                 return alipay_get_balance_account(self, data, actual_assets, ownerid)
@@ -193,7 +205,7 @@ class GetExpense:
         self.income = INCOME_OTHER
         self.bill = data[9]
         self.balance = data[4]
-        self.time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
+        self.time = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -331,6 +343,8 @@ def get_uuid(data):
         uuid = alipay_get_uuid(data)
     elif data[9] == BILL_WECHAT:
         uuid = wechatpay_get_uuid(data)
+    elif data[9] == BILL_ZHAOSHANG:
+        uuid = credits_zhaoshang_get_uuid()
     return uuid
 
 
@@ -340,6 +354,8 @@ def get_status(data):
         status = alipay_get_status(data)
     elif data[9] == BILL_WECHAT:
         status = wechatpay_get_status(data)
+    elif data[9] == BILL_ZHAOSHANG:
+        status = credits_zhaoshang_get_status()
     return status
 
 
@@ -349,6 +365,8 @@ def get_amount(data):
         amount = alipay_get_amount(data)
     elif data[9] == BILL_WECHAT:
         amount = wechatpay_get_amount(data)
+    elif data[9] == BILL_ZHAOSHANG:
+        amount = credits_zhaoshang_get_amount(data)
     return amount
 
 
@@ -367,10 +385,14 @@ def get_notes(data):
         notes = alipay_get_notes(data)
     elif data[9] == BILL_WECHAT:
         notes = wechatpay_get_notes(data)
+    elif data[9] == BILL_ZHAOSHANG:
+        notes = credits_zhaoshang_get_notes(data)
     return notes
 
 
-def get_shouzhi(shouzhi):
+def get_shouzhi(data):
+    shouzhi = data[4]
+
     if shouzhi == "支出":
         return "+", "-"
     elif shouzhi == "收入":
