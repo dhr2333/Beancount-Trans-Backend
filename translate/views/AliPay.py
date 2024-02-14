@@ -6,8 +6,6 @@ from translate.utils import ASSETS_OTHER
 from translate.utils import PaymentStrategy
 from translate.utils import pattern
 
-BILL_ALI = "alipay"
-
 
 class AliPayStrategy(PaymentStrategy):
     def get_data(self, bill):

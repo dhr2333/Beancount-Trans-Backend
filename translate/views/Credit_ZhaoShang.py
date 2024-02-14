@@ -1,16 +1,12 @@
+import csv
+import datetime
 import io
+import re
 
 import PyPDF2
-import csv
-import re
-import datetime
-
 from translate.models import Assets
 from translate.utils import ASSETS_OTHER
 from translate.utils import PaymentStrategy
-from translate.utils import pattern
-
-BILL_ZHAOSHANG = "Credit_ZhaoShang"
 
 
 class ZhaoShangStrategy(PaymentStrategy):
@@ -31,7 +27,7 @@ class ZhaoShangStrategy(PaymentStrategy):
                 way = "招商银行信用卡(" + row[4] + ")"  # 支付方式
                 status = "交易成功"  # 交易状态
                 notes = "暂定"  # 备注
-                bill = BILL_ZHAOSHANG
+                bill = "Credit_ZhaoShang"
                 uuid = "暂定"
                 single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill, uuid]
                 new_list = []
@@ -66,7 +62,7 @@ def zhaoshang_pdf_convert_to_csv(content):
     """
     lines = content.split('\n')
     date_string = None
-    
+
     # 提取日期字符串
     date_match = re.search(r'CMB Credit Card Statement \((\d{4}\.\d{2})\)', content)
     if date_match:
@@ -89,11 +85,12 @@ def zhaoshang_pdf_convert_to_csv(content):
             rmb_amount = match.group(4).replace(',', '')
             card_last_four_digits = match.group(5)
             foreign_amount = match.group(6).replace(',', '')
-            
+
             # transaction_date = datetime.datetime.strptime(transaction_date_str, '%m/%d')
             # formatted_transaction_date = transaction_date.strftime('%Y-%m-%d 00:00:00')
 
-            csv_writer.writerow([transaction_date, posting_date, description, rmb_amount, card_last_four_digits, foreign_amount])
+            csv_writer.writerow(
+                [transaction_date, posting_date, description, rmb_amount, card_last_four_digits, foreign_amount])
 
     output.seek(0)  # 将文件指针移回开头
     result = output.getvalue()  # 获取结果字符串
@@ -102,21 +99,27 @@ def zhaoshang_pdf_convert_to_csv(content):
 
     return result
 
+
 def credits_zhaoshang_get_uuid():
     import uuid
     return uuid.uuid4()
 
+
 def credits_zhaoshang_get_status():
     return "交易成功"
 
+
 def credits_zhaoshang_get_amount(data):
-    return "{:.2f} CNY".format(float(data[5])) 
+    return "{:.2f} CNY".format(float(data[5]))
+
 
 def credits_zhaoshang_get_notes(data):
     return data[3]
 
+
 def credits_zhaoshang_initalize_key(data):
     return data[6]
+
 
 def credits_zhaoshang_get_expense_account(self, assets, ownerid):
     key = self.key
@@ -130,4 +133,3 @@ def credits_zhaoshang_get_expense_account(self, assets, ownerid):
             return account_instance.assets
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
-

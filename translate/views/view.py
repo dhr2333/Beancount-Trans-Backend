@@ -5,29 +5,28 @@ from datetime import datetime
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
-from rest_framework import status
-
 from mydemo import settings
 from mydemo.utils.file import create_temporary_file, init_project_file, pdf_convert_to_csv
 from mydemo.utils.token import get_token_user_id
 from translate.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
-from translate.views.WeChat import *
 from translate.views.Credit_ZhaoShang import *
+from translate.views.WeChat import *
 
 
 def get_initials_bill(bill):
     """Get the initials of the bill's name."""
     first_line = next(bill)[0]
     year = first_line[:4]
-    if isinstance(first_line, str) and "------------------------------------------------------------------------------------" in first_line:
+    if isinstance(first_line,
+                  str) and "------------------------------------------------------------------------------------" in first_line:
         strategy = AliPayStrategy()
     elif isinstance(first_line, str) and "微信支付账单明细" in first_line:
         strategy = WeChatPayStrategy()
     elif isinstance(first_line, str) and "招商银行信用卡账单明细" in first_line:
         strategy = ZhaoShangStrategy()
-        return strategy.get_data(bill,year)
+        return strategy.get_data(bill, year)
     else:
         raise UnsupportedFileType("当前账单不支持")
     return strategy.get_data(bill)
@@ -46,7 +45,7 @@ class AnalyzeView(View):
             format_list = beancount_outfile(list, owner_id, write=False)
         except UnsupportedFileType as e:
             return JsonResponse({'error': str(e)}, status=400)
-            
+
         os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')
 

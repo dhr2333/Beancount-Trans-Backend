@@ -23,6 +23,10 @@ from .models import Assets
 # WECHATPAY = None  # Assets表中微信零钱的默认值，get_default_assets()函数会对其进行初始化
 # WECHATFUND = None
 
+BILL_ZHAOSHANG = "Credit_ZhaoShang"
+BILL_ALI = "alipay"
+BILL_WECHAT = "wechat"
+
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
 INCOME_OTHER = "Income:Other"
@@ -43,7 +47,7 @@ pattern = {"余额宝": r'^余额宝.*收益发放$',
 transaction_status = {
     "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
                   "充值完成", "充值成功", "已收钱"],
-    "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "已关闭", "解冻成功",
+    "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "还款失败", "已关闭", "解冻成功",
                "信用服务使用成功"]
 }
 
@@ -104,10 +108,11 @@ class IgnoreData:
         self.data = data
 
     def wechatpay(self, data):
-        return data[7] in ["已全额退款", "对方已退还"] or data[7].startswith("已退款")
+        if data[9] == BILL_WECHAT:
+            return data[7] in ["已全额退款", "对方已退还"] or data[7].startswith("已退款")
 
     def alipay(self, data):
-        if data[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭"]:
+        if data[9] == BILL_ALI and data[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败"]:
             return True
         elif re.match(pattern["余额宝"], data[3]):
             return True
@@ -124,8 +129,9 @@ class IgnoreData:
         return data["notes"] == "零钱提现"
 
     def credit_zhaoshang(self, data):
-        if "支付宝" in data[2] or "财付通" in data[2]:
+        if data[9] == BILL_ZHAOSHANG and "支付宝" in data[2] or "财付通" in data[2]:
             return True
+
 
 class UnsupportedFileType(Exception):
     pass

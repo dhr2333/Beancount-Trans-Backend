@@ -5,8 +5,6 @@ from translate.models import Assets
 from translate.utils import ASSETS_OTHER
 from translate.utils import PaymentStrategy
 
-BILL_WECHAT = "wechat"  # 用于判断账单类型
-
 
 class WeChatPayStrategy(PaymentStrategy):
     def get_data(self, bill):
