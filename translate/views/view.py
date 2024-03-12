@@ -38,11 +38,12 @@ class AnalyzeView(View):
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
         csv_file = pdf_convert_to_csv(uploaded_file)  # 对文件格式进行判断并转换
         temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
+        args = {"zhaoshang_ignore": request.POST.get('zhaoshang_ignore'), "write": request.POST.get('write')}
 
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 list = get_initials_bill(bill=csv.reader(csvfile))
-            format_list = beancount_outfile(list, owner_id, write=False)
+            format_list = beancount_outfile(list, owner_id, args)
         except UnsupportedFileType as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -55,13 +56,12 @@ class AnalyzeView(View):
         return render(request, "translate/trans.html", context)
 
 
-def beancount_outfile(data, owner_id: int, write=False):
+def beancount_outfile(data, owner_id: int, args):
     """对账单数据进行过滤并格式化
 
     Args:
         data (file): 账单数据
         owner_id (int): 用户id
-        write (bool, optional): 是否写入，默认为False
 
     Returns:
         list: 格式化后的账单数据
@@ -76,7 +76,7 @@ def beancount_outfile(data, owner_id: int, write=False):
             continue
         elif ignore_data.wechatpay(row):
             continue
-        elif ignore_data.credit_zhaoshang(row):
+        elif ignore_data.credit_zhaoshang(row, args["zhaoshang_ignore"]):
             continue
         try:
             entry = format(row, owner_id)
@@ -87,7 +87,7 @@ def beancount_outfile(data, owner_id: int, write=False):
             else:
                 instance = FormatData(entry).default(entry)
             instance_list.append(instance)
-            if write:
+            if args["write"] == "True":
                 mouth, year = instance[5:7], instance[0:4]
                 file = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year,
                                     f"{mouth}-expenses.bean")

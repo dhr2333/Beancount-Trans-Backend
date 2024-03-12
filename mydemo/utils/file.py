@@ -26,8 +26,7 @@ def init_project_file(file_path):
         "event.bean",
         "income.bean",
         "invoice.bean",
-        "price.bean",
-        "time.bean"
+        "price.bean"
     ]
     insert_contents = '''include "01-expenses.bean"
 include "02-expenses.bean"
@@ -45,8 +44,7 @@ include "cycle.bean"
 include "event.bean"
 include "income.bean"
 include "invoice.bean"
-include "price.bean"
-include "time.bean"'''
+include "price.bean"'''
     dir_path = os.path.split(file_path)[0]  # 获取账单的绝对路径，例如 */Beancount-Trans/Beancount-Trans-Assets/2023
     dir_name = os.path.basename(dir_path)
     if not os.path.isdir(dir_path):  # 判断年份账单是否存在，若不存在则创建目录并在main.bean中include该目录
