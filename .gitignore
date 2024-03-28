@@ -4,9 +4,9 @@ Pipfile.lock
 Pipfile
 collectstatic
 /conf/prod.py
+/conf/develop.py
 logs/*.log
 static
-mydemo/settings.py
 
 # __pycache
 __pycache__/

@@ -319,7 +319,7 @@ class GetPayee:
                     max_order is None or matching_max_order > max_order):  # 如果匹配到的key的matching_max_order大于max_order，则更新max_order
                 max_order = matching_max_order
 
-                if expense_instance is not None and expense_instance.payee != '':
+                if expense_instance is not None and expense_instance.payee is not None and expense_instance.payee != '':
                     payee = expense_instance.payee
 
             # 如果匹配到的key的matching_max_order等于max_order，则取原始payee。这样做的目的是为了防止多个key的matching_max_order相同，但payee不同的情况
@@ -370,7 +370,6 @@ def get_amount(data):
 
 
 def calculate_commission(total, commission):
-    amount = None
     if commission != "":
         amount = "{:.2f} CNY".format(float(total.split()[0]) - float(commission.split()[0]))
     else:
@@ -380,6 +379,7 @@ def calculate_commission(total, commission):
 
 def get_notes(data):
     notes = None
+    data[3] = data[3].replace('"', '\\"')
     if data[9] == BILL_ALI:
         notes = alipay_get_notes(data)
     elif data[9] == BILL_WECHAT:
@@ -391,12 +391,21 @@ def get_notes(data):
 
 def get_shouzhi(data):
     shouzhi = data[4]
+    high = ""
+    loss = "-"
 
     if shouzhi == "支出":
-        return "+", "-"
+        return high, loss
     elif shouzhi == "收入":
-        return "-", "+"
+        return loss, high
     elif shouzhi in ["/", "不计收支"]:
-        return "-", "+"
+        if data[9] == BILL_ALI:
+            if data[3] == "信用卡还款":
+                return high, loss
+            if "花呗主动还款" in data[3]:
+                return high, loss
+        if data[9] == BILL_WECHAT and data[1] == "信用卡还款":
+            return high, loss
+        return loss, high
     else:
         return None, None

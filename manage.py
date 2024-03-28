@@ -7,8 +7,8 @@ import sys
 def main():
     """Run administrative tasks."""
     # os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.prod')  # 生产环境
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.develop')  # 本地容器环境
-    # os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mydemo.settings')  # 本地开发环境
+    # os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.develop')  # 本地开发环境
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mydemo.settings')  # 本地容器环境
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

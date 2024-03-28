@@ -28,7 +28,7 @@ class AliPayStrategy(PaymentStrategy):
                 notes = "/" if row[11] == '                    ' else row[11]  # 备注
                 bill = "alipay"
                 uuid = row[9]
-                single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill, uuid]
+                single_list = [time, type, object, commodity, balance, amount, way.split('&')[0], status, notes, bill, uuid]
                 new_list = []
                 for item in single_list:
                     new_item = item.strip()
@@ -121,7 +121,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
 
 
 def alipay_get_balance_expense(self, data, assets, ownerid):
-    expend = "Unknown-Expend"
+    expend = "Unknown-Expend"  # 方便排查问题
     if self.type == "转账收款到余额宝":
         expend = assets["ALIPAY"]
     elif self.type == "余额宝-自动转入":
@@ -148,6 +148,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         expend = assets["HUABEI"]
     elif self.type == "信用卡还款":
         result = data[2] + "信用卡"  # 例如"华夏银行信用卡"
+        expend = "Assets:Other"  # TODO，测试通过后将原始expend修改为“Assets:Other”
         for full in self.full_list:
             if result in full:
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()

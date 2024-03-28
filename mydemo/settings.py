@@ -239,7 +239,7 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
 }
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(minutes=1),  # token有效时长
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(minutes=30),  # token有效时长
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7)  # token刷新后的有效时间
 }
 

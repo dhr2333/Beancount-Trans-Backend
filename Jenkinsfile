@@ -1,9 +1,9 @@
 pipeline {
     agent any
     environment {
-        DOCKER_TAG = '20240324'
+        DOCKER_TAG = '20240330'
         DOCKER_IMAGE = 'registry.cn-hangzhou.aliyuncs.com/dhr2333/beancount-trans-backend'
-        YAML = "    image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+        YAML = "image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
     }
     stages {
         stage('Clone') {
@@ -23,8 +23,7 @@ pipeline {
         }
         stage('Start Service'){
             steps{
-                sshPublisher(publishers: [sshPublisherDesc(configName: 'dhr2333', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: '''sed -i "/registry.cn-hangzhou.aliyuncs.com\\/dhr2333\\/beancount-trans-backend/c\\    image: registry.cn-hangzhou.aliyuncs.com/dhr2333/beancount-trans-backend:20240322" /root/Manage/docker-compose-beancount-trans.yaml
-docker compose -f /root/Manage/docker-compose-beancount-trans.yaml restart''', execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: '', sourceFiles: '')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'dhr2333', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: "echo ${DOCKER_TAG} \n echo \"${DOCKER_TAG}\" \n sed -i \"/registry.cn-hangzhou.aliyuncs.com\\/dhr2333\\/beancount-trans-backend/c\\\\    image: registry.cn-hangzhou.aliyuncs.com/dhr2333/beancount-trans-backend:${DOCKER_TAG}\" /root/Manage/docker-compose-beancount-trans.yaml \n docker compose -f /root/Manage/docker-compose-beancount-trans.yaml down \n docker compose -f /root/Manage/docker-compose-beancount-trans.yaml up -d", execTimeout: 120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: '', sourceFiles: '')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
             }
         }
     }
