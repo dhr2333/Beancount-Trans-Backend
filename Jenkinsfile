@@ -1,7 +1,7 @@
 pipeline {
     agent any
     environment {
-        DOCKER_TAG = '20240330'
+        DOCKER_TAG = '20240403'
         DOCKER_IMAGE = 'registry.cn-hangzhou.aliyuncs.com/dhr2333/beancount-trans-backend'
         YAML = "image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
     }

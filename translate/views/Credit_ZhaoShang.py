@@ -18,7 +18,7 @@ class ZhaoShangStrategy(PaymentStrategy):
         list = []
         try:
             for row in bill:
-                time = datetime.datetime.strptime(row[0], '%m/%d').strftime(f'{year}-%m-%d 00:00:00')  # 交易时间
+                time = datetime.datetime.strptime(f'{year}/{row[0]}', '%Y/%m/%d').strftime(f'{year}-%m-%d 00:00:00')
                 type = "商户消费"  # 交易类型
                 object = row[2]  # 交易对方
                 commodity = row[2]  # 商品
@@ -36,7 +36,9 @@ class ZhaoShangStrategy(PaymentStrategy):
                     new_list.append(new_item)
                 list.append(new_list)
         except UnicodeDecodeError:
-            print("error row = ", row)
+            print("UnicodeDecodeError error row = ", row)
+        # except:
+        #     print("error row = ", row)
         return list
 
 
@@ -64,17 +66,21 @@ def zhaoshang_pdf_convert_to_csv(content):
     date_string = None
 
     # 提取日期字符串
+    # print(content)
     date_match = re.search(r'CMB Credit Card Statement \((\d{4}\.\d{2})\)', content)
+    # print(date_match)
     if date_match:
         date_string = date_match.group(1)
+        # print(date_string)
     output = io.StringIO()
     csv_writer = csv.writer(output)
+    written_data = []  # 用于保存已写入的数据
     if date_string:
         csv_writer.writerow([f'{date_string} 招商银行信用卡账单明细'])
     else:
         csv_writer.writerow(['招商银行信用卡账单明细'])
     csv_writer.writerow(['交易日', '记账日', '交易摘要', '人民币金额', '卡号末四位', '交易地金额'])
-    pattern = r'(\ \d{2}/\d{2})\s+(\d{2}/\d{2})\s+(.*?)\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{4})\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
+    pattern = r'(\s*\d{2}/\d{2})\s+(\d{2}/\d{2})\s+(.*?)\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{4})\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
     for line in lines:
         line = re.sub(r'CMB Credit Card Statement \(\d{4}\.\d{2}\)', '', line)
         match = re.match(pattern, line)
@@ -88,7 +94,8 @@ def zhaoshang_pdf_convert_to_csv(content):
 
             # transaction_date = datetime.datetime.strptime(transaction_date_str, '%m/%d')
             # formatted_transaction_date = transaction_date.strftime('%Y-%m-%d 00:00:00')
-
+            written_data.append(
+                [transaction_date, posting_date, description, rmb_amount, card_last_four_digits, foreign_amount])
             csv_writer.writerow(
                 [transaction_date, posting_date, description, rmb_amount, card_last_four_digits, foreign_amount])
 
@@ -96,7 +103,6 @@ def zhaoshang_pdf_convert_to_csv(content):
     result = output.getvalue()  # 获取结果字符串
     # print(result)
     output.close()  # 关闭文件对象
-
     return result
 
 

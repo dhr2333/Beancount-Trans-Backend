@@ -147,8 +147,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
     elif re.match(pattern["花呗"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
         expend = assets["HUABEI"]
     elif self.type == "信用卡还款":
-        result = data[2] + "信用卡"  # 例如"华夏银行信用卡"
-        expend = "Assets:Other"  # TODO，测试通过后将原始expend修改为“Assets:Other”
+        result = data[2] + "信用卡"  # 例如"招商银行信用卡"
         for full in self.full_list:
             if result in full:
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
