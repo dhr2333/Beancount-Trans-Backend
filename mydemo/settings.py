@@ -40,6 +40,7 @@ ALLOWED_HOSTS = [
     "http://localhost:5173",
     "http://127.0.0.1:38001",
     "http://localhost:38001",
+    "trans.dhr2333.cn",
     "*",
 ]
 
@@ -68,24 +69,28 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.common.CommonMiddleware',
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
 CORS_ORIGIN_WHITELIST = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:38001",
-    "http://localhost:38001"  # 38001为Fount docker端口
+    "http://localhost:38001",  # 38001为Fount docker端口
+    "https://trans.dhr2333.cn",
 ]
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:38001",
-    "http://localhost:38001"
+    "http://localhost:38001",
+    "https://trans.dhr2333.cn",
 ]
 CORS_ALLOW_CREDENTIALS = True  # 跨域时允许携带cookie
 CORS_ALLOW_METHODS = (
@@ -200,6 +205,7 @@ USE_TZ = True
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')
 STATIC_URL = 'static/'
+# STATICFILES_DIRS = []
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
@@ -270,7 +276,7 @@ LOGGING = {
         'log_file': {
             'level': 'INFO',
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/brancount-trans.log'),
+            'filename': os.path.join(BASE_DIR, 'logs/beancount-trans.log'),
             'maxBytes': 10 * 1024 * 1024,
             'backupCount': 10,
             'formatter': 'verbose',

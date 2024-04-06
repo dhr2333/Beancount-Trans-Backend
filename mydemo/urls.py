@@ -24,7 +24,7 @@ from users.views import UserViewSet, GroupViewSet, CreateUserView, LoginView
 
 router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")
-router.register(r'assets', AssetsViewSet, basename="assets")
+router.register(r'aassets', AssetsViewSet, basename="assets")
 router.register(r'income', IncomeViewSet, basename="income")
 router.register(r'account', AccountViewSet, basename="account")
 router.register(r'users', UserViewSet, basename="user")
