@@ -150,14 +150,14 @@ DATABASES = {
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f'redis://127.0.0.1:36379/0' or str(os.environ.get("TRANS_REDIS_URL")) + "8",
+        'LOCATION': str(os.environ.get("TRANS_REDIS_URL")) + "0" or f'redis://127.0.0.1:36379/0',
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
     },
     'session': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': f'redis://127.0.0.1:36379/1' or str(os.environ.get("TRANS_REDIS_URL")) + "9",
+        'LOCATION': str(os.environ.get("TRANS_REDIS_URL")) + "1" or f'redis://127.0.0.1:36379/1',
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
