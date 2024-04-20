@@ -26,6 +26,7 @@ from .models import Assets
 BILL_ZHAOSHANG = "Credit_ZhaoShang"
 BILL_ALI = "alipay"
 BILL_WECHAT = "wechat"
+BILL_BOC = "BOC_Debit"
 
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
@@ -134,4 +135,12 @@ class IgnoreData:
 
 
 class UnsupportedFileType(Exception):
-    pass
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class DecryptionError(Exception):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code

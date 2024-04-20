@@ -1,10 +1,15 @@
 import csv
 import os
 import io
+import re
 import tempfile
 import PyPDF2
 import chardet
+from translate.utils import UnsupportedFileType, DecryptionError
+from mydemo.utils.tools import get_card_number
 from translate.views.Credit_ZhaoShang import zhaoshang_pdf_convert_to_csv
+from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv
+
 
 
 def init_project_file(file_path):
@@ -67,30 +72,46 @@ def create_temporary_file(file_name):
         content = file_name.read()
     except:
         content = file_name
-    encodeing = chardet.detect(content)['encoding']
+    try:
+        encodeing = chardet.detect(content)['encoding']
+    except TypeError:
+        raise UnsupportedFileType("当前账单不支持")
     temp = tempfile.NamedTemporaryFile(delete=False)
     temp.write(content)
     temp.flush()
     return temp, encodeing
 
 
-def pdf_convert_to_csv(file):
+def pdf_convert_to_csv(file, password):
     """转换为CSV格式供程序读取解析
 
     Args:
-        file_name (_type_): _description_
+        file (_type_): _description_
+        password (str): PDF文件的密码，如果文件受保护
     """
     _, file_extension = os.path.splitext(file.name)
     if file_extension.lower() == '.csv':
         return file  # <class 'django.core.files.uploadedfile.InMemoryUploadedFile'>
     elif file_extension.lower() == '.pdf':
         pdf = PyPDF2.PdfReader(file)
-        num_pages = len(pdf.pages)
+        if pdf.is_encrypted:
+            pdf.decrypt(password)
+        try:
+            num_pages = len(pdf.pages)
+        except PyPDF2.errors.FileNotDecryptedError:
+            raise DecryptionError("Decryption failed", 403)
         content = ""
         for page_num in range(num_pages):
             page = pdf.pages[page_num]
             content += page.extract_text()
-        if "招商银行信用卡" in content:  # 如果匹配到招商银行PDF文件
+        # print("content = ", content)  # 输出所有流水信息，用于判断银行卡
+        if "CMB Credit Card Statement" in content:  # 如果匹配到招商银行PDF文件
             convert_content = zhaoshang_pdf_convert_to_csv(content)
             file = convert_content.encode()
+            return file
+        elif "中国银行交易流水明细清单" in content:
+            card_number = get_card_number(content)
+            string_content = boc_debit_pdf_convert_to_string(file, password)
+            csv_content = boc_debit_string_convert_to_csv(string_content, card_number)
+            file = csv_content.encode()
             return file

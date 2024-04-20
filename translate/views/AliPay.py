@@ -9,6 +9,9 @@ from translate.utils import pattern
 
 class AliPayStrategy(PaymentStrategy):
     def get_data(self, bill):
+        """
+        ['2023-06-13 10:40:16', '其他', '得物', 'du***@theduapp.com', '商品交易', '支出', '202.00', '中信银行信用卡(6428)', '交易成功', '2023061322001474561408026317\t', '572306131668448120044651726\t', '', '']
+        """
         # 实现获取支付宝支付数据的逻辑
         row = 0
         while row < 24:

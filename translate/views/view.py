@@ -2,7 +2,7 @@ import csv
 import os
 from datetime import datetime
 
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.views import View
 from mydemo import settings
@@ -12,6 +12,7 @@ from translate.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
 from translate.views.Credit_ZhaoShang import *
+from translate.views.BOC_Debit import *
 from translate.views.WeChat import *
 
 
@@ -19,6 +20,10 @@ def get_initials_bill(bill):
     """Get the initials of the bill's name."""
     first_line = next(bill)[0]
     year = first_line[:4]
+    try:
+        card_number = card_number_get_key(first_line)
+    except:
+        pass
     if isinstance(first_line,
                   str) and "------------------------------------------------------------------------------------" in first_line:
         strategy = AliPayStrategy()
@@ -27,6 +32,9 @@ def get_initials_bill(bill):
     elif isinstance(first_line, str) and "招商银行信用卡账单明细" in first_line:
         strategy = ZhaoShangStrategy()
         return strategy.get_data(bill, year)
+    elif isinstance(first_line, str) and "中国银行储蓄卡账单明细" in first_line:
+        strategy = BOC_Debit_Strategy()
+        return strategy.get_data(bill, card_number)
     else:
         raise UnsupportedFileType("当前账单不支持")
     return strategy.get_data(bill)
@@ -34,11 +42,15 @@ def get_initials_bill(bill):
 
 class AnalyzeView(View):
     def post(self, request):
+        args = {"zhaoshang_ignore": request.POST.get('zhaoshang_ignore'), "write": request.POST.get('write'), "password": request.POST.get('password')}
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
-        csv_file = pdf_convert_to_csv(uploaded_file)  # 对文件格式进行判断并转换
+        try:
+            csv_file = pdf_convert_to_csv(uploaded_file, args["password"])  # 对文件格式进行判断并转换
+        except DecryptionError:
+            return HttpResponse("Decryption failed", status=403)
         temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
-        args = {"zhaoshang_ignore": request.POST.get('zhaoshang_ignore'), "write": request.POST.get('write')}
+
 
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
@@ -167,6 +179,8 @@ class GetAccount:
             self.key = wechatpay_initalize_key(self, data)
         elif self.bill == BILL_ZHAOSHANG:
             self.key = credits_zhaoshang_initalize_key(data)
+        elif self.bill == BILL_BOC:
+            self.key = boc_debit_init_key(data)
 
     def get_account(self, data, ownerid):
         self.initialize_key(data)
@@ -186,12 +200,15 @@ class GetAccount:
             elif self.bill == BILL_WECHAT:
                 return wechatpay_get_expense_account(self, actual_assets, ownerid)
             elif self.bill == BILL_ZHAOSHANG:
-                return credits_zhaoshang_get_expense_account(self, actual_assets, ownerid)
+                return credits_zhaoshang_get_expense_account(self, ownerid)
         elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
             if self.bill == BILL_ALI:
                 return alipay_get_balance_account(self, data, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
                 return wechatpay_get_balance_account(self, data, actual_assets, ownerid)
+
+        if self.bill == "BOC_Debit":
+            return boc_debit_get_account(self, ownerid)
         return account
 
 
@@ -344,6 +361,8 @@ def get_uuid(data):
         uuid = wechatpay_get_uuid(data)
     elif data[9] == BILL_ZHAOSHANG:
         uuid = credits_zhaoshang_get_uuid()
+    elif data[9] == BILL_BOC:
+        uuid = boc_debit_get_uuid(data)
     return uuid
 
 
@@ -354,7 +373,9 @@ def get_status(data):
     elif data[9] == BILL_WECHAT:
         status = wechatpay_get_status(data)
     elif data[9] == BILL_ZHAOSHANG:
-        status = credits_zhaoshang_get_status()
+        status = credits_zhaoshang_get_status(data)
+    elif data[9] == BILL_BOC:
+        status = boc_debit_get_status(data)
     return status
 
 
@@ -366,6 +387,8 @@ def get_amount(data):
         amount = wechatpay_get_amount(data)
     elif data[9] == BILL_ZHAOSHANG:
         amount = credits_zhaoshang_get_amount(data)
+    elif data[9] == BILL_BOC:
+        amount = boc_debit_get_amount(data)
     return amount
 
 
@@ -386,6 +409,8 @@ def get_notes(data):
         notes = wechatpay_get_notes(data)
     elif data[9] == BILL_ZHAOSHANG:
         notes = credits_zhaoshang_get_notes(data)
+    elif data[9] == BILL_BOC:
+        notes = boc_debit_get_notes(data)
     return notes
 
 

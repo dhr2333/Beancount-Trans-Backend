@@ -11,6 +11,9 @@ from translate.utils import PaymentStrategy
 
 class ZhaoShangStrategy(PaymentStrategy):
     def get_data(self, bill, year):
+        """
+        ['02/27', '02/28', '支付宝-上海拉扎斯信息科技有限公司', '17.90', '4523', '17.90']
+        """
         row = 0
         while row < 2:
             next(bill)
@@ -25,7 +28,7 @@ class ZhaoShangStrategy(PaymentStrategy):
                 balance = "收入" if "-" in row[3] else "支出"  # 收支
                 amount = row[3].replace("-", "") if "-" in row[3] else row[3]  # 金额
                 way = "招商银行信用卡(" + row[4] + ")"  # 支付方式
-                status = "交易成功"  # 交易状态
+                status = "CMB_Credit - 交易成功"  # 交易状态
                 notes = "暂定"  # 备注
                 bill = "Credit_ZhaoShang"
                 uuid = "暂定"
@@ -111,8 +114,8 @@ def credits_zhaoshang_get_uuid():
     return uuid.uuid4()
 
 
-def credits_zhaoshang_get_status():
-    return "交易成功"
+def credits_zhaoshang_get_status(data):
+    return data[7]
 
 
 def credits_zhaoshang_get_amount(data):
@@ -127,7 +130,7 @@ def credits_zhaoshang_initalize_key(data):
     return data[6]
 
 
-def credits_zhaoshang_get_expense_account(self, assets, ownerid):
+def credits_zhaoshang_get_expense_account(self, ownerid):
     key = self.key
     if key in self.key_list:
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
