@@ -4,12 +4,12 @@ import io
 import re
 
 import PyPDF2
+from mydemo.utils.tools import time_to_timestamp
 from translate.models import Assets
-from translate.utils import ASSETS_OTHER
-from translate.utils import PaymentStrategy
+from translate.utils import ASSETS_OTHER, PaymentStrategy, BILL_CMB_CREDIT
 
 
-class ZhaoShangStrategy(PaymentStrategy):
+class CmbCreditStrategy(PaymentStrategy):
     def get_data(self, bill, year):
         """
         ['02/27', '02/28', '支付宝-上海拉扎斯信息科技有限公司', '17.90', '4523', '17.90']
@@ -28,14 +28,14 @@ class ZhaoShangStrategy(PaymentStrategy):
                 balance = "收入" if "-" in row[3] else "支出"  # 收支
                 amount = row[3].replace("-", "") if "-" in row[3] else row[3]  # 金额
                 way = "招商银行信用卡(" + row[4] + ")"  # 支付方式
-                status = "CMB_Credit - 交易成功"  # 交易状态
+                status = BILL_CMB_CREDIT + " - 交易成功"  # 交易状态
                 notes = "暂定"  # 备注
-                bill = "Credit_ZhaoShang"
-                uuid = "暂定"
+                bill = BILL_CMB_CREDIT
+                uuid = time_to_timestamp(time)
                 single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill, uuid]
                 new_list = []
                 for item in single_list:
-                    new_item = item.strip()
+                    new_item = str(item).strip()
                     new_list.append(new_item)
                 list.append(new_list)
         except UnicodeDecodeError:
@@ -56,11 +56,11 @@ def extract_text_from_pdf(file_path):
     return text
 
 
-def zhaoshang_pdf_convert_to_csv(content):
+def cmb_credit_pdf_convert_to_csv(content):
     """接收字符串，处理为需要的格式，返回字符串
 
     Args:
-        content (_type_): _description_
+        content (string): _description_
 
     Returns:
         _type_: _description_
@@ -109,28 +109,27 @@ def zhaoshang_pdf_convert_to_csv(content):
     return result
 
 
-def credits_zhaoshang_get_uuid():
-    import uuid
-    return uuid.uuid4()
+def cmb_credit_get_uuid(data):
+    return data[10]
 
 
-def credits_zhaoshang_get_status(data):
+def cmb_credit_get_status(data):
     return data[7]
 
 
-def credits_zhaoshang_get_amount(data):
+def cmb_credit_get_amount(data):
     return "{:.2f} CNY".format(float(data[5]))
 
 
-def credits_zhaoshang_get_notes(data):
+def cmb_credit_get_notes(data):
     return data[3]
 
 
-def credits_zhaoshang_initalize_key(data):
+def cmb_credit_init_key(data):
     return data[6]
 
 
-def credits_zhaoshang_get_expense_account(self, ownerid):
+def cmb_credit_get_account(self, ownerid):
     key = self.key
     if key in self.key_list:
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()

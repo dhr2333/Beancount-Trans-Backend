@@ -2,8 +2,7 @@ import logging
 
 # from translate.views.view import WECHATPAY, WECHATFUND
 from translate.models import Assets
-from translate.utils import ASSETS_OTHER
-from translate.utils import PaymentStrategy
+from translate.utils import ASSETS_OTHER, PaymentStrategy, BILL_WECHAT
 
 
 class WeChatPayStrategy(PaymentStrategy):
@@ -25,7 +24,7 @@ class WeChatPayStrategy(PaymentStrategy):
                 way = row[6]  # 支付方式
                 status = row[7]  # 交易状态(支付宝账单中存在很多其他状态，但处理的时候只会处理"交易成功"的数据，其他数据丢弃)
                 notes = row[10]  # 备注(微信账单中该列为手续费，支付宝账单中全为空)
-                bill = "wechat"  # 账单(用于区分传入的各个账单以调用不同的函数处理)
+                bill = BILL_WECHAT  # 账单(用于区分传入的各个账单以调用不同的函数处理)
                 uuid = row[8]  # 交易单号
                 single_list = [time, type, object, commodity, balance, amount, way, status, notes, bill, uuid]
                 list.append(single_list)

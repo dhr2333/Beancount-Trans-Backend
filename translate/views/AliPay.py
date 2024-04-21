@@ -2,9 +2,7 @@ import re
 
 # from translate.views.view import ALIPAY,ALIFUND,HUABEI
 from translate.models import Assets
-from translate.utils import ASSETS_OTHER
-from translate.utils import PaymentStrategy
-from translate.utils import pattern
+from translate.utils import ASSETS_OTHER, PaymentStrategy, pattern, BILL_ALI
 
 
 class AliPayStrategy(PaymentStrategy):
@@ -29,9 +27,10 @@ class AliPayStrategy(PaymentStrategy):
                 way = "余额" if row[7] == '                    ' else row[7]  # 支付方式
                 status = row[8]  # 交易状态
                 notes = "/" if row[11] == '                    ' else row[11]  # 备注
-                bill = "alipay"
+                bill = BILL_ALI
                 uuid = row[9]
-                single_list = [time, type, object, commodity, balance, amount, way.split('&')[0], status, notes, bill, uuid]
+                single_list = [time, type, object, commodity, balance, amount, way.split('&')[0], status, notes, bill,
+                               uuid]
                 new_list = []
                 for item in single_list:
                     new_item = item.strip()

@@ -18,3 +18,15 @@ def custom_exception_handler(exc, context):
             logging.error('[%s] %s' % (view, exc))
             response = Response({'message': '服务器内部错误'}, status=status.HTTP_507_INSUFFICIENT_STORAGE)
     return response
+
+
+class UnsupportedFileType(Exception):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class DecryptionError(Exception):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code

@@ -1,13 +1,10 @@
-import re
-
 import pdfplumber
-
-from translate.models import Assets
-from translate.utils import PaymentStrategy
 from mydemo.utils.tools import time_to_timestamp
+from translate.models import Assets
+from translate.utils import PaymentStrategy, BILL_BOC_DEBIT
 
 
-class BOC_Debit_Strategy(PaymentStrategy):
+class BocDebitStrategy(PaymentStrategy):
     """
     记账日期row[0],记账时间row[1],币别row[2],金额row[3],余额row[4],交易名称row[5],渠道row[6],网点名称row[7],       附言row[8],      对方账户名row[9],  对方卡号/账号row[10],对方开户行row[11]
     2024-03-18,   10:19:28,    人民币,    -11.00,    4853.00,  网上快捷支付,   银企对接,   -------------------,财付通-扫二维码付款,财付通-扫二维码付款,Z2004944000010N,   -------------------
@@ -28,14 +25,15 @@ class BOC_Debit_Strategy(PaymentStrategy):
                 type = "支出" if "-" in row[3] else "收入"  # 收支
                 amount = row[3].replace("-", "") if "-" in row[3] else row[3]  # 金额
                 way = "中国银行储蓄卡(" + card + ")"  # 支付方式
-                status = "BOC_Debit - 交易成功"  # 交易状态
+                status = BILL_BOC_DEBIT + " - 交易成功"  # 交易状态
                 notes = row[8]  # 备注
-                bill = "BOC_Debit"
+                bill = BILL_BOC_DEBIT
                 uuid = time_to_timestamp(time)
                 balance = row[4]
                 card_number = row[10]
                 bank = row[11]
-                single_list = [time, currency, object, commodity, type, amount, way, status, notes, bill, uuid, balance, card_number, bank]
+                single_list = [time, currency, object, commodity, type, amount, way, status, notes, bill, uuid, balance,
+                               card_number, bank]
                 new_list = []
                 for item in single_list:
                     new_item = str(item).strip()
@@ -71,6 +69,7 @@ def boc_debit_string_convert_to_csv(data, card_number):
 
     Args:
         data (string): _description_
+        card_number (string): 储蓄卡/信用卡 完整的卡号
 
     Returns:
         csv: _description_
@@ -124,10 +123,3 @@ def boc_debit_get_account(self, ownerid):
     if key in self.full_list:
         account_instance = Assets.objects.filter(full=key, owner_id=ownerid).first()
         return account_instance.assets
-
-
-def card_number_get_key(data):
-    """
-    从银行卡号获取后四位尾号，将该函数移动到公有函数中
-    """
-    return re.search(r'\d{4}$', data).group()

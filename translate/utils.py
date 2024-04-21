@@ -1,32 +1,12 @@
-# import logging
-#
-# from datetime import datetime, time
-#
-# from django.http import JsonResponse
-# from django.shortcuts import render
-# from django.views import View
-#
-# from mydemo import settings
-# from mydemo.utils.file import create_temporary_file, init_project_file
-# from mydemo.utils.token import get_token_user_id
-# from .models import Expense, Assets, Income
-# from translate.views.AliPay import AliPayStrategy
-# from translate.views.WeChat import WeChatPayStrategy
 import re
 from datetime import time
 
 from .models import Assets
 
-# ALIPAY = None
-# ALIFUND = None
-# HUABEI = None
-# WECHATPAY = None  # Assets表中微信零钱的默认值，get_default_assets()函数会对其进行初始化
-# WECHATFUND = None
-
-BILL_ZHAOSHANG = "Credit_ZhaoShang"
 BILL_ALI = "alipay"
 BILL_WECHAT = "wechat"
-BILL_BOC = "BOC_Debit"
+BILL_CMB_CREDIT = "CMB_Credit"
+BILL_BOC_DEBIT = "BOC_Debit"
 
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
@@ -43,7 +23,6 @@ pattern = {"余额宝": r'^余额宝.*收益发放$',
            "花呗": r'^花呗主动还款.*账单$',
            "基金": r'.*-卖出至.*'
            }  # 统一管理正则表达式
-
 
 transaction_status = {
     "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
@@ -113,7 +92,8 @@ class IgnoreData:
             return data[7] in ["已全额退款", "对方已退还"] or data[7].startswith("已退款")
 
     def alipay(self, data):
-        if data[9] == BILL_ALI and data[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败"]:
+        if data[9] == BILL_ALI and data[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭",
+                                               "还款失败"]:
             return True
         elif re.match(pattern["余额宝"], data[3]):
             return True
@@ -129,18 +109,29 @@ class IgnoreData:
     def notes(self, data):
         return data["notes"] == "零钱提现"
 
-    def credit_zhaoshang(self, data, zhaoshang_ignore):
-        if data[9] == BILL_ZHAOSHANG and "支付宝" in data[2] or "财付通" in data[2]:
-            return zhaoshang_ignore == "True"
+    def cmb_credit(self, data, cmb_credit_ignore):
+        if data[9] == BILL_CMB_CREDIT and "支付宝" in data[2] or "财付通" in data[2]:
+            return cmb_credit_ignore == "True"
 
 
-class UnsupportedFileType(Exception):
-    def __init__(self, message, error_code):
-        super().__init__(message)
-        self.error_code = error_code
+def get_card_number(content):
+    """
+    从账单文件中获取该账单对应的银行卡号
+    """
+    boc_debit_card_number = boc_debit_get_card_number(content)
+    return boc_debit_card_number
 
 
-class DecryptionError(Exception):
-    def __init__(self, message, error_code):
-        super().__init__(message)
-        self.error_code = error_code
+def boc_debit_get_card_number(content):
+    """
+    从账单文件中获取中国银行卡号
+    """
+    boc_debit_card_number = re.search(r'\d{19}', content).group()
+    return boc_debit_card_number
+
+
+def card_number_get_key(data):
+    """
+    从银行卡号获取后四位尾号
+    """
+    return re.search(r'\d{4}$', data).group()

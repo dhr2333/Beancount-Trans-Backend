@@ -63,7 +63,7 @@ class ExpenseViewSet(ModelViewSet):
     def perform_create(self, serializer):
         if self.request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-    
+
         if Expense.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
