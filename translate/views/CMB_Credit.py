@@ -3,10 +3,12 @@ import datetime
 import io
 import re
 
-import PyPDF2
 from mydemo.utils.tools import time_to_timestamp
 from translate.models import Assets
 from translate.utils import ASSETS_OTHER, PaymentStrategy, BILL_CMB_CREDIT
+
+cmb_credit_sourcefile_identifier = "CMB Credit Card Statement"
+cmb_credit_csvfile_identifier = "招商银行信用卡账单明细"
 
 
 class CmbCreditStrategy(PaymentStrategy):
@@ -45,17 +47,6 @@ class CmbCreditStrategy(PaymentStrategy):
         return list
 
 
-def extract_text_from_pdf(file_path):
-    with open(file_path, 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        num_pages = len(pdf_reader.pages)
-        text = ""
-        for page in range(num_pages):
-            page_obj = pdf_reader.pages[page]
-            text += page_obj.extract_text()
-    return text
-
-
 def cmb_credit_pdf_convert_to_csv(content):
     """接收字符串，处理为需要的格式，返回字符串
 
@@ -79,9 +70,9 @@ def cmb_credit_pdf_convert_to_csv(content):
     csv_writer = csv.writer(output)
     written_data = []  # 用于保存已写入的数据
     if date_string:
-        csv_writer.writerow([f'{date_string} 招商银行信用卡账单明细'])
+        csv_writer.writerow([f'{date_string} {cmb_credit_csvfile_identifier}'])
     else:
-        csv_writer.writerow(['招商银行信用卡账单明细'])
+        csv_writer.writerow([cmb_credit_csvfile_identifier])
     csv_writer.writerow(['交易日', '记账日', '交易摘要', '人民币金额', '卡号末四位', '交易地金额'])
     pattern = r'(\s*\d{2}/\d{2})\s+(\d{2}/\d{2})\s+(.*?)\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{4})\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
     for line in lines:

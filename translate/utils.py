@@ -1,12 +1,13 @@
+# /home/daihaorui/账单案例/统一账单/工商银行储蓄卡.pdf
 import re
 from datetime import time
-
 from .models import Assets
 
 BILL_ALI = "alipay"
 BILL_WECHAT = "wechat"
 BILL_CMB_CREDIT = "CMB_Credit"
 BILL_BOC_DEBIT = "BOC_Debit"
+BILL_ICBC_DEBIT = "ICBC_Debit"
 
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
@@ -114,20 +115,17 @@ class IgnoreData:
             return cmb_credit_ignore == "True"
 
 
-def get_card_number(content):
+def get_card_number(content, sourcefile_identifier):
+    from translate.views.BOC_Debit import boc_debit_sourcefile_identifier, boc_debit_get_card_number
+    from translate.views.ICBC_Debit import icbc_debit_sourcefile_identifier, icbc_debit_get_card_number
     """
     从账单文件中获取该账单对应的银行卡号
     """
-    boc_debit_card_number = boc_debit_get_card_number(content)
-    return boc_debit_card_number
-
-
-def boc_debit_get_card_number(content):
-    """
-    从账单文件中获取中国银行卡号
-    """
-    boc_debit_card_number = re.search(r'\d{19}', content).group()
-    return boc_debit_card_number
+    if sourcefile_identifier == boc_debit_sourcefile_identifier:
+        card_number = boc_debit_get_card_number(content)
+    elif sourcefile_identifier == icbc_debit_sourcefile_identifier:
+        card_number = icbc_debit_get_card_number(content)
+    return card_number
 
 
 def card_number_get_key(data):

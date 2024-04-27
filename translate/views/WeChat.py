@@ -4,6 +4,8 @@ import logging
 from translate.models import Assets
 from translate.utils import ASSETS_OTHER, PaymentStrategy, BILL_WECHAT
 
+wechat_csvfile_identifier = "微信支付账单明细"
+
 
 class WeChatPayStrategy(PaymentStrategy):
     def get_data(self, bill):

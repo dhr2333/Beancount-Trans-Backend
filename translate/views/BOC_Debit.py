@@ -1,7 +1,12 @@
+import re
+
 import pdfplumber
 from mydemo.utils.tools import time_to_timestamp
 from translate.models import Assets
 from translate.utils import PaymentStrategy, BILL_BOC_DEBIT
+
+boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"
+boc_debit_csvfile_identifier = "中国银行储蓄卡账单明细"
 
 
 class BocDebitStrategy(PaymentStrategy):
@@ -19,7 +24,7 @@ class BocDebitStrategy(PaymentStrategy):
         try:
             for row in bill:
                 time = row[0] + " " + row[1]
-                currency = row[2]  # 交易类型
+                currency = row[5]  # 交易类型
                 object = row[9]  # 交易对方
                 commodity = row[2]  # 商品
                 type = "支出" if "-" in row[3] else "收入"  # 收支
@@ -74,7 +79,7 @@ def boc_debit_string_convert_to_csv(data, card_number):
     Returns:
         csv: _description_
     """
-    output_lines = ["中国银行储蓄卡账单明细 卡号: " + card_number]
+    output_lines = [boc_debit_csvfile_identifier + " 卡号: " + card_number]
 
     # 打印头部行并添加至结果列表
     header = data[0][0]
@@ -123,3 +128,11 @@ def boc_debit_get_account(self, ownerid):
     if key in self.full_list:
         account_instance = Assets.objects.filter(full=key, owner_id=ownerid).first()
         return account_instance.assets
+
+
+def boc_debit_get_card_number(content):
+    """
+    从账单文件中获取中国银行卡号
+    """
+    boc_debit_card_number = re.search(r'\d{19}', content).group()
+    return boc_debit_card_number

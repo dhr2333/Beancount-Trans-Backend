@@ -1,8 +1,9 @@
 import re
 
-# from translate.views.view import ALIPAY,ALIFUND,HUABEI
 from translate.models import Assets
 from translate.utils import ASSETS_OTHER, PaymentStrategy, pattern, BILL_ALI
+
+alipay_csvfile_identifier = "------------------------------------------------------------------------------------"
 
 
 class AliPayStrategy(PaymentStrategy):

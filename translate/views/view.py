@@ -14,31 +14,8 @@ from translate.utils import *
 from translate.views.AliPay import *
 from translate.views.BOC_Debit import *
 from translate.views.CMB_Credit import *
+from translate.views.ICBC_Debit import *
 from translate.views.WeChat import *
-
-
-def get_initials_bill(bill):
-    """Get the initials of the bill's name."""
-    first_line = next(bill)[0]
-    year = first_line[:4]
-    try:
-        card_number = card_number_get_key(first_line)
-    except:
-        pass
-    if isinstance(first_line,
-                  str) and "------------------------------------------------------------------------------------" in first_line:
-        strategy = AliPayStrategy()
-    elif isinstance(first_line, str) and "微信支付账单明细" in first_line:
-        strategy = WeChatPayStrategy()
-    elif isinstance(first_line, str) and "招商银行信用卡账单明细" in first_line:
-        strategy = CmbCreditStrategy()
-        return strategy.get_data(bill, year)
-    elif isinstance(first_line, str) and "中国银行储蓄卡账单明细" in first_line:
-        strategy = BocDebitStrategy()
-        return strategy.get_data(bill, card_number)
-    else:
-        raise UnsupportedFileType("当前账单不支持")
-    return strategy.get_data(bill)
 
 
 class AnalyzeView(View):
@@ -69,12 +46,39 @@ class AnalyzeView(View):
         return render(request, "translate/trans.html", context)
 
 
+def get_initials_bill(bill):
+    """Get the initials of the bill's name."""
+    first_line = next(bill)[0]
+    year = first_line[:4]
+    try:
+        card_number = card_number_get_key(first_line)
+    except:
+        pass
+    if isinstance(first_line, str) and alipay_csvfile_identifier in first_line:
+        strategy = AliPayStrategy()
+    elif isinstance(first_line, str) and wechat_csvfile_identifier in first_line:
+        strategy = WeChatPayStrategy()
+    elif isinstance(first_line, str) and cmb_credit_csvfile_identifier in first_line:
+        strategy = CmbCreditStrategy()
+        return strategy.get_data(bill, year)
+    elif isinstance(first_line, str) and boc_debit_csvfile_identifier in first_line:
+        strategy = BocDebitStrategy()
+        return strategy.get_data(bill, card_number)
+    elif isinstance(first_line, str) and icbc_debit_csvfile_identifier in first_line:
+        strategy = IcbcDebitStrategy()
+        return strategy.get_data(bill, card_number)
+    else:
+        raise UnsupportedFileType("当前账单不支持")
+    return strategy.get_data(bill)
+
+
 def beancount_outfile(data, owner_id: int, args):
     """对账单数据进行过滤并格式化
 
     Args:
         data (file): 账单数据
         owner_id (int): 用户id
+        args (dict): 前端上传的可选选项
 
     Returns:
         list: 格式化后的账单数据
@@ -122,7 +126,7 @@ def format(data, owner_id):
         payee : 收款方      浙江古茗
         notes : 备注        商品详情
         expend : 支付方式   Expenses:Food:DrinkFruit
-        account : 账户      Liabilities:CreditCard:Bank:ZhongXin:C6428
+        account : 账户      Liabilities:CreditCard:Bank:CITIC:C6428
     """
     try:
         date = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
@@ -182,6 +186,8 @@ class GetAccount:
             self.key = cmb_credit_init_key(data)
         elif self.bill == BILL_BOC_DEBIT:
             self.key = boc_debit_init_key(data)
+        elif self.bill == BILL_ICBC_DEBIT:
+            self.key = icbc_debit_init_key(data)
 
     def get_account(self, data, ownerid):
         self.initialize_key(data)
@@ -210,6 +216,8 @@ class GetAccount:
             return boc_debit_get_account(self, ownerid)
         elif self.bill == BILL_CMB_CREDIT:
             return cmb_credit_get_account(self, ownerid)
+        elif self.bill == BILL_ICBC_DEBIT:
+            return icbc_debit_get_account(self, ownerid)
         return account
 
 
@@ -399,6 +407,7 @@ def get_uuid(data):
         BILL_WECHAT: wechatpay_get_uuid,
         BILL_CMB_CREDIT: cmb_credit_get_uuid,
         BILL_BOC_DEBIT: boc_debit_get_uuid,
+        BILL_ICBC_DEBIT:icbc_debit_get_uuid,
     }
     return get_attribute(data, uuid_handlers)
 
@@ -409,6 +418,7 @@ def get_status(data):
         BILL_WECHAT: wechatpay_get_status,
         BILL_CMB_CREDIT: cmb_credit_get_status,
         BILL_BOC_DEBIT: boc_debit_get_status,
+        BILL_ICBC_DEBIT:icbc_debit_get_status,
     }
     return get_attribute(data, status_handlers)
 
@@ -419,6 +429,7 @@ def get_notes(data):
         BILL_WECHAT: wechatpay_get_notes,
         BILL_CMB_CREDIT: cmb_credit_get_notes,
         BILL_BOC_DEBIT: boc_debit_get_notes,
+        BILL_ICBC_DEBIT:icbc_debit_get_notes,
     }
     data[3] = data[3].replace('"', '\\"')
     return get_attribute(data, notes_handlers)
@@ -430,5 +441,6 @@ def get_amount(data):
         BILL_WECHAT: wechatpay_get_amount,
         BILL_CMB_CREDIT: cmb_credit_get_amount,
         BILL_BOC_DEBIT: boc_debit_get_amount,
+        BILL_ICBC_DEBIT: boc_debit_get_amount,
     }
     return get_attribute(data, amount_handlers)

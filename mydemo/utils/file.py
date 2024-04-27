@@ -5,8 +5,9 @@ import PyPDF2
 import chardet
 from mydemo.utils.exceptions import UnsupportedFileType, DecryptionError
 from translate.utils import get_card_number
-from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv
-from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv
+from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv, boc_debit_sourcefile_identifier
+from translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv, icbc_debit_sourcefile_identifier
+from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv, cmb_credit_sourcefile_identifier
 
 
 def init_project_file(file_path):
@@ -106,13 +107,18 @@ def pdf_convert_to_csv(file, password):
             content += page.extract_text()
         # print("content = ", content)  # 输出所有流水信息，用于判断银行卡
         # content会包含pdf文件的所有内容，找到能明确表明账单归属的文本用于判断所属的银行和卡片类型；
-        if "CMB Credit Card Statement" in content:  # 如果匹配到招商银行PDF文件
+        if cmb_credit_sourcefile_identifier in content:  # 如果匹配到招商银行PDF文件
             convert_content = cmb_credit_pdf_convert_to_csv(content)
             file = convert_content.encode()
             return file
-        elif "中国银行交易流水明细清单" in content:
-            card_number = get_card_number(content)
-            string_content = boc_debit_pdf_convert_to_string(file, password)
-            csv_content = boc_debit_string_convert_to_csv(string_content, card_number)
-            file = csv_content.encode()
+        elif boc_debit_sourcefile_identifier in content:
+            card_number = get_card_number(content, boc_debit_sourcefile_identifier)
+            string_content = boc_debit_pdf_convert_to_string(file, password)  # 中国银行储蓄卡账单无法通过基础pypdf2读取，需要进行数据处理
+            convert_content = boc_debit_string_convert_to_csv(string_content, card_number)
+            file = convert_content.encode()
+            return file
+        elif icbc_debit_sourcefile_identifier in content:
+            card_number = get_card_number(content, icbc_debit_sourcefile_identifier)
+            convert_content = icbc_debit_pdf_convert_to_csv(file, card_number ,password)
+            file = convert_content.encode()
             return file

@@ -1,4 +1,9 @@
+import re
+
 from translate.utils import PaymentStrategy
+
+bank_type_sourcefile_identifier = "xxxxxxxxxx"  # 能唯一标识所属银行及账单类型的原始上传文件
+bank_type_csvfile_identifier = "xx银行xx卡账单明细"  # 能唯一标识所属银行及账单类型
 
 
 class BankTypeStrategy(PaymentStrategy):
@@ -125,5 +130,12 @@ def bank_type_get_account(self, ownerid):
 
     Returns:
         account: _description_
+    """
+    pass
+
+
+def bank_type_get_card_number(content):
+    """
+    从账单文件中获取银行卡号
     """
     pass
