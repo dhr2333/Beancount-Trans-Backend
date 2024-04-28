@@ -65,7 +65,6 @@ def boc_debit_pdf_convert_to_string(file, password):
         content = []
         for page in pdf.pages:
             content += page.extract_tables()
-
     return content
 
 

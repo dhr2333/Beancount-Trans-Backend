@@ -8,6 +8,7 @@ BILL_WECHAT = "wechat"
 BILL_CMB_CREDIT = "CMB_Credit"
 BILL_BOC_DEBIT = "BOC_Debit"
 BILL_ICBC_DEBIT = "ICBC_Debit"
+BILL_CCB_DEBIT = "CCB_Debit"
 
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出

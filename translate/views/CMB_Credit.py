@@ -1,5 +1,5 @@
 import csv
-import datetime
+from datetime import datetime
 import io
 import re
 
@@ -23,7 +23,7 @@ class CmbCreditStrategy(PaymentStrategy):
         list = []
         try:
             for row in bill:
-                time = datetime.datetime.strptime(f'{year}/{row[0]}', '%Y/%m/%d').strftime(f'{year}-%m-%d 00:00:00')
+                time = datetime.strptime(f'{year}/{row[0]}', '%Y/%m/%d').strftime(f'{year}-%m-%d 00:00:00')
                 type = "商户消费"  # 交易类型
                 object = row[2]  # 交易对方
                 commodity = row[2]  # 商品

@@ -8,6 +8,7 @@ from translate.utils import get_card_number
 from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv, boc_debit_sourcefile_identifier
 from translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv, icbc_debit_sourcefile_identifier
 from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv, cmb_credit_sourcefile_identifier
+from translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string, ccb_debit_sourcefile_identifier
 
 
 def init_project_file(file_path):
@@ -80,7 +81,8 @@ def create_temporary_file(file_name):
     return temp, encodeing
 
 
-def pdf_convert_to_csv(file, password):
+def file_convert_to_csv(file, password):
+    import pandas as pd
     """转换为CSV格式供程序读取解析
 
     Args:
@@ -91,6 +93,15 @@ def pdf_convert_to_csv(file, password):
     _, file_extension = os.path.splitext(file.name)
     if file_extension.lower() == '.csv':
         return file  # <class 'django.core.files.uploadedfile.InMemoryUploadedFile'>
+    # 架构
+    elif file_extension.lower() == '.xls' or file_extension.lower() == '.xlsx':
+        string_content = ccb_debit_xls_convert_to_string(file) 
+        for row in string_content:
+            for item in row:
+                if pd.notnull(item) and ccb_debit_sourcefile_identifier in str(item):
+                    convert_content = ccb_debit_string_convert_to_csv(string_content)
+                    file = convert_content.encode()
+                    return file
     elif file_extension.lower() == '.pdf':
         pdf = PyPDF2.PdfReader(file)
         # 若文件加密，则根据上传的密码进行解密

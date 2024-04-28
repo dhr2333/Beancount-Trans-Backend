@@ -1,21 +1,22 @@
 import csv
 import os
-from datetime import datetime
+import datetime
 
 from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render
 from django.views import View
 from mydemo import settings
 from mydemo.utils.exceptions import UnsupportedFileType, DecryptionError
-from mydemo.utils.file import create_temporary_file, init_project_file, pdf_convert_to_csv
+from mydemo.utils.file import create_temporary_file, init_project_file, file_convert_to_csv
 from mydemo.utils.token import get_token_user_id
 from translate.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
+from translate.views.WeChat import *
 from translate.views.BOC_Debit import *
 from translate.views.CMB_Credit import *
 from translate.views.ICBC_Debit import *
-from translate.views.WeChat import *
+from translate.views.CCB_Debit import *
 
 
 class AnalyzeView(View):
@@ -25,7 +26,7 @@ class AnalyzeView(View):
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
         try:
-            csv_file = pdf_convert_to_csv(uploaded_file, args["password"])  # 对文件格式进行判断并转换
+            csv_file = file_convert_to_csv(uploaded_file, args["password"])  # 对文件格式进行判断并转换
         except DecryptionError:
             return HttpResponse("Decryption failed", status=403)
         temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
@@ -47,8 +48,11 @@ class AnalyzeView(View):
 
 
 def get_initials_bill(bill):
-    """Get the initials of the bill's name."""
+
     first_line = next(bill)[0]
+
+    # for row in bill:
+    #     print(row)
     year = first_line[:4]
     try:
         card_number = card_number_get_key(first_line)
@@ -66,6 +70,9 @@ def get_initials_bill(bill):
         return strategy.get_data(bill, card_number)
     elif isinstance(first_line, str) and icbc_debit_csvfile_identifier in first_line:
         strategy = IcbcDebitStrategy()
+        return strategy.get_data(bill, card_number)
+    elif isinstance(first_line, str) and ccb_debit_csvfile_identifier in first_line:
+        strategy = CcbDebitStrategy()
         return strategy.get_data(bill, card_number)
     else:
         raise UnsupportedFileType("当前账单不支持")
@@ -129,8 +136,8 @@ def format(data, owner_id):
         account : 账户      Liabilities:CreditCard:Bank:CITIC:C6428
     """
     try:
-        date = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
-        time = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
+        date = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+        time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
         uuid = get_uuid(data)
         status = get_status(data)
         amount = get_amount(data)
@@ -188,6 +195,8 @@ class GetAccount:
             self.key = boc_debit_init_key(data)
         elif self.bill == BILL_ICBC_DEBIT:
             self.key = icbc_debit_init_key(data)
+        elif self.bill == BILL_CCB_DEBIT:
+            self.key = ccb_debit_init_key(data)
 
     def get_account(self, data, ownerid):
         self.initialize_key(data)
@@ -218,6 +227,8 @@ class GetAccount:
             return cmb_credit_get_account(self, ownerid)
         elif self.bill == BILL_ICBC_DEBIT:
             return icbc_debit_get_account(self, ownerid)
+        elif self.bill == BILL_CCB_DEBIT:
+            return ccb_debit_get_account(self, ownerid)
         return account
 
 
@@ -230,7 +241,7 @@ class GetExpense:
         self.income = INCOME_OTHER
         self.bill = data[9]
         self.balance = data[4]
-        self.time = datetime.datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
+        self.time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -408,6 +419,7 @@ def get_uuid(data):
         BILL_CMB_CREDIT: cmb_credit_get_uuid,
         BILL_BOC_DEBIT: boc_debit_get_uuid,
         BILL_ICBC_DEBIT:icbc_debit_get_uuid,
+        BILL_CCB_DEBIT:ccb_debit_get_uuid,
     }
     return get_attribute(data, uuid_handlers)
 
@@ -419,6 +431,7 @@ def get_status(data):
         BILL_CMB_CREDIT: cmb_credit_get_status,
         BILL_BOC_DEBIT: boc_debit_get_status,
         BILL_ICBC_DEBIT:icbc_debit_get_status,
+        BILL_CCB_DEBIT:ccb_debit_get_status,
     }
     return get_attribute(data, status_handlers)
 
@@ -430,6 +443,7 @@ def get_notes(data):
         BILL_CMB_CREDIT: cmb_credit_get_notes,
         BILL_BOC_DEBIT: boc_debit_get_notes,
         BILL_ICBC_DEBIT:icbc_debit_get_notes,
+        BILL_CCB_DEBIT:ccb_debit_get_notes,
     }
     data[3] = data[3].replace('"', '\\"')
     return get_attribute(data, notes_handlers)
@@ -441,6 +455,7 @@ def get_amount(data):
         BILL_WECHAT: wechatpay_get_amount,
         BILL_CMB_CREDIT: cmb_credit_get_amount,
         BILL_BOC_DEBIT: boc_debit_get_amount,
-        BILL_ICBC_DEBIT: boc_debit_get_amount,
+        BILL_ICBC_DEBIT: icbc_debit_get_amount,
+        BILL_CCB_DEBIT:ccb_debit_get_amount,
     }
     return get_attribute(data, amount_handlers)

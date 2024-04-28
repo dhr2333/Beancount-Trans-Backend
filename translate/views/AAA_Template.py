@@ -8,38 +8,55 @@ bank_type_csvfile_identifier = "xx银行xx卡账单明细"  # 能唯一标识所
 
 class BankTypeStrategy(PaymentStrategy):
     def get_data(self, bill):
-        """根据csv文件的内容对字段进行整合
+        """根据CSV文件的内容对字段进行整合，转换为特定格式的列表
 
         Args:
-            bill(csv.reader):
+            bill (csv.reader): 包含银行交易数据的csv.reader对象
 
         Returns:
-            list: _description_
+            list: 包含整合后的银行交易数据的列表，每个元素为包含特定字段的列表
+
+        Raises:
+            UnicodeDecodeError: 若遇到编码错误时抛出异常
+            Exception: 其他异常情况下抛出异常
         """
         pass
 
 
-def bank_type_pdf_convert_to_string(file):
-    """接收PDF文件，返回字符串
+def bank_type_pdf_convert_to_string(file, password):
+    """从PDF文件中提取表格数据，并将其转换为列表格式
 
     Args:
-        file(_type_): PDF文件
+        file (str): 要处理的PDF文件的路径
+        password (str): PDF文件的密码（如果有）
 
     Returns:
-        string: 以List形式返回
+        list: 包含从PDF文件中提取的表格数据的列表
+    """
+    pass
+
+
+def bank_type_xls_convert_to_string(file):
+    """读取Excel文件并将其转换为列表格式
+
+    Args:
+        file (str): Excel文件的路径
+
+    Returns:
+        list: 包含Excel文件数据的列表
     """
     pass
 
 
 def bank_type_string_convert_to_csv(data, card_number):
-    """接收字符串，返回CSV格式文件
+    """将列表数据转换为CSV格式
 
     Args:
-        data (string): _description_
-        card_number (string): 储蓄卡/信用卡 完整的卡号
+        data (list): 包含借记卡数据的列表
+        card_number (str): 银行卡号
 
     Returns:
-        csv: _description_
+        str: 转换后的CSV格式字符串
     """
     pass
 
@@ -122,20 +139,24 @@ def bank_type_get_expense(self, ownerid):
 
 
 def bank_type_get_account(self, ownerid):
-    """根据bank_type_init_key得到的key来查找对应的account
+    """根据所有者ID获取账户资产信息
 
     Args:
-        self (string): _description_
-        ownerid (string): _description_
+        ownerid: 账户所有者的ID
 
     Returns:
-        account: _description_
+        float: 账户资产信息
     """
     pass
 
 
 def bank_type_get_card_number(content):
-    """
-    从账单文件中获取银行卡号
+    """从内容中提取卡号
+
+    Args:
+        content (str): 包含借记卡号的内容
+
+    Returns:
+        str: 提取的卡号
     """
     pass
