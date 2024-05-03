@@ -35,9 +35,10 @@ urlpatterns = [
 
     path('admin/', admin.site.urls),
     path('docs/', include_docs_urls(title='Beancount-Trans')),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),  # DRF 提供的一系列身份认证的接口，用于在页面中认证身份
+    path('accounts/', include('rest_framework.urls', namespace='rest_framework')),  # DRF 提供的一系列身份认证的接口，用于在页面中认证身份
 
     path('translate/', include('translate.urls')),
+    path('api/owntracks/', include('owntracks.urls')),
 
     path('user/create/', CreateUserView.as_view(), name='create_user'),  # 创建用户
     path('login/', LoginView.as_view(), name='user_login'),

@@ -1,4 +1,4 @@
 FROM mysql:8.0.26 as production-stage
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 
-COPY sql/20240406-Develop.sql /docker-entrypoint-initdb.d/
+COPY sql/20240507-Develop.sql /docker-entrypoint-initdb.d/

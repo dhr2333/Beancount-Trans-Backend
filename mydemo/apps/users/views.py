@@ -4,6 +4,7 @@ from rest_framework import permissions
 from rest_framework.generics import CreateAPIView
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from rest_framework.authtoken.models import Token
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -36,9 +37,11 @@ class LoginView(TokenObtainPairView):
                 serializer.is_valid(raise_exception=True)
                 access = serializer.validated_data.get('access')
                 refresh = serializer.validated_data.get('refresh')
+                # token, _ = Token.objects.get_or_create(user=user)
                 response_data = {
                     'access': str(access),
                     'refresh': str(refresh),
+                    # 'token': token.key,
                 }
                 return Response(response_data)
 
