@@ -1,7 +1,7 @@
-# /home/daihaorui/账单案例/统一账单/工商银行储蓄卡.pdf
 import re
 from datetime import time
 from .models import Assets
+from abc import ABC, abstractmethod
 
 BILL_ALI = "alipay"
 BILL_WECHAT = "wechat"
@@ -56,64 +56,53 @@ def get_default_assets(ownerid):
     return actual_assets
 
 
-class PaymentStrategy:
-    def get_data(self, bill):
-        raise NotImplementedError()
+class InitStrategy(ABC):
+    @abstractmethod
+    def init(self, bill, **kwargs):
+        pass
 
 
 class FormatData:
-    def __init__(self, entry):
-        self.entry = entry
 
-    def commission(self, entry):
-        instance = f"{entry['date']} * \"{entry['payee']}\" \"{entry['notes']}\"\n\
-    time: \"{entry['time']}\"\n\
-    uuid: \"{entry['uuid']}\"\n\
-    status: \"{entry['status']}\"\n\
-    {entry['expend']} {entry['expend_sign']}{entry['amount']}\n\
-    {entry['account']} {entry['account_sign']}{entry['actual_amount']}\n\
-    Expenses:Finance:Commission\n\n"
-        return instance
+    def format_instance(entry):
+        ignore_data = IgnoreData(None)
+        formatted_str = ""
 
-    def default(self, entry):
-        instance = f"{entry['date']} * \"{entry['payee']}\" \"{entry['notes']}\"\n\
-    time: \"{entry['time']}\"\n\
-    uuid: \"{entry['uuid']}\"\n\
-    status: \"{entry['status']}\"\n\
-    {entry['expend']} {entry['expend_sign']}{entry['amount']}\n\
-    {entry['account']} {entry['account_sign']}{entry['amount']}\n\n"
-        return instance
+        formatted_str += f"{entry['date']}"
+        formatted_str += f" *"
+        formatted_str += f" \"{entry['payee']}\""
+        formatted_str += f" \"{entry['note']}\""
+        if entry['tag'] is not None:
+            formatted_str += f" {entry['tag']}"
+        formatted_str += f"\n    time: \"{entry['time']}\"\n"
+        if entry['uuid'] is not None:
+            formatted_str += f"    uuid: \"{entry['uuid']}\"\n"
+        formatted_str += f"    status: \"{entry['status']}\"\n"
+        formatted_str += f"    {entry['expense']} {entry['expenditure_sign']}{entry['amount']}\n"
+        formatted_str += f"    {entry['account']} {entry['account_sign']}"
+        if ignore_data.notes(entry):
+            formatted_str += f"{entry['actual_amount']}"
+        else:
+            formatted_str += f"{entry['amount']}"
+
+        if ignore_data.notes(entry):
+            formatted_str += "\n    Expenses:Finance:Commission"
+
+        return formatted_str + "\n\n"
+    
+    def balance_instance(entry):
+        pass
 
 
 class IgnoreData:
     def __init__(self, data):
         self.data = data
 
-    def wechatpay(self, data):
-        if data[9] == BILL_WECHAT:
-            return data[7] in ["已全额退款", "对方已退还"] or data[7].startswith("已退款")
-
-    def alipay(self, data):
-        if data[9] == BILL_ALI and data[7] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭",
-                                               "还款失败"]:
-            return True
-        elif re.match(pattern["余额宝"], data[3]):
-            return True
-        else:
-            return False
-
-    def alipay_fund(self, data):
-        return data[1] in ["转账收款到余额宝", "余额宝-自动转入", "余额宝-单次转入"]
-
     def empty(self, data):
         return data == {}
 
     def notes(self, data):
-        return data["notes"] == "零钱提现"
-
-    def cmb_credit(self, data, cmb_credit_ignore):
-        if data[9] == BILL_CMB_CREDIT and "支付宝" in data[2] or "财付通" in data[2]:
-            return cmb_credit_ignore == "True"
+        return data["note"] == "零钱提现"
 
 
 def get_card_number(content, sourcefile_identifier):
@@ -134,3 +123,4 @@ def card_number_get_key(data):
     从银行卡号获取后四位尾号
     """
     return re.search(r'\d{4}$', data).group()
+

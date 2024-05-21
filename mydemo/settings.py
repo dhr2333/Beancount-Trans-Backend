@@ -78,15 +78,15 @@ MIDDLEWARE = [
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-CORS_ORIGIN_ALLOW_ALL = True  # 允许所有
+# CSRF_TRUSTED_ORIGINS = [
+#     "http://127.0.0.1:5173",
+#     "http://localhost:5173",
+#     "http://127.0.0.1:38001",
+#     "http://localhost:38001",
+#     "https://trans.dhr2333.cn",
+# ]
+CORS_ORIGIN_ALLOW_ALL = True
 CORS_ORIGIN_WHITELIST = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:38001",
-    "http://localhost:38001",  # 38001为Fount docker端口
-    "https://trans.dhr2333.cn",
-]
-CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:38001",
@@ -246,7 +246,7 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
 }
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(minutes=15),  # token有效时长
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=3),  # token有效时长
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7)  # token刷新后的有效时间
 }
 

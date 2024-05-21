@@ -24,17 +24,6 @@ class AccountViewSet(ModelViewSet):
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
 
-    # permission_classes = [IsOwnerOrAdminReadWriteOnly]
-    # filter_backends = [CurrentUserFilterBackend]
-    # search_fields = ['key', 'payee']
-    # ordering_fields = ['id', 'key']
-    # authentication_classes = [JWTAuthentication]
-
-    # def get_queryset(self):
-    #     user = self.request.user
-    #     print(user)
-    #     return Expense.objects.filter(owner=user)
-
     def perform_create(self, serializer):
         if Account.objects.filter(owner_id=self.request.user, account=self.request.data["account"]).exists():
             raise ValidationError("Account already exists.")

@@ -1,26 +1,45 @@
-import re
+import logging
 
-from translate.utils import PaymentStrategy
+from translate.utils import InitStrategy, IgnoreData
 
 bank_type_sourcefile_identifier = "xxxxxxxxxx"  # 能唯一标识所属银行及账单类型的原始上传文件
 bank_type_csvfile_identifier = "xx银行xx卡账单明细"  # 能唯一标识所属银行及账单类型
 
 
-class BankTypeStrategy(PaymentStrategy):
-    def get_data(self, bill):
-        """根据CSV文件的内容对字段进行整合，转换为特定格式的列表
+class BankTypeInitStrategy(InitStrategy):
+    def init(self, bill, **kwargs):
+        import itertools
+        bill = itertools.islice(bill, 1, None)  # 默认跳过首行
+        records = []
+        try:
+            for row in bill:
+                record = {
+                    'transaction_time': '/',  # 交易发生的时间
+                    'transaction_category': '/',  # 交易类型
+                    'counterparty': '/',  # 发生交易的对方
+                    'commodity': '/',  # 商品
+                    'transaction_type': '/',  # 收支类型（收入/支出/不计收支）
+                    'amount': '/',  # 金额
+                    'payment_method': '/',  # 使用什么进行支付（银行卡、储蓄卡、支付宝等）
+                    'transaction_status': '/',  # 交易状态
+                    'notes': '/',  # 备注
+                    'bill_identifier': '/',  # 唯一标识账单（用于区分传入的各个账单以调用不同的函数处理）
+                    'uuid': '/',  # 每条记录的唯一标识
+                    'balance': '/',  # 发生交易后的储蓄卡余额
+                    'card_number': "对方卡号",  # 发生交易的对方卡号
+                    'counterparty_bank': "所属银行"  # 发生交易的对方银行开户行
+                }
+                records.append(record)
+        except UnicodeDecodeError as e:
+            logging.error("Unicode decode error at row=%s: %s", row, e)
+        except Exception as e:
+            logging.error("Unexpected error: %s", e)
 
-        Args:
-            bill (csv.reader): 包含银行交易数据的csv.reader对象
+        return records
 
-        Returns:
-            list: 包含整合后的银行交易数据的列表，每个元素为包含特定字段的列表
 
-        Raises:
-            UnicodeDecodeError: 若遇到编码错误时抛出异常
-            Exception: 其他异常情况下抛出异常
-        """
-        pass
+def bank_type_ignore(self, data, bank_type_ignore):
+    pass
 
 
 def bank_type_pdf_convert_to_string(file, password):
@@ -97,14 +116,32 @@ def bank_type_get_amount(data):
     pass
 
 
-def bank_type_get_notes(data):
+def bank_type_get_note(data):
     """接收字符串，返回备注
 
     Args:
         data (string): _description_
 
     Returns:
-        notes:备注
+        note:备注
+    """
+    pass
+
+
+def bank_type_get_tag(data):
+    """支付宝、微信识别 "#" 用于添加tag标签 
+
+    Args:
+        data (_type_): _description_
+    """
+    pass
+
+
+def bank_type_get_commission(data):
+    """用于计算利息
+
+    Args:
+        data (_type_): _description_
     """
     pass
 
@@ -160,3 +197,6 @@ def bank_type_get_card_number(content):
         str: 提取的卡号
     """
     pass
+
+
+IgnoreData.bank_type_ignore = bank_type_ignore

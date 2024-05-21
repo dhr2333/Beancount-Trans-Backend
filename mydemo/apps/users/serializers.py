@@ -13,7 +13,7 @@ class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "password", "password2", "mobile"]
-        extra_kwage = {  # 修改字段选项
+        extra_kwage = {
             "username": {
                 "min_length": 5,
                 "nax_length": 20,

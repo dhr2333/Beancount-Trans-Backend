@@ -45,8 +45,4 @@ urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
-
-    # path('api/get_csrf_token/', get_csrf_token, name='token_verify')
-    # path('users/', include('users.urls')),
-    # path('maps/', include('maps.urls')),
 ]

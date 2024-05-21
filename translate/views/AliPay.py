@@ -1,45 +1,57 @@
 import re
+import logging
 
 from translate.models import Assets
-from translate.utils import ASSETS_OTHER, PaymentStrategy, pattern, BILL_ALI
+from translate.utils import ASSETS_OTHER,  BILL_ALI, pattern ,IgnoreData,InitStrategy
 
 alipay_csvfile_identifier = "------------------------------------------------------------------------------------"
 
+class AliPayInitStrategy(InitStrategy):
+    def init(self, bill, **kwargs):
+        import itertools
+        bill = itertools.islice(bill, 24, None)  # 跳过前24行
+        records = []
 
-class AliPayStrategy(PaymentStrategy):
-    def get_data(self, bill):
-        """
-        ['2023-06-13 10:40:16', '其他', '得物', 'du***@theduapp.com', '商品交易', '支出', '202.00', '中信银行信用卡(6428)', '交易成功', '2023061322001474561408026317\t', '572306131668448120044651726\t', '', '']
-        """
-        # 实现获取支付宝支付数据的逻辑
-        row = 0
-        while row < 24:
-            next(bill)
-            row += 1
-        list = []
         try:
             for row in bill:
-                time = row[0]  # 交易时间
-                type = row[1]  # 交易类型
-                object = row[2]  # 交易对方
-                commodity = row[4]  # 商品
-                balance = "/" if row[5] == "不计收支" else row[5]  # 收支
-                amount = row[6]  # 金额
-                way = "余额" if row[7] == '                    ' else row[7]  # 支付方式
-                status = row[8]  # 交易状态
-                notes = "/" if row[11] == '                    ' else row[11]  # 备注
-                bill = BILL_ALI
-                uuid = row[9]
-                single_list = [time, type, object, commodity, balance, amount, way.split('&')[0], status, notes, bill,
-                               uuid]
-                new_list = []
-                for item in single_list:
-                    new_item = item.strip()
-                    new_list.append(new_item)
-                list.append(new_list)
-        except UnicodeDecodeError:
-            print("error row = ", row)
-        return list
+                transaction_type = "/" if row[5] == "不计收支" else row[5]
+                payment_method = "余额" if row[7].strip() == '' else row[7].strip()
+                notes = "/" if row[11].strip() == '' else row[11].strip()
+
+                record = {
+                    'transaction_time': row[0].strip(),  # 交易时间
+                    'transaction_category': row[1].strip(),  # 交易类型
+                    'counterparty': row[2].strip(),  # 交易对方
+                    'commodity': row[4].strip(),  # 商品
+                    'transaction_type': transaction_type.strip(),  # 收支类型（收入/支出/不计收支）
+                    'amount': row[6].strip(),  # 金额
+                    'payment_method': payment_method.split('&')[0],  # 支付方式
+                    'transaction_status': row[8].strip(),  # 交易状态
+                    'notes': notes,  # 备注
+                    'bill_identifier': BILL_ALI,  # 账单类型
+                    'uuid': row[9].strip()  # 交易单号
+                }
+                records.append(record)
+
+        except UnicodeDecodeError as e:
+            logging.error(f"Unicode decode error at row={row}: {str(e)}")
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+
+        return records
+    
+
+def alipay_ignore(self, data):
+    if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败"]:
+        return True
+    elif data['bill_identifier'] == BILL_ALI and  re.match(pattern["余额宝"], data['commodity']):
+        return True
+    else:
+        return False
+
+def alipay_fund_ignore(self, data):
+    if data['bill_identifier'] == BILL_ALI:
+        return data['transaction_category'] in ["转账收款到余额宝", "余额宝-自动转入", "余额宝-单次转入"]
 
 
 def alipay_get_expense_account(self, assets, ownerid):
@@ -85,7 +97,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
     elif self.type == "余额宝-单次转入":
         account = assets["ALIFUND"]
     elif self.type == "余额宝-转出到银行卡":
-        result = data[6]
+        result = data['payment_method']
         for key in self.key_list:
             if key in result:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
@@ -95,14 +107,14 @@ def alipay_get_balance_account(self, data, assets, ownerid):
     elif self.type == "充值-普通充值":
         account = assets["ALIPAY"]  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
-        result = data[2] + "储蓄卡"  # 例如"宁波银行储蓄卡"
+        result = data['counterparty'] + "储蓄卡"  # 例如"宁波银行储蓄卡"
         for full in self.full_list:
             if result in full:
                 account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
                 account = account_instance.assets
                 return account
     elif self.type == "信用卡还款" or re.match(pattern["花呗"], self.type):
-        result = data[6]
+        result = data['payment_method']
         for key in self.key_list:
             if key in result:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
@@ -111,7 +123,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
             else:
                 account = ASSETS_OTHER
     elif re.match(pattern["基金"], self.type):
-        result = data[3][data[3].index("卖出至") + len("卖出至"):]
+        result = data['commodity'][data['commodity'].index("卖出至") + len("卖出至"):]
         for key in self.key_list:
             if result in key:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
@@ -132,10 +144,9 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
     elif self.type == "余额宝-转出到余额":
         expend = assets["ALIFUND"]
     elif self.type == "余额宝-单次转入":
-        result = data[6]
+        result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                # expend_instance = Assets.objects.get(key=key)
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
                 expend = expend_instance.assets
                 return expend
@@ -150,7 +161,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
     elif re.match(pattern["花呗"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
         expend = assets["HUABEI"]
     elif self.type == "信用卡还款":
-        result = data[2] + "信用卡"  # 例如"招商银行信用卡"
+        result = data['counterparty'] + "信用卡"  # 例如"招商银行信用卡"
         for full in self.full_list:
             if result in full:
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
@@ -162,11 +173,11 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
 
 
 def alipay_get_type(data):
-    return data[3]
+    return data['commodity']
 
 
 def alipay_initalize_key(data):
-    key = data[6]
+    key = data['payment_method']
     if "&" in key:  # 用于解决支付宝中"&[红包]"导致无法被匹配的问题
         sub_strings = key.split("&")
         key = sub_strings[0]
@@ -174,28 +185,35 @@ def alipay_initalize_key(data):
 
 
 def alipay_get_uuid(data):
-    return data[10]
+    return data['uuid']
 
 
 def alipay_get_status(data):
-    return "ALiPay - " + data[7]
+    return "ALiPay - " + data['transaction_status']
 
 
 def alipay_get_amount(data):
-    return "{:.2f} CNY".format(float(data[5]))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
+    return "{:.2f} CNY".format(float(data['amount']))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
 
 
-def alipay_get_notes(data):
-    if data[3] == "Transfer":
+def alipay_get_note(data):
+    if data['commodity'] == "Transfer":
         return "无备注转账"
-    elif data[3] == "发普通红包":
+    elif data['commodity'] == "发普通红包":
         return "发普通红包"
-    elif data[3] == "收到普通红包":
+    elif data['commodity'] == "收到普通红包":
         return "收到普通红包"
-    return data[3]
+    return data['commodity']
 
-# def alipay_get_payee(self):
-#     if '(' in self.payee and ')' in self.payee and self.notes == "Transfer":
-#         match = re.search(r'\((.*?)\)', self.payee)  # 提取 account 中的数字部分
-#         if match:
-#             return match.group(1)
+
+def alipay_get_tag(data):
+    pass
+
+
+def alipay_get_commission(data):
+    return data['notes'][4:]
+
+
+
+IgnoreData.alipay_ignore = alipay_ignore
+IgnoreData.alipay_fund_ignore = alipay_fund_ignore

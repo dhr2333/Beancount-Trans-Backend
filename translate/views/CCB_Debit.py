@@ -1,7 +1,7 @@
 import re
+import logging
 
-from translate.utils import PaymentStrategy, BILL_CCB_DEBIT
-from mydemo.utils.tools import time_to_timestamp
+from translate.utils import InitStrategy, BILL_CCB_DEBIT
 from translate.models import Assets
 from datetime import datetime
 
@@ -9,64 +9,35 @@ ccb_debit_sourcefile_identifier = "中国建设银行个人活期账户全部交
 ccb_debit_csvfile_identifier = "中国建设银行储蓄卡账单明细"  # 能唯一标识所属银行及账单类型
 
 
-class CcbDebitStrategy(PaymentStrategy):
-    """
-    摘要row[0], 币别row[1],钞汇row[2],交易日期row[3],交易金额row[4],账户余额row[5],交易地点row[6],对方账号row[7],户名row[8]
-    支付机构提现,   人民币元,        钞,    20230303,       +10.00,        10.00,    零钱通提现,    243300133,财付通支付科技有限公司
-    """
-    def get_data(self, bill, card):
-        """根据csv文件的内容对字段进行整合
-
-        Args:
-            bill(csv.reader):
-
-        Returns:
-            list: _description_
-        """
-        row = 0
-        while row < 1:
-            next(bill)
-            row += 1
-        list = []
+class CcbDebitInitStrategy(InitStrategy):
+    def init(self, bill, **kwargs):
+        import itertools
+        card = kwargs.get('card_number', None)
+        bill = itertools.islice(bill, 1, None)
+        records = []
         try:
             for row in bill:
-                time = datetime.strptime(row[3], '%Y%m%d').strftime('%Y-%m-%d %H:%M:%S')
-                currency = row[0]  # 交易类型，当object和card_number为"（空）"时object = currency
-                object = row[8]  # 交易对方
-                commodity = row[6]  # 商品
-                type = "支出" if "-" in row[4] else "收入"  # 收支
-                amount = row[4].replace("-", "") if "-" in row[4] else row[4]  # 金额
-                way = "中国建设银行储蓄卡(" + card + ")"  # 支付方式
-                status = BILL_CCB_DEBIT + " - 交易成功"  # 交易状态
-                notes = row[6]  # 备注
-                bill = BILL_CCB_DEBIT
-                uuid = time_to_timestamp(time)
-                balance = row[5]
-                card_number = row[7]  # 对方卡号
-                single_list = [time, currency, object, commodity, type, amount, way, status, notes, bill, uuid, balance,
-                               card_number]
-                new_list = []
-                for item in single_list:
-                    new_item = str(item).strip()
-                    new_list.append(new_item)
-                list.append(new_list)
-        except UnicodeDecodeError:
-            print("UnicodeDecodeError error row = ", row)
-        except:
-            print("error row = ", row)
-        return list
+                record = {
+                    'transaction_time': datetime.strptime(row[3], '%Y%m%d').strftime('%Y-%m-%d %H:%M:%S'),  # 交易时间
+                    'transaction_category': row[0],  # 交易类型
+                    'counterparty': row[8],  # 交易对方
+                    'commodity': row[6],  # 商品
+                    'transaction_type': "支出" if "-" in row[4] else "收入",  # 收支类型（收入/支出/不计收支）
+                    'amount': row[4].replace("-", "") if "-" in row[4] else row[4],  # 金额
+                    'payment_method': "中国建设银行储蓄卡(" + card + ")",  # 支付方式
+                    'transaction_status': BILL_CCB_DEBIT + " - 交易成功",  # 交易状态
+                    'notes': row[6],  # 备注
+                    'bill_identifier': BILL_CCB_DEBIT,  # 账单类型
+                    'balance': row[5],
+                    'card_number': row[7],
+                }
+                records.append(record)
+        except UnicodeDecodeError as e:
+            logging.error("Unicode decode error at row=%s: %s", row, e)
+        except Exception as e:
+            logging.error("Unexpected error: %s", e)
 
-
-def ccb_debit_pdf_convert_to_string(file, card_number):
-    """接收PDF文件，返回字符串
-
-    Args:
-        file(_type_): PDF文件
-
-    Returns:
-        string: 以List形式返回
-    """
-    pass
+        return records
 
 
 def ccb_debit_xls_convert_to_string(file):
@@ -131,18 +102,6 @@ def ccb_debit_string_convert_to_csv(data):
     return output
 
 
-def ccb_debit_get_uuid(data):
-    """接收字符串，返回uuid用于唯一标识
-
-    Args:
-        data (string): _description_
-
-    Returns:
-        uuid: 若有账单条目唯一识别则直接使用，若无则根据时间字符串转换为时间戳
-    """
-    return data[10]
-
-
 def ccb_debit_get_status(data):
     """接收字符串，返回条目状态
 
@@ -152,7 +111,7 @@ def ccb_debit_get_status(data):
     Returns:
         status: 各交易状态（支付成功、退款成功等）
     """
-    return data[7]
+    return data['transaction_status']
 
 
 def ccb_debit_get_amount(data):
@@ -164,10 +123,10 @@ def ccb_debit_get_amount(data):
     Returns:
         amount: 金额
     """
-    return "{:.2f} CNY".format(float(data[5]))
+    return "{:.2f} CNY".format(float(data['amount']))
 
 
-def ccb_debit_get_notes(data):
+def ccb_debit_get_note(data):
     """接收字符串，返回备注
 
     Args:
@@ -176,7 +135,7 @@ def ccb_debit_get_notes(data):
     Returns:
         notes:备注
     """
-    return data[8]
+    return data['notes']
 
 
 def ccb_debit_init_key(data):
@@ -192,7 +151,7 @@ def ccb_debit_init_key(data):
     Returns:
         key (string):
     """
-    return data[6]
+    return data['payment_method']
 
 
 def ccb_debit_get_expense(self, ownerid):

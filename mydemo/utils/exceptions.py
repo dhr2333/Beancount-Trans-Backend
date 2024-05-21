@@ -16,17 +16,17 @@ def custom_exception_handler(exc, context):
         view = context['view']  # exc 异常实例对象 context 异常发生的上下文
         if isinstance(exc, DatabaseError):
             logging.error('[%s] %s' % (view, exc))
-            response = Response({'message': '服务器内部错误'}, status=status.HTTP_507_INSUFFICIENT_STORAGE)
+            response = Response({'message': '服务器内部错误'}, status = status.HTTP_507_INSUFFICIENT_STORAGE)
     return response
 
 
-class UnsupportedFileType(Exception):
-    def __init__(self, message, error_code):
+class UnsupportedFileTypeError(Exception):
+    def __init__(self, message, error_code = status.HTTP_501_NOT_IMPLEMENTED):
         super().__init__(message)
         self.error_code = error_code
 
 
 class DecryptionError(Exception):
-    def __init__(self, message, error_code):
+    def __init__(self, message, error_code = status.HTTP_401_UNAUTHORIZED):
         super().__init__(message)
         self.error_code = error_code

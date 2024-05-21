@@ -1,85 +1,43 @@
 import re
 import pdfplumber
+import logging
 
-from mydemo.utils.tools import time_to_timestamp
 from translate.models import Assets
-from translate.utils import PaymentStrategy, BILL_ICBC_DEBIT
+from translate.utils import InitStrategy, BILL_ICBC_DEBIT
 
 icbc_debit_sourcefile_identifier = "中国工商银行借记账户历史明细"
 icbc_debit_csvfile_identifier = "中国工商银行储蓄卡账单明细"
 
 
-class IcbcDebitStrategy(PaymentStrategy):
-    """
-    交易日期row[0],           账号row[1],            储种row[2],序号row[3],币种row[4],钞汇row[5],摘要row[6],地区row[7],收入/支出金额row[8],余额row[9],对方户名row[10],对方账号row[11],        渠道row[12]
-    ['2023-05-05 09:52:17', '1203202001129563517', '活期',    '00000',  '人民币',  '钞',      '他行汇入', '1203',   '+4499.68',       '4499.68', '戴豪锐',      '6214180002008321746', '其他']
-    """
-    def get_data(self, bill, card):
-        """根据csv文件的内容对字段进行整合
-
-        Args:
-            bill(csv.reader):
-
-        Returns:
-            list: _description_
-        """
-        row = 0
-        while row < 1:
-            next(bill)
-            row += 1
-        list = []
+class IcbcDebitInitStrategy(InitStrategy):
+    def init(self, bill, **kwargs):
+        import itertools
+        card = kwargs.get('card_number', None)
+        bill = itertools.islice(bill, 1, None)
+        records = []
         try:
             for row in bill:
-                time = row[0]
-                currency = row[6]  # 交易类型，当object和card_number为"（空）"时object = currency
-                object = row[10]  # 交易对方
-                commodity = row[4]  # 商品
-                type = "支出" if "-" in row[8] else "收入"  # 收支
-                amount = row[8].replace("-", "") if "-" in row[8] else row[8]  # 金额
-                way = "中国工商银行储蓄卡(" + card + ")"  # 支付方式
-                status = BILL_ICBC_DEBIT + " - 交易成功"  # 交易状态
-                notes = row[6]  # 备注
-                bill = BILL_ICBC_DEBIT
-                uuid = time_to_timestamp(time)
-                balance = row[9]
-                card_number = row[11]  # 对方卡号
-                single_list = [time, currency, object, commodity, type, amount, way, status, notes, bill, uuid, balance,
-                               card_number]
-                new_list = []
-                for item in single_list:
-                    new_item = str(item).strip()
-                    new_list.append(new_item)
-                list.append(new_list)
-        except UnicodeDecodeError:
-            print("UnicodeDecodeError error row = ", row)
-        except:
-            print("error row = ", row)
-        return list
+                record = {
+                    'transaction_time': row[0],  # 交易时间
+                    'transaction_category': row[6],  # 交易类型
+                    'counterparty': row[10],  # 交易对方
+                    'commodity': row[4],  # 商品
+                    'transaction_type': "支出" if "-" in row[8] else "收入",  # 收支类型（收入/支出/不计收支）
+                    'amount': row[8].replace("+", "").replace("-", ""),  # 金额
+                    'payment_method': "中国工商银行储蓄卡(" + card + ")",  # 支付方式
+                    'transaction_status': BILL_ICBC_DEBIT + " - 交易成功",  # 交易状态
+                    'notes': row[6],  # 备注
+                    'bill_identifier': BILL_ICBC_DEBIT,  # 账单类型
+                    'balance': row[9],
+                    'card_number': row[11],
+                }
+                records.append(record)
+        except UnicodeDecodeError as e:
+            logging.error("Unicode decode error at row=%s: %s", row, e)
+        except Exception as e:
+            logging.error("Unexpected error: %s", e)
 
-
-def icbc_debit_pdf_convert_to_string(file):
-    """接收PDF文件，返回字符串
-
-    Args:
-        file(_type_): PDF文件
-
-    Returns:
-        string: 以List形式返回
-    """
-    pass
-
-
-def icbc_debit_string_convert_to_csv(data, card_number):
-    """接收字符串，返回CSV格式文件
-
-    Args:
-        data (string): _description_
-        card_number (string): 储蓄卡/信用卡 完整的卡号
-
-    Returns:
-        csv: _description_
-    """
-    pass
+        return records
 
 
 def text_with_specific_font(page, fontname, max_fontsize, min_fontsize):
@@ -107,11 +65,9 @@ def icbc_debit_pdf_convert_to_csv(file, card_number, password):
         header = ["交易日期,账号,储种,序号,币种,钞汇,摘要,地区,收入/支出金额,余额,对方户名,对方账号,渠道"]
         output_lines = [icbc_debit_csvfile_identifier + " 卡号: " + card_number]
         output_lines.append(",".join(header))
-        # print("交易日期,账号,储种,序号,币种,钞汇,摘要,地区,收入/支出金额,余额,对方户名,对方账号,渠道")
         for page_num in range(num_pages):
             page = pdf.pages[page_num]
             specific_text = text_with_specific_font(page, "GSSDFL+SimHei", 7.0,0.900000000000034)  # 假设的字体和大小
-            # print(specific_text)
             # 定义正则表达式
             pattern = re.compile(
                 r'(\d{4}-\d{2}-\d{2})'    # 日期 yyyy-mm-dd
@@ -138,23 +94,10 @@ def icbc_debit_pdf_convert_to_csv(file, card_number, password):
                 balance = balance.replace(',', '')  # 去除余额中的逗号
                 # 拼接字符串
                 csv_row = f"{date} {time},{account},活期,{serial},人民币,钞,{summary},{area},{amount},{balance},{name},{opponent_account},{channel}"
-                # print(csv_row)
                 output_lines.append(csv_row)
-            # content = page.extract_tables()
             final_output = "\n".join(output_lines)
     return final_output
 
-
-def icbc_debit_get_uuid(data):
-    """接收字符串，返回uuid用于唯一标识
-
-    Args:
-        data (string): _description_
-
-    Returns:
-        uuid: 若有账单条目唯一识别则直接使用，若无则根据时间字符串转换为时间戳
-    """
-    return data[10]
 
 
 def icbc_debit_get_status(data):
@@ -166,7 +109,7 @@ def icbc_debit_get_status(data):
     Returns:
         status: 各交易状态（支付成功、退款成功等）
     """
-    return data[7]
+    return data['transaction_status']
 
 
 def icbc_debit_get_amount(data):
@@ -178,10 +121,10 @@ def icbc_debit_get_amount(data):
     Returns:
         amount: 金额
     """
-    return data[5]
+    return data['amount']
 
 
-def icbc_debit_get_notes(data):
+def icbc_debit_get_note(data):
     """接收字符串，返回备注
 
     Args:
@@ -190,7 +133,7 @@ def icbc_debit_get_notes(data):
     Returns:
         notes:备注
     """
-    return data[8]
+    return data['notes']
 
 
 def icbc_debit_init_key(data):
@@ -206,20 +149,7 @@ def icbc_debit_init_key(data):
     Returns:
         key (string):
     """
-    return data[6]
-
-
-def icbc_debit_get_expense(self, ownerid):
-    """根据bank_type_init_key得到的key来查找对应的expense
-
-    Args:
-        self (string): _description_
-        ownerid (string): _description_
-
-    Returns:
-        expense: _description_
-    """
-    pass
+    return data['payment_method']
 
 
 def icbc_debit_get_account(self, ownerid):

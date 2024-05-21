@@ -1,55 +1,46 @@
 import re
-
+import logging
 import pdfplumber
-from mydemo.utils.tools import time_to_timestamp
+
 from translate.models import Assets
-from translate.utils import PaymentStrategy, BILL_BOC_DEBIT
+from translate.utils import InitStrategy, BILL_BOC_DEBIT
 
 boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"
 boc_debit_csvfile_identifier = "中国银行储蓄卡账单明细"
 
 
-class BocDebitStrategy(PaymentStrategy):
-    """
-    记账日期row[0],记账时间row[1],币别row[2],金额row[3],余额row[4],交易名称row[5],渠道row[6],网点名称row[7],       附言row[8],      对方账户名row[9],  对方卡号/账号row[10],对方开户行row[11]
-    2024-03-18,   10:19:28,    人民币,    -11.00,    4853.00,  网上快捷支付,   银企对接,   -------------------,财付通-扫二维码付款,财付通-扫二维码付款,Z2004944000010N,   -------------------
-    """
+class BocDebitInitStrategy(InitStrategy):
+    def init(self, bill, **kwargs):
+        import itertools
 
-    def get_data(self, bill, card):
-        row = 0
-        while row < 1:
-            next(bill)
-            row += 1
-        list = []
+        card = kwargs.get('card_number', None)
+        bill = itertools.islice(bill, 1, None)
+        records = []
         try:
             for row in bill:
-                time = row[0] + " " + row[1]
-                currency = row[5]  # 交易类型
-                object = row[9]  # 交易对方
-                commodity = row[2]  # 商品
-                type = "支出" if "-" in row[3] else "收入"  # 收支
-                amount = row[3].replace("-", "") if "-" in row[3] else row[3]  # 金额
-                way = "中国银行储蓄卡(" + card + ")"  # 支付方式
-                status = BILL_BOC_DEBIT + " - 交易成功"  # 交易状态
-                notes = row[8]  # 备注
-                bill = BILL_BOC_DEBIT
-                uuid = time_to_timestamp(time)
-                balance = row[4]
-                card_number = row[10]
-                bank = row[11]
-                single_list = [time, currency, object, commodity, type, amount, way, status, notes, bill, uuid, balance,
-                               card_number, bank]
-                new_list = []
-                for item in single_list:
-                    new_item = str(item).strip()
-                    new_list.append(new_item)
-                list.append(new_list)
-        except UnicodeDecodeError:
-            print("UnicodeDecodeError error row = ", row)
-        except:
-            print("error row = ", row)
-        return list
+                record = {
+                    'transaction_time': row[0] + " " + row[1],  # 交易时间
+                    'transaction_category': row[5],  # 交易类型
+                    'counterparty': row[9],  # 交易对方
+                    'commodity': row[2],  # 商品
+                    'transaction_type': "支出" if "-" in row[3] else "收入" ,  # 收支类型（收入/支出/不计收支）
+                    'amount': row[3].replace("-", "") if "-" in row[3] else row[3],  # 金额
+                    'payment_method': "中国银行储蓄卡(" + card + ")",  # 支付方式
+                    'transaction_status': BILL_BOC_DEBIT + " - 交易成功",  # 交易状态
+                    'notes': row[8],  # 备注
+                    'bill_identifier': BILL_BOC_DEBIT,  # 账单类型
+                    'balance': row[4],
+                    'card_number': row[10],
+                    'counterparty_bank': row[11],
+                }
+                records.append(record)
+        except UnicodeDecodeError as e:
+            logging.error("Unicode decode error at row=%s: %s", row, e)
+        except Exception as e:
+            logging.error("Unexpected error: %s", e)
 
+        return records
+    
 
 def boc_debit_pdf_convert_to_string(file, password):
     """接收PDF文件，返回字符串
@@ -103,23 +94,23 @@ def boc_debit_string_convert_to_csv(data, card_number):
 
 
 def boc_debit_get_uuid(data):
-    return data[10]
+    return data['uuid']
 
 
 def boc_debit_get_status(data):
-    return data[7]
+    return data['transaction_status']
 
 
 def boc_debit_get_amount(data):
-    return "{:.2f} CNY".format(float(data[5]))
+    return "{:.2f} CNY".format(float(data['amount']))
 
 
-def boc_debit_get_notes(data):
-    return data[8]
+def boc_debit_get_note(data):
+    return data['notes']
 
 
 def boc_debit_init_key(data):
-    return data[6]
+    return data['payment_method']
 
 
 def boc_debit_get_account(self, ownerid):

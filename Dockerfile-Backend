@@ -1,5 +1,5 @@
 # FROM python:3.11.6-alpine as production-stage
-FROM python:3.11.6 as production-stage
+FROM python:3.12.3 as production-stage
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 ENV PYTHONUNBUFFERED 1
 WORKDIR /code/beancount-trans/

@@ -62,9 +62,8 @@ def show_maps(request):
         return HttpResponseForbidden()
 
 
-# @login_required
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])  # 必须在authentication_classes前面
+@permission_classes([IsAuthenticated])
 @authentication_classes([JWTAuthentication]) 
 def show_log_dates(request):
     dates = OwnTrackLog.objects.values_list('creation_time', flat=True)
@@ -72,13 +71,6 @@ def show_log_dates(request):
     
     serializer = LogDatesSerializer({'results': results})
     return Response(serializer.data)
-
-    # print(results)
-
-    # context = {
-    #     'results': results
-    # }
-    # return render(request, 'owntracks/show_log_dates.html', context)
 
 
 def convert_to_amap(locations):
@@ -129,12 +121,6 @@ def get_datas(request):
             d = dict()
             d["name"] = tid
             paths = list()
-            # 使用高德转换后的经纬度
-            # locations = convert_to_amap(
-            #     sorted(item, key=lambda x: x.creation_time))
-            # for i in locations.split(';'):
-            #     paths.append(i.split(','))
-            # 使用GPS原始经纬度
             for location in sorted(item, key=lambda x: x.creation_time):
                 paths.append([str(location.lon), str(location.lat)])
             d["path"] = paths

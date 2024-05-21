@@ -2,12 +2,11 @@ import csv
 import os
 import datetime
 
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.views import View
-from mydemo import settings
-from mydemo.utils.exceptions import UnsupportedFileType, DecryptionError
-from mydemo.utils.file import create_temporary_file, init_project_file, file_convert_to_csv
+from mydemo.utils.exceptions import UnsupportedFileTypeError, DecryptionError
+from mydemo.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file
 from mydemo.utils.token import get_token_user_id
 from translate.models import Expense, Income
 from translate.utils import *
@@ -25,154 +24,132 @@ class AnalyzeView(View):
                 "password": request.POST.get('password')}
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
+
+        if not uploaded_file:
+            return JsonResponse({'error': 'No file uploaded'}, status=400)
+        
         try:
             csv_file = file_convert_to_csv(uploaded_file, args["password"])  # 对文件格式进行判断并转换
-        except DecryptionError:
-            return HttpResponse("Decryption failed", status=403)
-        temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
+            temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
+        except DecryptionError as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 list = get_initials_bill(bill=csv.reader(csvfile))
             format_list = beancount_outfile(list, owner_id, args)
-        except UnsupportedFileType as e:
+        except UnsupportedFileTypeError as e:
             return JsonResponse({'error': str(e)}, status=400)
+        finally:
+            if 'temp' in locals():
+                os.unlink(temp.name)
 
-        os.unlink(temp.name)
         return JsonResponse(format_list, safe=False, content_type='application/json')
 
     def get(self, request):
-        title = "trans"
-        context = {"title": title}
-        return render(request, "translate/trans.html", context)
+        return render(request, "translate/trans.html", {"title": "trans"})
 
 
 def get_initials_bill(bill):
-
     first_line = next(bill)[0]
-
-    # for row in bill:
-    #     print(row)
     year = first_line[:4]
+    card_number = None
+
     try:
         card_number = card_number_get_key(first_line)
-    except:
-        pass
-    if isinstance(first_line, str) and alipay_csvfile_identifier in first_line:
-        strategy = AliPayStrategy()
-    elif isinstance(first_line, str) and wechat_csvfile_identifier in first_line:
-        strategy = WeChatPayStrategy()
-    elif isinstance(first_line, str) and cmb_credit_csvfile_identifier in first_line:
-        strategy = CmbCreditStrategy()
-        return strategy.get_data(bill, year)
-    elif isinstance(first_line, str) and boc_debit_csvfile_identifier in first_line:
-        strategy = BocDebitStrategy()
-        return strategy.get_data(bill, card_number)
-    elif isinstance(first_line, str) and icbc_debit_csvfile_identifier in first_line:
-        strategy = IcbcDebitStrategy()
-        return strategy.get_data(bill, card_number)
-    elif isinstance(first_line, str) and ccb_debit_csvfile_identifier in first_line:
-        strategy = CcbDebitStrategy()
-        return strategy.get_data(bill, card_number)
-    else:
-        raise UnsupportedFileType("当前账单不支持")
-    return strategy.get_data(bill)
+    except Exception as e:
+        logging.warning(f"Failed to extract card number: {e}")
+    
+    strategies = [
+        (alipay_csvfile_identifier, AliPayInitStrategy()),
+        (wechat_csvfile_identifier, WeChatInitStrategy()),
+        (cmb_credit_csvfile_identifier, CmbCreditInitStrategy()),
+        (boc_debit_csvfile_identifier, BocDebitInitStrategy()),
+        (icbc_debit_csvfile_identifier, IcbcDebitInitStrategy()),
+        (ccb_debit_csvfile_identifier, CcbDebitInitStrategy()),
+    ]
 
+    for identifier, parser_function in strategies:
+        if isinstance(first_line, str) and identifier in first_line:
+            return parser_function.init(bill, card_number=card_number, year=year)
+    
+    raise UnsupportedFileTypeError("当前账单格式不被支持，无法处理。")
+
+
+def should_ignore_row(row, ignore_data, args):
+    return (ignore_data.wechatpay_ignore(row)
+            or ignore_data.alipay_ignore(row)
+            or ignore_data.alipay_fund_ignore(row)
+            or ignore_data.cmb_credit_ignore(row, args.get("cmb_credit_ignore"))
+            )
+    
 
 def beancount_outfile(data, owner_id: int, args):
-    """对账单数据进行过滤并格式化
-
-    Args:
-        data (file): 账单数据
-        owner_id (int): 用户id
-        args (dict): 前端上传的可选选项
-
-    Returns:
-        list: 格式化后的账单数据
-    """
     ignore_data = IgnoreData(None)
     instance_list = []
     for row in data:
-        # print(row)
-        if ignore_data.alipay(row):
-            continue
-        elif ignore_data.alipay_fund(row):
-            continue
-        elif ignore_data.wechatpay(row):
-            continue
-        elif ignore_data.cmb_credit(row, args["cmb_credit_ignore"]):
+        if should_ignore_row(row, ignore_data, args):
             continue
         try:
-            entry = format(row, owner_id)
+            entry = preprocess_transaction_data(row, owner_id)
             if ignore_data.empty(entry):
                 continue
-            elif ignore_data.notes(entry):  # 该条目只有微信零钱提现，支付宝提现功能不支持。支付宝账单不包含转出的银行卡信息
-                instance = FormatData(entry).commission(entry)
-            else:
-                instance = FormatData(entry).default(entry)
+            instance = FormatData.format_instance(entry)
             instance_list.append(instance)
-            if args["write"] == "True":
-                mouth, year = instance[5:7], instance[0:4]
-                file = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year,
-                                    f"{mouth}-expenses.bean")
-                init_project_file(file)
-                with open(file, mode='a') as file:
-                    file.write(instance)
+            if args["write"] == "true":
+                write_entry_to_file(instance)
         except ValueError as e:
             instance = str(e) + "\n\n"
             instance_list.append(instance)
     return instance_list
 
 
-def format(data, owner_id):
+def preprocess_transaction_data(data, owner_id):
     """
         date : 日期         2023-04-28
         time : 时间         09:03:00
         uuid : 交易单号     1000039801202211266356238708041
-        amount : 金额        23.00 CNY
+        status : 支付状态   WeChat - 支付成功
+        amount : 金额       23.00 CNY
         payee : 收款方      浙江古茗
         notes : 备注        商品详情
+        tag : 标签          # tag
+        balacne : 余额     2022-05-01 balance      Liabilities:CreditCard:Bank:CITIC:C0000  -5515.51 CNY
         expend : 支付方式   Expenses:Food:DrinkFruit
         account : 账户      Liabilities:CreditCard:Bank:CITIC:C6428
+        commission : 利息   Expenses:Finance:Commission
     """
     try:
-        date = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
-        time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
+        date = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
+        time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
         uuid = get_uuid(data)
         status = get_status(data)
         amount = get_amount(data)
-        payee = GetPayee(data).get_payee(data, owner_id)
-        notes = get_notes(data)
-        expend_sign, account_sign = get_shouzhi(data)
-        expend = GetExpense(data).get_expense(data, owner_id)
-        account = GetAccount(data).get_account(data, owner_id)
-        commission = data[8][4:]
-        if data[4] == "/":
+        payee = PayeeHandler(data).get_payee(data, owner_id)
+        note = get_note(data)
+        tag = get_tag(data)
+        balance = get_balance(data)
+        expenditure_sign, account_sign = get_shouzhi(data)
+        expense = ExpenseHandler(data).get_expense(data, owner_id)
+        account = AccountHandler(data).get_account(data, owner_id)
+        commission = get_commission(data)
+        if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
-            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "notes": notes,
-                    "expend": expend,
-                    "expend_sign": expend_sign,
-                    "account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
-        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "notes": notes,
-                "expend": expend,
-                "expend_sign": expend_sign,
-                "account": account, "account_sign": account_sign, "amount": amount}
+            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
+        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance,"expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount}
     except ValueError as e:
-        # logging.exception("format函数执行报错，可能是账单的格式有误")
-        # logging.error("format函数执行报错，可能是账单的格式有误")
-        # return "format函数执行报错，可能是账单的格式有误"
         raise e
 
 
-class GetAccount:
+class AccountHandler:
     def __init__(self, data):
         self.key = None
         self.key_list = None
         self.full_list = None
         self.type = None
         self.account = ASSETS_OTHER
-        self.bill = data[9]
-        self.balance = data[4]
+        self.bill = data['bill_identifier']
+        self.balance = data['transaction_type']
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -232,16 +209,16 @@ class GetAccount:
         return account
 
 
-class GetExpense:
+class ExpenseHandler:
     def __init__(self, data):
         self.key_list = None
         self.full_list = None
         self.type = None
         self.expend = EXPENSES_OTHER
         self.income = INCOME_OTHER
-        self.bill = data[9]
-        self.balance = data[4]
-        self.time = datetime.strptime(data[0], "%Y-%m-%d %H:%M:%S").time()
+        self.bill = data['bill_identifier']
+        self.balance = data['transaction_type']
+        self.time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").time()
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -268,7 +245,7 @@ class GetExpense:
         matching_max_order = None
 
         if self.balance == "支出":
-            matching_keys = [k for k in self.key_list if k in data[2] or k in data[3]]  # 通过列表推导式获取所有匹配的key形成新的列表
+            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
             max_order = None
             expend_set = set()
             for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
@@ -303,7 +280,7 @@ class GetExpense:
             return expend
 
         elif self.balance == "收入":
-            matching_keys = [k for k in self.key_list if k in data[2] or k in data[3]]  # 通过列表推导式获取所有匹配的key形成新的列表
+            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
             for matching_key in matching_keys:
                 income_instance = Income.objects.filter(owner_id=ownerid, key=matching_key).first()
                 if income_instance:  # 由于作者的收入来源较少，因此暂时不考虑收入来源的优先级问题，直接返回匹配到的第一个收入来源
@@ -318,21 +295,21 @@ class GetExpense:
         return expend
 
 
-class GetPayee:
+class PayeeHandler:
     def __init__(self, data):
         self.key_list = None
-        self.payee = data[2]
-        self.notes = data[3]
-        self.bill = data[9]
+        self.payee = data['counterparty']
+        self.notes = data['commodity']
+        self.bill = data['bill_identifier']
 
     def get_payee(self, data, ownerid):
         self.key_list = list(Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True))
 
-        if data[9] == BILL_WECHAT and data[4] == "/":  # 一般微信好友转账，如妈妈->我
-            return data[6][:4]
-        elif data[1] == "微信红包（单发）":
+        if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
+            return data['payment_method'][:4]
+        elif data['transaction_category'] == "微信红包（单发）":
             return self.payee[2:]
-        elif data[1] == "转账-退款" or data[1] == "微信红包-退款":
+        elif data['transaction_category'] == "转账-退款" or data['transaction_category'] == "微信红包-退款":
             return "退款"
         elif '(' in self.payee and ')' in self.payee and self.notes == "Transfer":
             match = re.search(r'\((.*?)\)', self.payee)  # 提取 account 中的数字部分
@@ -364,12 +341,12 @@ class GetPayee:
             elif matching_max_order is not None and (max_order is None or matching_max_order == max_order):
                 payee = self.payee
 
-        if data[9] == BILL_ALI and payee == "":
-            return data[2]
-        elif data[9] == BILL_WECHAT and payee == "":
-            payee = data[2]
+        if data['bill_identifier'] == BILL_ALI and payee == "":
+            return data['counterparty']
+        elif data['bill_identifier'] == BILL_WECHAT and payee == "":
+            payee = data['counterparty']
             if payee == "/":
-                return data[1]
+                return data['transaction_time']
         return payee
 
 
@@ -382,7 +359,7 @@ def calculate_commission(total, commission):
 
 
 def get_shouzhi(data):
-    shouzhi = data[4]
+    shouzhi = data['transaction_type']
     high = ""
     loss = "-"
 
@@ -391,12 +368,12 @@ def get_shouzhi(data):
     elif shouzhi == "收入":
         return loss, high
     elif shouzhi in ["/", "不计收支"]:
-        if data[9] == BILL_ALI:
-            if data[3] == "信用卡还款":
+        if data['bill_identifier'] == BILL_ALI:
+            if data['commodity'] == "信用卡还款":
                 return high, loss
-            if "花呗主动还款" in data[3]:
+            if "花呗主动还款" in data['commodity']:
                 return high, loss
-        if data[9] == BILL_WECHAT and data[1] == "信用卡还款":
+        if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
         return loss, high
     else:
@@ -406,7 +383,7 @@ def get_shouzhi(data):
 def get_attribute(data, attribute_handlers):
     # 如果需要对数据进行一般性处理，也可以在这里完成
 
-    bill_type = data[9]
+    bill_type = data['bill_identifier']
     if bill_type in attribute_handlers:
         return attribute_handlers[bill_type](data)
     return None
@@ -416,10 +393,6 @@ def get_uuid(data):
     uuid_handlers = {
         BILL_ALI: alipay_get_uuid,
         BILL_WECHAT: wechatpay_get_uuid,
-        BILL_CMB_CREDIT: cmb_credit_get_uuid,
-        BILL_BOC_DEBIT: boc_debit_get_uuid,
-        BILL_ICBC_DEBIT:icbc_debit_get_uuid,
-        BILL_CCB_DEBIT:ccb_debit_get_uuid,
     }
     return get_attribute(data, uuid_handlers)
 
@@ -436,16 +409,16 @@ def get_status(data):
     return get_attribute(data, status_handlers)
 
 
-def get_notes(data):
+def get_note(data):
     notes_handlers = {
-        BILL_ALI: alipay_get_notes,
-        BILL_WECHAT: wechatpay_get_notes,
-        BILL_CMB_CREDIT: cmb_credit_get_notes,
-        BILL_BOC_DEBIT: boc_debit_get_notes,
-        BILL_ICBC_DEBIT:icbc_debit_get_notes,
-        BILL_CCB_DEBIT:ccb_debit_get_notes,
+        BILL_ALI: alipay_get_note,
+        BILL_WECHAT: wechatpay_get_note,
+        BILL_CMB_CREDIT: cmb_credit_get_note,
+        BILL_BOC_DEBIT: boc_debit_get_note,
+        BILL_ICBC_DEBIT:icbc_debit_get_note,
+        BILL_CCB_DEBIT:ccb_debit_get_note,
     }
-    data[3] = data[3].replace('"', '\\"')
+    data['commodity'] = data['commodity'].replace('"', '\\"')
     return get_attribute(data, notes_handlers)
 
 
@@ -459,3 +432,26 @@ def get_amount(data):
         BILL_CCB_DEBIT:ccb_debit_get_amount,
     }
     return get_attribute(data, amount_handlers)
+
+def get_tag(data):
+    tag_handlers = {
+        BILL_ALI: alipay_get_tag,
+        BILL_WECHAT: wechatpay_get_tag,
+    }
+    return get_attribute(data, tag_handlers)
+
+
+def get_balance(data):
+    balance_handlers = {
+        # BILL_BOC_DEBIT: boc_debit_get_balance,
+        # BILL_ICBC_DEBIT: icbc_debit_get_balance,
+        # BILL_CCB_DEBIT:ccb_debit_get_balance,
+    }
+    return get_attribute(data, balance_handlers)
+
+def get_commission(data):
+    commission_handlers = {
+        BILL_ALI: alipay_get_commission,
+        BILL_WECHAT: wechatpay_get_commission,
+    }
+    return get_attribute(data, commission_handlers)

@@ -1,5 +1,4 @@
 from maps.serializers import AssetsSerializer, ExpenseSerializer, IncomeSerializer
-# from rest_framework import filters, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
@@ -26,10 +25,6 @@ class ExpenseViewSet(ModelViewSet):
     delete:
     删除指定支出映射条目
     """
-    # authentication_classes = [authentication.IsAuthenticatedOrReadOnly]
-    # permission_classes = [IsAuthenticatedOrReadOnly]
-    # pagination_class = LargeResultsSetPagination
-    # filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     queryset = Expense.objects.all()
     serializer_class = ExpenseSerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
@@ -37,11 +32,6 @@ class ExpenseViewSet(ModelViewSet):
     search_fields = ['key', 'payee']
     ordering_fields = ['id', 'key']
     authentication_classes = [JWTAuthentication]
-
-    # def get_queryset(self):
-    #     user = self.request.user
-    #     print(user)
-    #     return Expense.objects.filter(owner=user)
 
     def create(self, request, *args, **kwargs):  # 重写create方法，实现批量创建
         serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
@@ -74,7 +64,7 @@ class ExpenseViewSet(ModelViewSet):
                 id=instance.id).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
-
+    
 
 class AssetsViewSet(ModelViewSet):
     """
@@ -87,9 +77,6 @@ class AssetsViewSet(ModelViewSet):
     read:
     修改资产映射
     """
-    # authentication_classes = [IsAuthenticatedOrReadOnly]
-    # permission_classes = [IsAuthenticatedOrReadOnly]
-    # filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     queryset = Assets.objects.all()
     serializer_class = AssetsSerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
@@ -97,10 +84,6 @@ class AssetsViewSet(ModelViewSet):
     search_fields = ['full']
     ordering_fields = ['id', 'full']
     authentication_classes = [JWTAuthentication]
-
-    # def get_queryset(self):
-    #     user = self.request.user
-    #     return Assets.objects.filter(owner=user)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
@@ -168,35 +151,3 @@ class IncomeViewSet(ModelViewSet):
                 id=instance.id).exists():
             raise ValidationError("Accountalready exists.")
         serializer.save(owner=self.request.user)
-
-# class ExpenseMapList(generics.ListCreateAPIView):
-#     queryset = Expense_Map.objects.all()
-#     serializer_class = ExpenseMapSerializer
-
-
-# class ExpenseMapDetail(generics.RetrieveUpdateDestroyAPIView):
-#     queryset = Expense_Map.objects.all()
-#     serializer_class = ExpenseMapSerializer
-
-
-# class AssetsMapList(generics.ListCreateAPIView):
-#     """
-#     get:
-#     返回所有账户信息
-#     post:
-#     新建账户映射
-#     """
-#     queryset = Assets_Map.objects.all()
-#     serializer_class = AssetsMapSerializer
-#
-#
-# class AssetsMapDetail(generics.RetrieveUpdateDestroyAPIView):
-#     queryset = Assets_Map.objects.all()
-#     serializer_class = AssetsMapSerializer
-
-
-# class LargeResultsSetPagination(PageNumberPagination):
-#     page_size = 200
-#     page_query_param = 'page'
-#     page_size_query_param = 'page_size'
-#     max_page_size = 200
