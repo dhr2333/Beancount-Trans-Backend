@@ -91,7 +91,17 @@ class FormatData:
         return formatted_str + "\n\n"
     
     def balance_instance(entry):
-        pass
+        formatted_str = ""
+        formatted_str += f"{entry['balance_date']}"
+        formatted_str += f" balance"
+        formatted_str += f" {entry['account']}"
+        formatted_str += f" {entry['balance']} CNY"
+        formatted_str += f"\n{entry['date']}"
+        formatted_str += f" pad"
+        formatted_str += f" {entry['account']}"
+        formatted_str += f" Assets:Other"
+
+        return formatted_str + "\n\n"
 
 
 class IgnoreData:
@@ -103,6 +113,26 @@ class IgnoreData:
 
     def notes(self, data):
         return data["note"] == "零钱提现"
+    
+    def balance(self, data):
+        from datetime import datetime
+
+        # 将字符串日期转换为 datetime 对象
+        for record in data:
+            record["transaction_time"] = datetime.strptime(record["transaction_time"], "%Y-%m-%d %H:%M:%S")
+        # 以天为单位找到每组中时间最晚的记录
+        unique_days = {}
+        for record in data:
+            date_key = record["transaction_time"].date()
+            if date_key not in unique_days or record["transaction_time"] > unique_days[date_key]["transaction_time"]:
+                unique_days[date_key] = record
+        # 提取结果并保证输入和输出的格式不变
+        result = list(unique_days.values())
+        # 将 transaction_time 转换回字符串
+        for record in result:
+            record["transaction_time"] = record["transaction_time"].strftime("%Y-%m-%d %H:%M:%S")
+        # 输出结果
+        return result
 
 
 def get_card_number(content, sourcefile_identifier):

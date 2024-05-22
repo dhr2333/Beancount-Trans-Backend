@@ -156,3 +156,12 @@ def extract_text_from_pdf(pdf):
     for page in pdf.pages:
         content += page.extract_text() or ""
     return content
+
+
+def read_and_write(reader,writer):
+    import csv
+    
+    reader = csv.reader(reader)
+    writer = csv.writer(writer)
+    for row in reader:
+        writer.writerow(row)

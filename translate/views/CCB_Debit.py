@@ -183,6 +183,10 @@ def ccb_debit_get_account(self, ownerid):
         return account_instance.assets
 
 
+def ccb_debit_get_balance(data):
+    return data['balance']
+
+
 def ccb_debit_get_card_number(content):
     """
     从账单文件中获取银行卡号

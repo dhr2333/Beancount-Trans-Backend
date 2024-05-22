@@ -120,6 +120,10 @@ def boc_debit_get_account(self, ownerid):
         return account_instance.assets
 
 
+def boc_debit_get_balance(data):
+    return data['balance']
+    
+    
 def boc_debit_get_card_number(content):
     """
     从账单文件中获取中国银行卡号

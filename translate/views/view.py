@@ -1,12 +1,13 @@
 import csv
 import os
 import datetime
+from datetime import timedelta
 
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 from mydemo.utils.exceptions import UnsupportedFileTypeError, DecryptionError
-from mydemo.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file
+from mydemo.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file, read_and_write
 from mydemo.utils.token import get_token_user_id
 from translate.models import Expense, Income
 from translate.utils import *
@@ -20,8 +21,7 @@ from translate.views.CCB_Debit import *
 
 class AnalyzeView(View):
     def post(self, request):
-        args = {"cmb_credit_ignore": request.POST.get('cmb_credit_ignore'), "write": request.POST.get('write'),
-                "password": request.POST.get('password')}
+        args = {key: request.POST.get(key) for key in request.POST}
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
 
@@ -34,6 +34,16 @@ class AnalyzeView(View):
         except DecryptionError as e:
             return JsonResponse({'error': str(e)}, status=400)
 
+        if args['isCSVOnly'] == "true":
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="converted.csv"'
+
+            with open(temp.name, newline='', encoding=encoding) as csvfile:
+                read_and_write(csvfile,response)
+            # 关闭并删除临时文件
+            os.unlink(temp.name)
+            return response
+        
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 list = get_initials_bill(bill=csv.reader(csvfile))
@@ -87,6 +97,8 @@ def should_ignore_row(row, ignore_data, args):
 def beancount_outfile(data, owner_id: int, args):
     ignore_data = IgnoreData(None)
     instance_list = []
+    if args["balance"] == "true":
+        data = ignore_data.balance(data)
     for row in data:
         if should_ignore_row(row, ignore_data, args):
             continue
@@ -94,7 +106,10 @@ def beancount_outfile(data, owner_id: int, args):
             entry = preprocess_transaction_data(row, owner_id)
             if ignore_data.empty(entry):
                 continue
-            instance = FormatData.format_instance(entry)
+            if args["balance"] == "true":
+                instance = FormatData.balance_instance(entry)
+            else:
+                instance = FormatData.format_instance(entry)
             instance_list.append(instance)
             if args["write"] == "true":
                 write_entry_to_file(instance)
@@ -129,14 +144,15 @@ def preprocess_transaction_data(data, owner_id):
         note = get_note(data)
         tag = get_tag(data)
         balance = get_balance(data)
+        balance_date = (datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(data)
         expense = ExpenseHandler(data).get_expense(data, owner_id)
         account = AccountHandler(data).get_account(data, owner_id)
         commission = get_commission(data)
         if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
-            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
-        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance,"expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount}
+            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
+        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount}
     except ValueError as e:
         raise e
 
@@ -443,9 +459,9 @@ def get_tag(data):
 
 def get_balance(data):
     balance_handlers = {
-        # BILL_BOC_DEBIT: boc_debit_get_balance,
-        # BILL_ICBC_DEBIT: icbc_debit_get_balance,
-        # BILL_CCB_DEBIT:ccb_debit_get_balance,
+        BILL_BOC_DEBIT: boc_debit_get_balance,
+        BILL_ICBC_DEBIT: icbc_debit_get_balance,
+        BILL_CCB_DEBIT:ccb_debit_get_balance,
     }
     return get_attribute(data, balance_handlers)
 
