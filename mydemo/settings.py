@@ -36,10 +36,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)k
 DEBUG = env_to_bool('DJANGO_DEBUG', True)
 
 ALLOWED_HOSTS = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:38001",
-    "http://localhost:38001",
+    "127.0.0.1",
+    "localhost",
     "trans.dhr2333.cn",
     "*",
 ]
@@ -85,7 +83,15 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 #     "http://localhost:38001",
 #     "https://trans.dhr2333.cn",
 # ]
-CORS_ORIGIN_ALLOW_ALL = True
+# CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://trans.dhr2333.cn",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:38001",
+    "http://localhost:38001",
+]
+
 CORS_ORIGIN_WHITELIST = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
