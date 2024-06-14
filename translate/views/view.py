@@ -108,6 +108,8 @@ def beancount_outfile(data, owner_id: int, args):
                 continue
             if args["balance"] == "true":
                 instance = FormatData.balance_instance(entry)
+            elif "分期" in row['payment_method']: # TODO
+                instance = FormatData.installment_instance(entry)
             else:
                 instance = FormatData.format_instance(entry)
             instance_list.append(instance)
@@ -138,21 +140,23 @@ def preprocess_transaction_data(data, owner_id):
         date = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
         time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
         uuid = get_uuid(data)
-        status = get_status(data)
-        amount = get_amount(data)
+        status = get_status(data)  # 支付状态
+        amount = get_amount(data)  # 支付金额
         payee = PayeeHandler(data).get_payee(data, owner_id)
         note = get_note(data)
-        tag = get_tag(data)
-        balance = get_balance(data)
+        tag = get_tag(data)  # 标签
+        balance = get_balance(data)  # 余额
         balance_date = (datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(data)
         expense = ExpenseHandler(data).get_expense(data, owner_id)
         account = AccountHandler(data).get_account(data, owner_id)
-        commission = get_commission(data)
+        commission = get_commission(data)  # 利息
+        installment_granularity = get_installment_granularity(data)  # 分期粒度（年/月/日）
+        installment_cycle = get_installment_cycle(data)  # 分期频率
         if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
-            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount}
-        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount}
+            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle}
+        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle}
     except ValueError as e:
         raise e
 
@@ -368,7 +372,7 @@ class PayeeHandler:
 
 def calculate_commission(total, commission):
     if commission != "":
-        amount = "{:.2f} CNY".format(float(total.split()[0]) - float(commission.split()[0]))
+        amount = "{:.2f}".format(float(total.split()[0]) - float(commission.split()[0]))
     else:
         amount = total
     return amount
@@ -388,6 +392,8 @@ def get_shouzhi(data):
             if data['commodity'] == "信用卡还款":
                 return high, loss
             if "花呗主动还款" in data['commodity']:
+                return high, loss
+            if "亲情卡" in data['payment_method']:
                 return high, loss
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
@@ -449,6 +455,7 @@ def get_amount(data):
     }
     return get_attribute(data, amount_handlers)
 
+
 def get_tag(data):
     tag_handlers = {
         BILL_ALI: alipay_get_tag,
@@ -465,9 +472,24 @@ def get_balance(data):
     }
     return get_attribute(data, balance_handlers)
 
+
 def get_commission(data):
     commission_handlers = {
         BILL_ALI: alipay_get_commission,
         BILL_WECHAT: wechatpay_get_commission,
     }
     return get_attribute(data, commission_handlers)
+
+
+def get_installment_granularity(data):
+    installment_granularity_handlers = {
+        BILL_ALI: alipay_installment_granularity,
+    }
+    return get_attribute(data, installment_granularity_handlers)
+
+
+def get_installment_cycle(data):
+    installment_cycle_handlers = {
+        BILL_ALI: alipay_installment_cycle,
+    }
+    return get_attribute(data, installment_cycle_handlers)

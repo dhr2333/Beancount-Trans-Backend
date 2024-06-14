@@ -154,7 +154,7 @@ def wechatpay_get_status(data):
 
 
 def wechatpay_get_amount(data):
-    return "{:.2f} CNY".format(float(data['amount'][1:]))  # 微信账单格式为"￥10.00"，需要转换
+    return "{:.2f}".format(float(data['amount'][1:]))  # 微信账单格式为"￥10.00"，需要转换
 
 
 def wechatpay_get_note(data):

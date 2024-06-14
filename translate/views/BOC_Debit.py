@@ -102,7 +102,7 @@ def boc_debit_get_status(data):
 
 
 def boc_debit_get_amount(data):
-    return "{:.2f} CNY".format(float(data['amount']))
+    return "{:.2f}".format(float(data['amount']))
 
 
 def boc_debit_get_note(data):

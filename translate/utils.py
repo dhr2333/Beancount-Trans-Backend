@@ -78,12 +78,12 @@ class FormatData:
         if entry['uuid'] is not None:
             formatted_str += f"    uuid: \"{entry['uuid']}\"\n"
         formatted_str += f"    status: \"{entry['status']}\"\n"
-        formatted_str += f"    {entry['expense']} {entry['expenditure_sign']}{entry['amount']}\n"
+        formatted_str += f"    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} CNY\n"
         formatted_str += f"    {entry['account']} {entry['account_sign']}"
         if ignore_data.notes(entry):
-            formatted_str += f"{entry['actual_amount']}"
+            formatted_str += f"{entry['actual_amount']} CNY"
         else:
-            formatted_str += f"{entry['amount']}"
+            formatted_str += f"{entry['amount']} CNY"
 
         if ignore_data.notes(entry):
             formatted_str += "\n    Expenses:Finance:Commission"
@@ -92,6 +92,7 @@ class FormatData:
     
     def balance_instance(entry):
         formatted_str = ""
+
         formatted_str += f"{entry['balance_date']}"
         formatted_str += f" balance"
         formatted_str += f" {entry['account']}"
@@ -101,6 +102,30 @@ class FormatData:
         formatted_str += f" {entry['account']}"
         formatted_str += f" Assets:Other"
 
+        return formatted_str + "\n\n"
+    
+    def installment_instance(entry):
+        formatted_str = ""
+        
+        formatted_str += f"{entry['date']}"
+        formatted_str += f" #"
+        formatted_str += f" \"{entry['payee']}"
+        formatted_str += f" ["
+        formatted_str += f"{entry['installment_granularity']}"
+        formatted_str += f" REPEAT"
+        formatted_str += f" {entry['installment_cycle']}"
+        formatted_str += f" TIMES]\""
+        formatted_str += f"\n    time: \"{entry['time']}\"\n"
+        if entry['uuid'] is not None:
+            formatted_str += f"    uuid: \"{entry['uuid']}\"\n"
+        formatted_str += f"    status: \"{entry['status']}\"\n"
+        formatted_str += f"    {entry['expense']}"
+        formatted_str += f" {entry['expenditure_sign']}"
+        formatted_str += f" {float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY\n"
+        formatted_str += f"    {entry['account']} {entry['account_sign']}"
+        formatted_str += f"{float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY"
+        
+        
         return formatted_str + "\n\n"
 
 

@@ -123,7 +123,7 @@ def ccb_debit_get_amount(data):
     Returns:
         amount: 金额
     """
-    return "{:.2f} CNY".format(float(data['amount']))
+    return "{:.2f}".format(float(data['amount']))
 
 
 def ccb_debit_get_note(data):
