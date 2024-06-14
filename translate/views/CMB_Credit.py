@@ -96,7 +96,7 @@ def cmb_credit_get_status(data):
 
 
 def cmb_credit_get_amount(data):
-    return "{:.2f} CNY".format(float(data['amount']))
+    return "{:.2f}".format(float(data['amount']))
 
 
 def cmb_credit_get_note(data):

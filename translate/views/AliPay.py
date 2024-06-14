@@ -193,7 +193,7 @@ def alipay_get_status(data):
 
 
 def alipay_get_amount(data):
-    return "{:.2f} CNY".format(float(data['amount']))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
+    return "{:.2f}".format(float(data['amount']))  # 支付宝账单格式为"10.00"，直接以数字形式返回即可
 
 
 def alipay_get_note(data):
@@ -213,6 +213,13 @@ def alipay_get_tag(data):
 def alipay_get_commission(data):
     return data['notes'][4:]
 
+
+def alipay_installment_granularity(data):
+    return "MONTHLY"  # 默认以月进行支付
+
+
+def alipay_installment_cycle(data):
+    return 3  # TODO ，硬编码，需修改
 
 
 IgnoreData.alipay_ignore = alipay_ignore
