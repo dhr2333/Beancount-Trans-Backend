@@ -1,18 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
+{% extends "base.html" %}
+{% block title %}
+    Trans
+{% endblock title %}
+{% block content %}
 <form action="{% url 'trans' %}" enctype="multipart/form-data" method="post">
     {% csrf_token %}
     <label for="file">请上传要解析的文件(微信账单 & 支付宝账单)：</label>
     <input id="trans" name="trans" type="file" value="trans">
     <input type="submit" value="解析">
 </form>
-<div>
-
-</div>
-</body>
-</html>
+{% endblock content %}

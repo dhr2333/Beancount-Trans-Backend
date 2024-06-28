@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% block head %}
+    <title>{% block title %}{% endblock title %} - Beancount-Trans</title>
+    {% endblock head %}
+  </head>
+  <body>
+    <div id="content">
+      {% block content %}{% endblock content %}
+    </div>
+    <div id="footer">
+      {% block footer %}{% endblock footer %}
+    </div>
+  </body>
+</html>
