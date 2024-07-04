@@ -63,7 +63,8 @@ def wechatpay_get_income_account(self, assets, ownerid):
 
 
 def wechatpay_get_balance_account(self, data, assets, ownerid):
-    account = "Unknown-Account"
+    # account = "Unknown-Account"  # 方便排查问题
+    account = self.account
     if self.type == "零钱提现":
         for key in self.key_list:
             if key in data['counterparty']:
@@ -104,7 +105,8 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
 
 
 def wechatpay_get_balance_expense(self, data, assets, ownerid):
-    expend = "Unknown-Expend"
+    # expend = "Unknown-Expend"  # 方便排查问题
+    expend = self.expend
     if self.type == "零钱提现":
         expend = assets["WECHATPAY"]
     elif self.type == "零钱充值":
