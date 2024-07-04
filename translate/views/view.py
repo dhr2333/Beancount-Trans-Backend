@@ -90,7 +90,8 @@ def should_ignore_row(row, ignore_data, args):
     return (ignore_data.wechatpay_ignore(row)
             or ignore_data.alipay_ignore(row)
             or ignore_data.alipay_fund_ignore(row)
-            or ignore_data.cmb_credit_ignore(row, args.get("cmb_credit_ignore"))
+            or ignore_data.cmb_credit_ignore(row, args.get("card_ignore"))
+            or ignore_data.boc_debit_ignore(row, args.get("card_ignore"))
             )
     
 
@@ -108,7 +109,7 @@ def beancount_outfile(data, owner_id: int, args):
                 continue
             if args["balance"] == "true":
                 instance = FormatData.balance_instance(entry)
-            elif "分期" in row['payment_method']: # TODO
+            elif "分期" in row['payment_method']:
                 instance = FormatData.installment_instance(entry)
             else:
                 instance = FormatData.format_instance(entry)
@@ -246,8 +247,8 @@ class ExpenseHandler:
         elif self.bill == BILL_WECHAT:
             self.type = wechatpay_get_type(data)
 
-    def initialize_key_list(self, ownerid):
-        if self.balance == "支出":
+    def initialize_key_list(self, data, ownerid):
+        if self.balance == "支出" or "亲情卡" in data['payment_method']:
             self.key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
         elif self.balance == "收入":
             self.key_list = Income.objects.filter(owner_id=ownerid).values_list('key', flat=True)
@@ -256,7 +257,7 @@ class ExpenseHandler:
         self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
 
     def get_expense(self, data, ownerid):
-        self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
+        self.initialize_key_list(data, ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
         self.initialize_type(data)
         actual_assets = get_default_assets(ownerid=ownerid)
         expend = self.expend
@@ -264,7 +265,7 @@ class ExpenseHandler:
         foodtime = self.time
         matching_max_order = None
 
-        if self.balance == "支出":
+        if self.balance == "支出" or "亲情卡" in data['payment_method']:
             matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
             max_order = None
             expend_set = set()
@@ -391,7 +392,7 @@ def get_shouzhi(data):
         if data['bill_identifier'] == BILL_ALI:
             if data['commodity'] == "信用卡还款":
                 return high, loss
-            if "花呗主动还款" in data['commodity']:
+            if "花呗主动还款" or "花呗自动还款" in data['commodity']:
                 return high, loss
             if "亲情卡" in data['payment_method']:
                 return high, loss

@@ -3,7 +3,7 @@ import logging
 import pdfplumber
 
 from translate.models import Assets
-from translate.utils import InitStrategy, BILL_BOC_DEBIT
+from translate.utils import InitStrategy, IgnoreData, BILL_BOC_DEBIT
 
 boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"
 boc_debit_csvfile_identifier = "中国银行储蓄卡账单明细"
@@ -40,6 +40,11 @@ class BocDebitInitStrategy(InitStrategy):
             logging.error("Unexpected error: %s", e)
 
         return records
+
+
+def boc_debit_ignore(self, data, boc_debit_ignore):
+    if data['bill_identifier'] == BILL_BOC_DEBIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
+        return boc_debit_ignore == "true"
     
 
 def boc_debit_pdf_convert_to_string(file, password):
@@ -130,3 +135,5 @@ def boc_debit_get_card_number(content):
     """
     boc_debit_card_number = re.search(r'\d{19}', content).group()
     return boc_debit_card_number
+
+IgnoreData.boc_debit_ignore = boc_debit_ignore

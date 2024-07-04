@@ -13,6 +13,7 @@ BILL_CCB_DEBIT = "CCB_Debit"
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
 INCOME_OTHER = "Income:Other"
+OPENBALANCE = "Equity:OpenBalance"
 
 TIME_BREAKFAST_START = time(6)
 TIME_BREAKFAST_END = time(10)
@@ -22,7 +23,8 @@ TIME_DINNER_START = time(16)
 TIME_DINNER_END = time(20)
 
 pattern = {"余额宝": r'^余额宝.*收益发放$',
-           "花呗": r'^花呗主动还款.*账单$',
+           "花呗主动还款": r'^花呗主动还款.*账单$',
+           "花呗自动还款": r'^花呗自动还款.*账单$',
            "基金": r'.*-卖出至.*'
            }  # 统一管理正则表达式
 
@@ -30,7 +32,7 @@ transaction_status = {
     "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
                   "充值完成", "充值成功", "已收钱"],
     "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "还款失败", "已关闭", "解冻成功",
-               "信用服务使用成功"]
+               "信用服务使用成功", "等待付款"]
 }
 
 
