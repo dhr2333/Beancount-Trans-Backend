@@ -21,58 +21,130 @@ def env_to_bool(env, default):
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))  # 系统的导包路径
 
-# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
+# 对会话和密码进行加密和签名防止伪造，确保唯一性
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
+DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env_to_bool('DJANGO_DEBUG', True)
-
-ALLOWED_HOSTS = [
-    "127.0.0.1",
-    "localhost",
-    "trans.dhr2333.cn",
-    "*",
+ALLOWER_HOST = [
+        "127.0.0.1",
+        "LOCALHOST",
+        "*",
 ]
 
 # Application definition
-
-INSTALLED_APPS = [
+INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'django_filters',
+    'django.contrib.sites',
     'coreapi',
     'corsheaders',
     'translate',
     'owntracks',
-    'account',
+    # 'account.apps.AccountConfig',
     'rest_framework',
+    'rest_framework.authtoken',
     'rest_framework_simplejwt',
-    'users.apps.UsersConfig',
     'maps.apps.MapsConfig',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
+    'allauth.socialaccount.providers.github',
+    # 'allauth.socialaccount.providers.dummy',
+    # "allauth.mfa",
+    "allauth.headless",
+    "allauth.usersessions",
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
 ]
 
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
+
+LOGIN_REDIRECT_URL = '/'  # 登录成功后重定向的 URL
+LOGOUT_REDIRECT_URL = '/'  # 用户注销后重定向的 URL
+
+# Allauth Configuration
+
+# Allauth Socialaccount
+SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP=True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT=False
+SOCIALACCOUNT_STORE_TOKENS =True
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_PROVIDERS = {
+    'dummy':{
+    },
+}
+
+
+# Allauth Headless
+# HEADLESS_ONLY = True  # 设置allauth为无头服务
+# HEADLESS_TOKEN_STRATEGY = "allauth.headless.tokens.sessions.SessionTokenStrategy"
+HEADLESS_TOKEN_STRATEGY = "mydemo.utils.token.JWTTokenStrategy"
+HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": "http://127.0.0.1:38001/accounts/verify-email/{key}",
+    "account_reset_password": "http://127.0.0.1:38001/accounts/password/reset",
+    "account_reset_password_from_key": "http://127.0.0.1:38001/accounts/password/reset/key/{key}",
+    "account_signup": "http://127.0.0.1:38001/accounts/signup",
+    "socialaccount_login_error": "http://127.0.0.1:38001/accounts/google/login/callback",
+    # "socialaccount_login_error": "/accounts/provider/callback",
+    # "socialaccount_login_error": "http://127.0.0.1:38001/_allauth/browser/v1/auth/provider/redirect",
+    # "socialaccount_login_error": "http://localhost:5173/",
+}
+
+
+# MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
+# MFA_PASSKEY_LOGIN_ENABLED = True
+
+AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持多种身份验证方式
+    # Needed to login by username in Django admin, regardless of `allauth`
+    'django.contrib.auth.backends.ModelBackend',
+
+    # `allauth` specific authentication methods, such as login by email
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+
+
+# 配置 Django Allauth
+ACCOUNT_AUTHENTICATION_METHOD = 'username'  # 用户登录时使用的身份验证方法
+ACCOUNT_USERNAME_REQUIRED = True  # 注册时是否需要提供用户名
+ACCOUNT_EMAIL_REQUIRED = False  # 注册时是否需要提供电子邮件地址
+ACCOUNT_EMAIL_VERIFICATION = 'optional'  # 用户可以选择是否验证电子邮件,none mandatory optional
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE= False  # 用户在更改密码时是否自动注销
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常是通过邮箱或短信发送的）进行登录，默认为False
+
+# 配置用于 JWT 的 REST_AUTH
+REST_AUTH = {
+    'USE_JWT': True,
+    "JWT_AUTH_HTTPONLY": False,
+    'JWT_AUTH_COOKIE': 'beancount-trans-auth',
+    'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
+}
+
+MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理
+    'corsheaders.middleware.CorsMiddleware',  # API 需要被不同域的前端应用访问时，使用此中间件来配置允许的跨域请求
+    'django.middleware.security.SecurityMiddleware',  # 提供一系列安全相关的功能，生产环境强烈推荐使用
+    'django.contrib.sessions.middleware.SessionMiddleware',  # 处理会话管理
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.common.CommonMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
+    'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -83,24 +155,45 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 #     "http://localhost:38001",
 #     "https://trans.dhr2333.cn",
 # ]
-# CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOWED_ORIGINS = [
-    "https://trans.dhr2333.cn",
+ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
     "http://127.0.0.1:5173",
     "http://localhost:5173",
     "http://127.0.0.1:38001",
     "http://localhost:38001",
+    "http://127.0.0.1:38000",
+    "http://localhost:38000",
+    "http://127.0.0.1:80",
+    "http://localhost:80",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "trans.dhr2333.cn",
+    "*",
 ]
-
-CORS_ORIGIN_WHITELIST = [
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:38001",
-    "http://localhost:38001",
-    "https://trans.dhr2333.cn",
-]
-CORS_ALLOW_CREDENTIALS = True  # 跨域时允许携带cookie
-CORS_ALLOW_METHODS = (
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        # CORS_ORIGIN_ALLOW_ALL = True  # 是否允许来自所有域的跨域请求
+        # CORS_ALLOW_ALL_ORIGINS = True  # 是否允许来自所有域的跨域请求（最佳实践）
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:38001",
+        "http://localhost:38001",
+        "http://127.0.0.1:38000",
+        "http://localhost:38000",
+        "http://127.0.0.1:80",
+        "http://localhost:80",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+    ]
+else:
+    CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
+        "https://trans.dhr2333.cn",
+    ]
+# CSRF_COOKIE_SAMESITE = 'Lax'
+# SESSION_COOKIE_SAMESITE = 'Lax'
+# CSRF_COOKIE_HTTPONLY = True
+# SESSION_COOKIE_HTTPONLY = True
+CORS_ALLOW_CREDENTIALS = True  # 是否允许跨域请求中包含凭据(cookies、HTTP 认证信息)
+CORS_ALLOW_METHODS = (  # 指定允许的 HTTP 方法用于跨域请求
     'DELETE',
     'GET',
     'OPTIONS',
@@ -109,7 +202,7 @@ CORS_ALLOW_METHODS = (
     'PUT',
     'VIEW',
 )
-CORS_ALLOW_HEADERS = (
+CORS_ALLOW_HEADERS = (  # 指定允许的 HTTP 请求头用于跨域请求
     # '*',该通配符无效
     'XMLHttpRequest',
     'X_FILENAME',
@@ -124,15 +217,15 @@ CORS_ALLOW_HEADERS = (
     'Pragma',
 )
 
-ROOT_URLCONF = 'mydemo.urls'
+ROOT_URLCONF = 'mydemo.urls'  # 指定 Django 应用的 URL 配置模块
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',  # 模板引擎
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # 模板文件搜索目录
+        'APP_DIRS': True,  # 如果为True，在每个应用的templates目录中查找模板
+        'OPTIONS': {  # 额外选项
+            'context_processors': [  # 上下文处理器
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
@@ -142,100 +235,91 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'mydemo.wsgi.application'
+WSGI_APPLICATION = 'mydemo.wsgi.application'  # WSGI 应用程序的路径，部署 Django 应用时与 WSGI 服务器（如 Gunicorn、uWSGI）进行交互
 
 # Database
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
         'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
+        # 'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',
         'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',
         'HOST': os.environ.get('TRANS_MYSQL_HOST') or '127.0.0.1',
         'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
+        # 'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
         'TIME_ZONE': 'Asia/Shanghai',
     }
 }
-
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': str(os.environ.get("TRANS_REDIS_URL")) + "0" or f'redis://127.0.0.1:36379/0',
+        'LOCATION': os.environ.get("TRANS_REDIS_URL", f'redis://127.0.0.1:36379/0'),
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
     },
     'session': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': str(os.environ.get("TRANS_REDIS_URL")) + "1" or f'redis://127.0.0.1:36379/1',
+        'LOCATION': os.environ.get("TRANS_REDIS_URL", f'redis://127.0.0.1:36379/1'),
         'OPTIONS': {
             'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
         },
     },
 }
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"  # 会话存储后端（数据库、缓存、文件系统）
+SESSION_CACHE_ALIAS = "session"  # 会话的缓存别名，适用于使用缓存存储会话时
 
-SESSION_ENGINE = "django.contrib.sessions.backends.cache"
-SESSION_CACHE_ALIAS = "session"
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
+    },  # 检查密码是否与用户的其他属性（如用户名或电子邮件）太相似
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
+    },  # 确保密码至少达到指定的最小长度
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
+    },  # 防止使用常见或易猜测的密码
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    },  # 阻止仅使用数字的密码
 ]
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
-
 LANGUAGE_CODE = 'zh-hans'
-
 TIME_ZONE = 'Asia/Shanghai'
-
-USE_I18N = True
-
-USE_TZ = True
+USE_I18N = True  # 国际化（i18n）功能
+USE_TZ = True  # 时区
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
-
-STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')
-STATIC_URL = 'static/'
-# STATICFILES_DIRS = []
-STATICFILES_DIRS = [
+STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')  # 使用 python manage.py collectstatic 命令时，所有静态文件将被复制到此目录
+STATIC_URL = 'static/'  # 静态文件URL前缀
+STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件时会包含这些目录
     os.path.join(BASE_DIR, 'static'),
 ]
+MEDIA_URL = 'media/'  # 访问媒体文件的 URL 前缀，通常用于用户上传的文件
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目录
 
-MEDIA_URL = 'media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
-
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字段类型，AutoField or BigAutoField
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': (  # 默认的身份验证类
+        # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         # 'rest_framework.authentication.BasicAuthentication',
-        # 'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
-        # 'rest_framework.permissions.IsAuthenticated',
+    'DEFAULT_PERMISSION_CLASSES': (  # 默认的权限类
+        # 'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ),
-    'DEFAULT_THROTTLE_CLASSES': (
+    'DEFAULT_THROTTLE_CLASSES': (  # 请求速率限制
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle'
     ),
@@ -243,65 +327,84 @@ REST_FRAMEWORK = {
         'anon': '10000/minute',
         'user': '10000/minute'
     },
-    'DEFAULT_FILTER_BACKENDS': (
+    'DEFAULT_FILTER_BACKENDS': (  # 过滤后端，允许使用 Django Filter 进行查询
         'django_filters.rest_framework.DjangoFilterBackend',
     ),
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
     # 'PAGE_SIZE': 200,
-    'EXCEPTION_HANDLER': 'mydemo.utils.exceptions.custom_exception_handler',
-    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',
+    'EXCEPTION_HANDLER': 'mydemo.utils.exceptions.custom_exception_handler',  # 自定义异常处理器
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',  # 自动生成 API 文档的模式类
 }
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=3),  # token有效时长
-    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=7)  # token刷新后的有效时间
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=1),  # Access_Token 访问令牌的有效期
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),  # Refresh_Token 刷新令牌的有效期
+    'ROTATE_REFRESH_TOKENS': False,  # 是否在每次请求时旋转刷新令牌
+    'BLACKLIST_AFTER_ROTATION': True,  # 在旋转后是否将旧的刷新令牌列入黑名单
+    'ALGORITHM': 'HS256',  # 用于签名的算法
+    'SIGNING_KEY': SECRET_KEY,  # 签名的密钥
+    'VERIFYING_KEY': None,
+    'AUDIENCE': None,
+    'ISSUER': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),  # 定义身份验证头的类型，通常是 Bearer
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),  # 定义用于生成的令牌类型
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'JTI_CLAIM': 'jti',
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
 }
 
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': False,
+    'disable_existing_loggers': False,  # 当设置为 False 时，保留已存在的日志记录器
     'root': {
-        'level': 'INFO',
-        'handlers': ['console', 'log_file'],
+        'level': 'INFO',  # 指定根日志记录器的日志级别，INFO 表示记录信息级别及以上的日志
+        'handlers': ['console', 'log_file'],  # 指定该记录器使用的处理器（handlers）
     },
     'formatters': {
         'verbose': {
             'format': '[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d %(module)s] %(message)s',
-        },
+        },  # 详细格式，包括时间戳、日志级别、模块名、函数名和行号
         'simple': {
             'format': '%(levelname)s [%(name)s.%(funcName)s:%(lineno)d %(module)s] %(message)s',
-        }
+        }  # 简单格式，包含日志级别、模块名、函数名和行号
     },
     'filters': {
         'require_debug_false': {
             '()': 'django.utils.log.RequireDebugFalse',
-        },
+        },  # 用于在 DEBUG 模式关闭时记录日志
         'require_debug_true': {
             '()': 'django.utils.log.RequireDebugTrue',
-        },
+        },  # 用于在 DEBUG 模式开启时记录日志
     },
     'handlers': {
         'log_file': {
             'level': 'INFO',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs/beancount-trans.log'),
-            'maxBytes': 10 * 1024 * 1024,
-            'backupCount': 10,
+            'class': 'logging.handlers.RotatingFileHandler',  # RotatingFileHandler，支持日志轮换
+            'filename': os.path.join(BASE_DIR, 'logs/beancount-trans.log'),  # 日志文件的保存路径
+            'maxBytes': 10 * 1024 * 1024,  # 日志文件的最大字节数，达到后将进行轮换
+            'backupCount': 10,  # 保留的备份日志文件数量
             'formatter': 'verbose',
         },
         'console': {
             'level': 'DEBUG',
-            'filters': ['require_debug_true'],
-            'class': 'logging.StreamHandler',
+            'filters': ['require_debug_true'],  # 应用过滤器，确保只有在 DEBUG 模式下才记录
+            'class': 'logging.StreamHandler',  # StreamHandler，用于输出到标准输出
             'formatter': 'simple'
         },
     },
-    'loggers': {
-        'beancount-trans': {
+    'loggers': {  # 特定的日志记录器
+        'beancount-trans': {  # 记录来自 beancount-trans 模块的日志，并使用 log_file 和 console 处理器
             'handlers': ['log_file', 'console'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': True,  # 日志会传递到父日志记录器
+        },
+        'allauth': {  # 专门用于 Allauth 模块，记录级别为 DEBUG，仅输出到控制台，不向上游传播
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
         },
     }
 }
 
-AUTH_USER_MODEL = "users.User"

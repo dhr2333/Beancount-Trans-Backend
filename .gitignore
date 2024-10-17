@@ -18,3 +18,4 @@ translate/__pycache__/
 translate/migrations/__pycache__/
 conf/__pycache_/
 htmlcov/
+uwsgi.pid
