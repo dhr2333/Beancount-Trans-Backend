@@ -1,5 +1,6 @@
 from django.db import models
-from users.models import User
+from django.contrib.auth.models import User
+
 
 from mydemo.models import BaseModel
 
@@ -28,6 +29,7 @@ class Account(BaseModel):
                               verbose_name="属主")
 
     class Meta:
+        app_label = 'account_config'
         ordering = ['account_type']
         verbose_name = '账本账户'
         verbose_name_plural = verbose_name
