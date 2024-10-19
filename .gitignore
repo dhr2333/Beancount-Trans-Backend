@@ -19,3 +19,4 @@ translate/migrations/__pycache__/
 conf/__pycache_/
 htmlcov/
 uwsgi.pid
+fixtures/Develop.sql
