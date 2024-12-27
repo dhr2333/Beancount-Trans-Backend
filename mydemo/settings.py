@@ -28,7 +28,8 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))  # 系统的导包路�
 
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
-DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
+# DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
+DEBUG = True  # 是否开始Debug模式
 
 ALLOWER_HOST = [
         "127.0.0.1",
@@ -61,7 +62,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.github',
-    # 'allauth.socialaccount.providers.dummy',
+    'allauth.socialaccount.providers.dummy',
     # "allauth.mfa",
     "allauth.headless",
     "allauth.usersessions",
@@ -71,8 +72,8 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
 
 SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 
-LOGIN_REDIRECT_URL = '/'  # 登录成功后重定向的 URL
-LOGOUT_REDIRECT_URL = '/'  # 用户注销后重定向的 URL
+LOGIN_REDIRECT_URL = 'http://trans.localhost/api/accounts/github/login/callback/'  # 登录成功后重定向的 URL，必须要是该URL否则oauth登录报错
+LOGOUT_REDIRECT_URL = 'http://trans.localhost'  # 用户注销后重定向的 URL
 
 # Allauth Configuration
 
@@ -85,6 +86,48 @@ SOCIALACCOUNT_STORE_TOKENS =True
 SOCIALACCOUNT_LOGIN_ON_GET = False
 SOCIALACCOUNT_PROVIDERS = {
     'dummy':{
+        
+    },
+    'google': {
+        'APPS': [
+          {
+              "client_id": "27533849710-0ot3fj14f5vqkinena7is5ms08nfe2kl.apps.googleusercontent.com",
+              "secret": "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",
+              "key": "",
+          },
+        ],
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'METHOD': 'oauth2',
+        'VERIFIED_EMAIL': False,
+        'OAUTH_PKCE_ENABLED': True,
+        'VERSION': 'v3',
+    },
+    'github': {
+        'APPS': [
+          {
+              "client_id": "Ov23liuJwXE0syF3flmO",
+              "secret": "eff79b87bd4aac435745418696878a3b4be4fce5",
+              "key": "",
+          },
+        ],
+        'SCOPE': [
+            'user',
+            'repo',
+            'read:org',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        },
+        'METHOD': 'oauth2',
+        'VERIFIED_EMAIL': False,
+        'OAUTH_PKCE_ENABLED': True,
+        'VERSION': 'v3',
     },
 }
 
@@ -95,11 +138,11 @@ SOCIALACCOUNT_PROVIDERS = {
 HEADLESS_TOKEN_STRATEGY = "mydemo.utils.token.JWTTokenStrategy"
 HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": "http://127.0.0.1:38001/accounts/verify-email/{key}",
-    "account_reset_password": "http://127.0.0.1:38001/accounts/password/reset",
-    "account_reset_password_from_key": "http://127.0.0.1:38001/accounts/password/reset/key/{key}",
-    "account_signup": "http://127.0.0.1:38001/accounts/signup",
-    "socialaccount_login_error": "http://127.0.0.1:38001/accounts/google/login/callback",
+    "account_confirm_email": "http://trans.localhost/api/accounts/verify-email/{key}",
+    "account_reset_password": "http://trans.localhost/api/accounts/password/reset",
+    "account_reset_password_from_key": "http://trans.localhost/api/accounts/password/reset/key/{key}",
+    "account_signup": "http://trans.localhost/api/accounts/signup",
+    "socialaccount_login_error": "http://trans.localhost/api/accounts/google/login/callback",
     # "socialaccount_login_error": "/accounts/provider/callback",
     # "socialaccount_login_error": "http://127.0.0.1:38001/_allauth/browser/v1/auth/provider/redirect",
     # "socialaccount_login_error": "http://localhost:5173/",
@@ -116,7 +159,6 @@ AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持�
     # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
 
 
 # 配置 Django Allauth
@@ -183,6 +225,7 @@ if DEBUG:
         "http://localhost:80",
         "http://127.0.0.1:8000",
         "http://localhost:8000",
+        "http://trans.localhost"
     ]
 else:
     CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
