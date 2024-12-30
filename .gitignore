@@ -20,3 +20,4 @@ conf/__pycache_/
 htmlcov/
 uwsgi.pid
 fixtures/Develop.sql
+beancount-trans-backend.tar

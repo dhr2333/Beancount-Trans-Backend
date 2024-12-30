@@ -35,19 +35,11 @@ router.register(r'income', IncomeViewSet, basename="income")
 
 urlpatterns = [
     path('api/', include(router.urls)),
-    path('api/admin/', admin.site.urls),  # 管理地址
-    path('api/docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
+    path('admin/', admin.site.urls),  # 管理地址
+    path('docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
     
     # 用户权限相关的urls
     path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证
-    # path('auth/registration/', include('dj_rest_auth.registration.urls')),  # 注册
-    # path('auth/social/', include('allauth.urls')),  # 支持Oauth2
-    # path("auth/_allauth/", include("allauth.headless.urls")),
-    # path('auth/social/github/', include('allauth.socialaccount.urls')),  # GitHub OAuth
-    # path('auth/social/github/', GitHubLogin.as_view(), name='github_login'),
-    # path('auth/social/github/login/', GitHubLogin.as_view(), name='github_login'),
-    # path('auth/social/github/login/callback/', GitHubLogin.as_view(), name='github_login'),
-    # path('api/google/', GoogleLogin.as_view(), name='google_login'),  # 这块好像是dj_rest_auth需要的配置
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
@@ -57,8 +49,6 @@ urlpatterns = [
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
     
-    # path('api/github/callback/', github_callback, name='github_callback'),
-
     
     # 业务相关的urls
     path('api/translate/', include('translate.urls')),  # 解析地址

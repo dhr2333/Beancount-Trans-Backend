@@ -29,12 +29,21 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))  # 系统的导包路�
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
 # DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
-DEBUG = True  # 是否开始Debug模式
+DEBUG = True  # 测试环境默认开始Debug
 
-ALLOWER_HOST = [
-        "127.0.0.1",
-        "LOCALHOST",
-        "*",
+ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:38001",
+    "http://localhost:38001",
+    "http://127.0.0.1:38000",
+    "http://localhost:38000",
+    "http://127.0.0.1:80",
+    "http://localhost:80",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "trans.dhr2333.cn",
+    "*",
 ]
 
 # Application definition
@@ -63,27 +72,58 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'allauth.socialaccount.providers.google',
     'allauth.socialaccount.providers.github',
     'allauth.socialaccount.providers.dummy',
-    # "allauth.mfa",
     "allauth.headless",
     "allauth.usersessions",
     'dj_rest_auth',
     'dj_rest_auth.registration',
 ]
 
-SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
+MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理
+    'corsheaders.middleware.CorsMiddleware',  # API 需要被不同域的前端应用访问时，使用此中间件来配置允许的跨域请求
+    'django.middleware.security.SecurityMiddleware',  # 提供一系列安全相关的功能，生产环境强烈推荐使用
+    'django.contrib.sessions.middleware.SessionMiddleware',  # 处理会话管理
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
+    'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
+    'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
+    'allauth.account.middleware.AccountMiddleware',
+]
 
+ROOT_URLCONF = 'mydemo.urls'  # 指定 Django 应用的 URL 配置模块
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',  # 模板引擎
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # 模板文件搜索目录
+        'APP_DIRS': True,  # 如果为True，在每个应用的templates目录中查找模板
+        'OPTIONS': {  # 额外选项
+            'context_processors': [  # 上下文处理器
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'mydemo.wsgi.application'  # WSGI 应用程序的路径，部署 Django 应用时与 WSGI 服务器（如 Gunicorn、uWSGI）进行交互
+
+
+# Allauth Configuration
+SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 LOGIN_REDIRECT_URL = 'http://trans.localhost/api/accounts/github/login/callback/'  # 登录成功后重定向的 URL，必须要是该URL否则oauth登录报错
 LOGOUT_REDIRECT_URL = 'http://trans.localhost'  # 用户注销后重定向的 URL
 
-# Allauth Configuration
-
-# Allauth Socialaccount
 SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
 SOCIALACCOUNT_AUTO_SIGNUP=True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT=False
 SOCIALACCOUNT_STORE_TOKENS =True
 SOCIALACCOUNT_LOGIN_ON_GET = False
+
+# Social Account Providers Configuration
 SOCIALACCOUNT_PROVIDERS = {
     'dummy':{
         
@@ -91,8 +131,8 @@ SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APPS': [
           {
-              "client_id": "27533849710-0ot3fj14f5vqkinena7is5ms08nfe2kl.apps.googleusercontent.com",
-              "secret": "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",
+              "client_id": "*.apps.googleusercontent.com",
+              "secret": "*",
               "key": "",
           },
         ],
@@ -111,8 +151,8 @@ SOCIALACCOUNT_PROVIDERS = {
     'github': {
         'APPS': [
           {
-              "client_id": "Ov23liuJwXE0syF3flmO",
-              "secret": "eff79b87bd4aac435745418696878a3b4be4fce5",
+              "client_id": "*",
+              "secret": "*",
               "key": "",
           },
         ],
@@ -131,7 +171,6 @@ SOCIALACCOUNT_PROVIDERS = {
     },
 }
 
-
 # Allauth Headless
 # HEADLESS_ONLY = True  # 设置allauth为无头服务
 # HEADLESS_TOKEN_STRATEGY = "allauth.headless.tokens.sessions.SessionTokenStrategy"
@@ -148,10 +187,10 @@ HEADLESS_FRONTEND_URLS = {
     # "socialaccount_login_error": "http://localhost:5173/",
 }
 
-
 # MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
 # MFA_PASSKEY_LOGIN_ENABLED = True
 
+# Authentication Backends
 AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持多种身份验证方式
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
@@ -159,7 +198,6 @@ AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持�
     # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
 
 # 配置 Django Allauth
 ACCOUNT_AUTHENTICATION_METHOD = 'username'  # 用户登录时使用的身份验证方法
@@ -169,6 +207,7 @@ ACCOUNT_EMAIL_VERIFICATION = 'optional'  # 用户可以选择是否验证电子�
 ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE= False  # 用户在更改密码时是否自动注销
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常是通过邮箱或短信发送的）进行登录，默认为False
 
+
 # 配置用于 JWT 的 REST_AUTH
 REST_AUTH = {
     'USE_JWT': True,
@@ -177,65 +216,13 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
 }
 
-MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理
-    'corsheaders.middleware.CorsMiddleware',  # API 需要被不同域的前端应用访问时，使用此中间件来配置允许的跨域请求
-    'django.middleware.security.SecurityMiddleware',  # 提供一系列安全相关的功能，生产环境强烈推荐使用
-    'django.contrib.sessions.middleware.SessionMiddleware',  # 处理会话管理
-    'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
-    'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
-    'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
-    'allauth.account.middleware.AccountMiddleware',
-]
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-# CSRF_TRUSTED_ORIGINS = [
-#     "http://127.0.0.1:5173",
-#     "http://localhost:5173",
-#     "http://127.0.0.1:38001",
-#     "http://localhost:38001",
-#     "https://trans.dhr2333.cn",
-# ]
-ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:38001",
-    "http://localhost:38001",
-    "http://127.0.0.1:38000",
-    "http://localhost:38000",
-    "http://127.0.0.1:80",
-    "http://localhost:80",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-    "trans.dhr2333.cn",
-    "*",
-]
-if DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        # CORS_ORIGIN_ALLOW_ALL = True  # 是否允许来自所有域的跨域请求
-        # CORS_ALLOW_ALL_ORIGINS = True  # 是否允许来自所有域的跨域请求（最佳实践）
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "http://127.0.0.1:38001",
-        "http://localhost:38001",
-        "http://127.0.0.1:38000",
-        "http://localhost:38000",
-        "http://127.0.0.1:80",
-        "http://localhost:80",
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "http://trans.localhost"
-    ]
-else:
-    CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
-        "https://trans.dhr2333.cn",
-    ]
+# CORS Configuration
+CORS_ALLOW_CREDENTIALS = True  # 是否允许跨域请求中包含凭据(cookies、HTTP 认证信息)
 # CSRF_COOKIE_SAMESITE = 'Lax'
 # SESSION_COOKIE_SAMESITE = 'Lax'
 # CSRF_COOKIE_HTTPONLY = True
 # SESSION_COOKIE_HTTPONLY = True
-CORS_ALLOW_CREDENTIALS = True  # 是否允许跨域请求中包含凭据(cookies、HTTP 认证信息)
 CORS_ALLOW_METHODS = (  # 指定允许的 HTTP 方法用于跨域请求
     'DELETE',
     'GET',
@@ -259,28 +246,33 @@ CORS_ALLOW_HEADERS = (  # 指定允许的 HTTP 请求头用于跨域请求
     'x-requested-with',
     'Pragma',
 )
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        # CORS_ORIGIN_ALLOW_ALL = True  # 是否允许来自所有域的跨域请求
+        # CORS_ALLOW_ALL_ORIGINS = True  # 是否允许来自所有域的跨域请求（最佳实践）
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:38001",
+        "http://localhost:38001",
+        "http://127.0.0.1:38000",
+        "http://localhost:38000",
+        "http://127.0.0.1:80",
+        "http://localhost:80",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "http://trans.localhost"
+    ]
+else:
+    CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
+        "https://trans.dhr2333.cn",
+    ]
 
-ROOT_URLCONF = 'mydemo.urls'  # 指定 Django 应用的 URL 配置模块
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',  # 模板引擎
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # 模板文件搜索目录
-        'APP_DIRS': True,  # 如果为True，在每个应用的templates目录中查找模板
-        'OPTIONS': {  # 额外选项
-            'context_processors': [  # 上下文处理器
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
+# Security Settings
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-WSGI_APPLICATION = 'mydemo.wsgi.application'  # WSGI 应用程序的路径，部署 Django 应用时与 WSGI 服务器（如 Gunicorn、uWSGI）进行交互
 
-# Database
+# Database Configuration
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 DATABASES = {
     'default': {
@@ -295,6 +287,9 @@ DATABASES = {
         'TIME_ZONE': 'Asia/Shanghai',
     }
 }
+
+
+# Cache Configuration
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
@@ -314,6 +309,7 @@ CACHES = {
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"  # 会话存储后端（数据库、缓存、文件系统）
 SESSION_CACHE_ALIAS = "session"  # 会话的缓存别名，适用于使用缓存存储会话时
 
+
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
 AUTH_PASSWORD_VALIDATORS = [
@@ -331,12 +327,14 @@ AUTH_PASSWORD_VALIDATORS = [
     },  # 阻止仅使用数字的密码
 ]
 
+
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True  # 国际化（i18n）功能
 USE_TZ = True  # 时区
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
@@ -348,9 +346,12 @@ STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件�
 MEDIA_URL = 'media/'  # 访问媒体文件的 URL 前缀，通常用于用户上传的文件
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目录
 
+
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字段类型，AutoField or BigAutoField
 
+
+# REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (  # 默认的身份验证类
         # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
@@ -379,6 +380,8 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',  # 自动生成 API 文档的模式类
 }
 
+
+# Simple JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=1),  # Access_Token 访问令牌的有效期
     'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),  # Refresh_Token 刷新令牌的有效期
@@ -398,6 +401,8 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
 }
 
+
+# Logging Configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,  # 当设置为 False 时，保留已存在的日志记录器
@@ -450,4 +455,3 @@ LOGGING = {
         },
     }
 }
-
