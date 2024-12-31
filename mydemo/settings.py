@@ -21,15 +21,13 @@ def env_to_bool(env, default):
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-# BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, os.path.join(BASE_DIR, 'mydemo/apps'))  # 系统的导包路径
 
 
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
-# DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
-DEBUG = True  # 测试环境默认开始Debug
+DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
 
 ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
     "http://127.0.0.1:5173",
@@ -83,7 +81,7 @@ MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图�
     'django.middleware.security.SecurityMiddleware',  # 提供一系列安全相关的功能，生产环境强烈推荐使用
     'django.contrib.sessions.middleware.SessionMiddleware',  # 处理会话管理
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
     'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入

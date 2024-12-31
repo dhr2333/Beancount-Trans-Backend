@@ -1,12 +1,19 @@
+import os 
 import jwt
 import typing
-import mydemo.settings as settings
 from django.http import HttpRequest
 from allauth.headless.tokens.base import AbstractTokenStrategy
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from django.contrib.sessions.backends.base import SessionBase
 from allauth.headless.internal import sessionkit
 
+settings_module = os.environ.get('DJANGO_SETTINGS_MODULE')
+if settings_module == 'conf.prod':
+    from conf.prod import *
+elif settings_module == 'conf.develop':
+    from conf.develop import *
+else:
+    from mydemo.settings import *
 
 class JWTTokenStrategy(AbstractTokenStrategy):
     def create_access_token(self, request: HttpRequest) -> str:
@@ -57,7 +64,7 @@ def get_token(request):
 
 def decode_token(token):
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
         return payload
     except jwt.ExpiredSignatureError:
         return {'error': 'Token过期'}

@@ -1,10 +1,9 @@
 import os
 import tempfile
-
 import PyPDF2
 import chardet
 import pandas as pd
-from mydemo import settings
+
 from mydemo.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from translate.utils import get_card_number
 from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv, boc_debit_sourcefile_identifier
@@ -12,6 +11,14 @@ from translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv, icbc_debit
 from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv, cmb_credit_sourcefile_identifier
 from translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string, ccb_debit_sourcefile_identifier
 
+settings_module = os.environ.get('DJANGO_SETTINGS_MODULE')
+
+if settings_module == 'conf.prod':
+    from conf.prod import *
+elif settings_module == 'conf.develop':
+    from conf.develop import *
+else:
+    from mydemo.settings import *
 
 SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf']
 
@@ -90,7 +97,7 @@ def write_entry_to_file(content):  # TODO
     try:
         year = content[0:4]
         month = content[5:7]
-        file_path = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year, f"{month}-expenses.bean")
+        file_path = os.path.join(os.path.dirname(BASE_DIR), "Beancount-Trans-Assets", year, f"{month}-expenses.bean")
         init_project_file(file_path)
         with open(file_path, mode='a') as file:
             file.write(content)
