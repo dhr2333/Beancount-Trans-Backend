@@ -160,7 +160,9 @@ def wechatpay_get_amount(data):
 
 
 def wechatpay_get_note(data):
-    if data['transaction_type'] == "/":  # 收支为/时，备注为交易类型
+    if data['transaction_category'] == "信用卡还款" and data['transaction_type'] == "/":
+        return data['counterparty']
+    elif data['transaction_type'] == "/":  # 收支为/时，备注为交易类型
         return data['transaction_category']
     return data['commodity']
 

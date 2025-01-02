@@ -90,13 +90,13 @@ def alipay_get_balance_account(self, data, assets, ownerid):
     # account = "Unknown-Account"  # 方便排查问题
     account = self.account
     if self.type == "转账收款到余额宝":
-        account = assets["ALIFUND"]
+        account = assets["ALIPAY"]
     elif self.type == "余额宝-自动转入":
         account = assets["ALIFUND"]
     elif self.type == "余额宝-转出到余额":
         account = assets["ALIPAY"]
     elif self.type == "余额宝-单次转入":
-        account = assets["ALIFUND"]
+        account = assets["ALIPAY"]
     elif self.type == "余额宝-转出到银行卡":
         result = data['payment_method']
         for key in self.key_list:
@@ -142,13 +142,14 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
     # expend = "Unknown-Expend"  # 方便排查问题
     expend = self.expend
     if self.type == "转账收款到余额宝":
-        expend = assets["ALIPAY"]
+        expend = assets["ALIFUND"]
     elif self.type == "余额宝-自动转入":
         expend = assets["ALIPAY"]
     elif self.type == "余额宝-转出到余额":
         expend = assets["ALIFUND"]
     elif self.type == "余额宝-单次转入":
-        result = data['payment_method']
+        # result = data['payment_method']
+        result = data['counterparty']
         for key in self.key_list:
             if key in result:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()

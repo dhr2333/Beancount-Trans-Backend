@@ -90,8 +90,8 @@ def should_ignore_row(row, ignore_data, args):
     return (ignore_data.wechatpay_ignore(row)
             or ignore_data.alipay_ignore(row)
             or ignore_data.alipay_fund_ignore(row)
-            or ignore_data.cmb_credit_ignore(row, args.get("card_ignore"))
-            or ignore_data.boc_debit_ignore(row, args.get("card_ignore"))
+            or ignore_data.cmb_credit_ignore(row, args.get("cmb_credit_ignore"))
+            or ignore_data.boc_debit_ignore(row, args.get("boc_debit_ignore"))
             )
     
 

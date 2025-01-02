@@ -21,7 +21,7 @@ class BocDebitInitStrategy(InitStrategy):
                 record = {
                     'transaction_time': row[0] + " " + row[1],  # 交易时间
                     'transaction_category': row[5],  # 交易类型
-                    'counterparty': row[9],  # 交易对方
+                    'counterparty': row[5] if "-------------------" in row[9] else row[9],  # 交易对方
                     'commodity': row[2],  # 商品
                     'transaction_type': "支出" if "-" in row[3] else "收入" ,  # 收支类型（收入/支出/不计收支）
                     'amount': row[3].replace("-", "") if "-" in row[3] else row[3],  # 金额
