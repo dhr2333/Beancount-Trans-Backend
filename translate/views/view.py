@@ -130,12 +130,16 @@ def preprocess_transaction_data(data, owner_id):
         status : 支付状态   WeChat - 支付成功
         amount : 金额       23.00 CNY
         payee : 收款方      浙江古茗
-        notes : 备注        商品详情
+        note : 备注        商品详情
         tag : 标签          # tag
         balacne : 余额     2022-05-01 balance      Liabilities:CreditCard:Bank:CITIC:C0000  -5515.51 CNY
-        expend : 支付方式   Expenses:Food:DrinkFruit
+        balance_date =    2024-11-01
+        expenditure_sign, account_sign = '+' or '-'
+        expense : 支付方式   Expenses:Food:DrinkFruit
         account : 账户      Liabilities:CreditCard:Bank:CITIC:C6428
         commission : 利息   Expenses:Finance:Commission
+        installment_granularity : 
+        installment_cycle : 
     """
     try:
         date = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
@@ -200,6 +204,7 @@ class AccountHandler:
         self.initialize_key(data)
         self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
         self.initialize_type(data)
+        self.status = data['transaction_status']
         actual_assets = get_default_assets(ownerid=ownerid)
         account = self.account
 
@@ -325,8 +330,9 @@ class PayeeHandler:
 
     def get_payee(self, data, ownerid):
         self.key_list = list(Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True))
-
-        if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
+        if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/" and data['transaction_category'] == "信用卡还款":
+            return data['counterparty']
+        elif data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
             return data['payment_method'][:4]
         elif data['transaction_category'] == "微信红包（单发）":
             return self.payee[2:]

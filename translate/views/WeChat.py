@@ -1,4 +1,5 @@
 import logging
+import re
 
 from translate.models import Assets
 from translate.utils import InitStrategy, IgnoreData, ASSETS_OTHER, BILL_WECHAT
@@ -56,8 +57,15 @@ def wechatpay_get_expense_account(self, assets, ownerid):
 
 
 def wechatpay_get_income_account(self, assets, ownerid):
-    key = self.key
-    if key in self.key_list:
+    key = self.key   # '中信银行(6428)'
+    if self.status == "已转入零钱通":
+        key = "零钱通"
+    else:
+        match = re.search(r'\((\d+)\)', key)
+        if match:
+            key = match.group(1)
+
+    if key in self.key_list:  # 6428
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
         return account_instance.assets
 
@@ -160,9 +168,10 @@ def wechatpay_get_amount(data):
 
 
 def wechatpay_get_note(data):
-    if data['transaction_category'] == "信用卡还款" and data['transaction_type'] == "/":
-        return data['counterparty']
-    elif data['transaction_type'] == "/":  # 收支为/时，备注为交易类型
+    # if data['transaction_category'] == "信用卡还款" and data['transaction_type'] == "/":
+        # return data['counterparty']
+        # return data['transaction_category']
+    if data['transaction_type'] == "/":  # 收支为/时，备注为交易类型
         return data['transaction_category']
     return data['commodity']
 

@@ -92,7 +92,7 @@ def create_temporary_file(file_name):
     return temp, encodeing
 
 
-def write_entry_to_file(content):  # TODO
+def write_entry_to_file(content):
     """将条目写入相应的beancount文件"""
     try:
         year = content[0:4]
