@@ -111,7 +111,10 @@ def boc_debit_get_amount(data):
 
 
 def boc_debit_get_note(data):
-    return data['notes']
+    if data['transaction_category'] == "跨行转账":
+        return data['counterparty_bank']
+    else:
+        return data['notes']
 
 
 def boc_debit_init_key(data):
