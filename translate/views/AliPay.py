@@ -92,28 +92,24 @@ def alipay_get_balance_account(self, data, assets, ownerid):
     if self.type == "转账收款到余额宝":
         account = assets["ALIPAY"]
     elif self.type == "余额宝-自动转入":
-        account = assets["ALIFUND"]
+        account = assets["ALIPAY"]
     elif self.type == "余额宝-转出到余额":
-        account = assets["ALIPAY"]
+        account = assets["ALIFUND"]
     elif self.type == "余额宝-单次转入":
-        account = assets["ALIPAY"]
-    elif self.type == "余额宝-转出到银行卡":
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                account = account_instance.assets
-                return account
-        account = ASSETS_OTHER
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend = expend_instance.assets
+                return expend
+            else:
+                expend = ASSETS_OTHER
+    elif self.type == "余额宝-转出到银行卡":
+        account = assets["ALIFUND"]
     elif self.type == "充值-普通充值":
-        account = assets["ALIPAY"]  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
+        account = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
-        result = data['counterparty'] + "储蓄卡"  # 例如"宁波银行储蓄卡"
-        for full in self.full_list:
-            if result in full:
-                account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
-                account = account_instance.assets
-                return account
+        account = assets["ALIPAY"]
     elif self.type == "信用卡还款" or re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):
         result = data['payment_method']
         for key in self.key_list:
@@ -123,14 +119,6 @@ def alipay_get_balance_account(self, data, assets, ownerid):
                 return account
             else:
                 account = ASSETS_OTHER
-    elif re.match(pattern["基金"], self.type):
-        result = data['commodity'][data['commodity'].index("卖出至") + len("卖出至"):]
-        for key in self.key_list:
-            if result in key:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-                account = account_instance.assets
-                return account
-        account = ASSETS_OTHER
     elif "亲情卡" in data['payment_method']:
         account = OPENBALANCE
     else:
@@ -144,25 +132,28 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
     if self.type == "转账收款到余额宝":
         expend = assets["ALIFUND"]
     elif self.type == "余额宝-自动转入":
-        expend = assets["ALIPAY"]
-    elif self.type == "余额宝-转出到余额":
         expend = assets["ALIFUND"]
+    elif self.type == "余额宝-转出到余额":
+        expend = assets["ALIPAY"]
     elif self.type == "余额宝-单次转入":
-        # result = data['payment_method']
-        result = data['counterparty']
+        expend = assets["ALIFUND"]
+    elif self.type == "余额宝-转出到银行卡":
+        result = data['payment_method']
         for key in self.key_list:
             if key in result:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
                 expend = expend_instance.assets
                 return expend
-            else:
-                expend = ASSETS_OTHER
-    elif self.type == "余额宝-转出到银行卡":
-        expend = assets["ALIFUND"]
+        expend = ASSETS_OTHER
     elif self.type == "充值-普通充值":
-        expend = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
+        expend = assets["ALIPAY"]  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现":
-        expend = assets["ALIPAY"]
+        result = data['counterparty'] + "储蓄卡"  # 例如"宁波银行储蓄卡"
+        for full in self.full_list:
+            if result in full:
+                expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
+                expend = expend_instance.assets
+                return expend
     elif re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
         expend = assets["HUABEI"]
     elif self.type == "信用卡还款":
@@ -172,6 +163,14 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
                 expend = expend_instance.assets
                 return expend
+    elif re.match(pattern["基金"], self.type):
+        result = data['commodity'][data['commodity'].index("卖出至") + len("卖出至"):]
+        for key in self.key_list:
+            if result in key:
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend = expend_instance.assets
+                return expend
+        expend = ASSETS_OTHER
     else:
         expend = ASSETS_OTHER
     return expend

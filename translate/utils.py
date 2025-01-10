@@ -139,7 +139,7 @@ class IgnoreData:
         return data == {}
 
     def notes(self, data):
-        return data["note"] == "零钱提现" or data["note"] == "信用卡还款"
+        return data["note"] == "零钱提现" or data["note"] == "信用卡还款" or data["note"] == "提现-实时提现" or data["note"] == "余额宝-转出到银行卡"
     
     def balance(self, data):
         from datetime import datetime
