@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+# Django 配置
+DJANGO_SETTINGS_MODULE = "conf.develop"
+# 禁用自动探测
+# django_find_project = "false"
+# 测试路径
+testpaths = ["translate/tests"]
+# 测试文件匹配模式
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+# 过滤警告
+filterwarnings = [
+    "ignore::DeprecationWarning:coreapi.*",
+    "ignore::DeprecationWarning:cgi.*",
+    "ignore::DeprecationWarning:PyPDF2.*"
+]
+# 附加参数（禁用迁移加速测试）
+addopts = "--no-migrations --reuse-db"

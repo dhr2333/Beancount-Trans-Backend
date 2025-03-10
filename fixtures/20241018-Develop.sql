@@ -503,7 +503,7 @@ CREATE TABLE `maps_income` (
 
 LOCK TABLES `maps_income` WRITE;
 /*!40000 ALTER TABLE `maps_income` DISABLE KEYS */;
-INSERT INTO `maps_income` VALUES (32,'2024-10-18 16:58:10.720217','2024-10-18 16:58:10.720255','红包',NULL,'Income:Receivables:RedPacket',1),(33,'2024-10-18 16:58:10.726582','2024-10-18 16:58:10.726631','某义','老婆','Liabilities:Payables:Personal:LaoPo',1),(34,'2024-10-18 16:58:10.735493','2024-10-18 16:58:10.735618','小荷包',NULL,'Assets:Savings:Web:XiaoHeBao',1),(35,'2024-10-18 16:58:10.743159','2024-10-18 16:58:10.743284','老婆','老婆','Liabilities:Payables:Personal:LaoPo',1),(36,'2024-10-18 16:58:10.751967','2024-10-18 16:58:10.751998','戴某轩',NULL,'Assets:Savings:Web:XiaoHeBao:DaiMouXuan',1),(37,'2024-10-18 16:58:10.759864','2024-10-18 16:58:10.759915','收钱码经营版收款',NULL,'Income:Business',1),(38,'2024-10-18 16:58:10.767807','2024-10-18 16:58:10.767839','出行账户余额提现',NULL,'Income:Sideline:DiDi',1);
+INSERT INTO `maps_income` VALUES (32,'2024-10-18 16:58:10.720217','2024-10-18 16:58:10.720255','红包',NULL,'Income:RedPacket:Organization',1),(33,'2024-10-18 16:58:10.726582','2024-10-18 16:58:10.726631','某义','老婆','Liabilities:Payables:Personal:LaoPo',1),(34,'2024-10-18 16:58:10.735493','2024-10-18 16:58:10.735618','小荷包',NULL,'Assets:Savings:Web:XiaoHeBao',1),(35,'2024-10-18 16:58:10.743159','2024-10-18 16:58:10.743284','老婆','老婆','Liabilities:Payables:Personal:LaoPo',1),(36,'2024-10-18 16:58:10.751967','2024-10-18 16:58:10.751998','戴某轩',NULL,'Assets:Savings:Web:XiaoHeBao:DaiMouXuan',1),(37,'2024-10-18 16:58:10.759864','2024-10-18 16:58:10.759915','收钱码经营版收款',NULL,'Income:Business',1),(38,'2024-10-18 16:58:10.767807','2024-10-18 16:58:10.767839','出行账户余额提现',NULL,'Income:Sideline:DiDi',1);
 /*!40000 ALTER TABLE `maps_income` ENABLE KEYS */;
 UNLOCK TABLES;
 

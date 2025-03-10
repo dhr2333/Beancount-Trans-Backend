@@ -1,8 +1,6 @@
 .idea
 .coverage
 /media/
-Pipfile.lock
-Pipfile
 collectstatic
 /conf/prod.py
 /conf/develop.py
