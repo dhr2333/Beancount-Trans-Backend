@@ -4,7 +4,7 @@ DJANGO_SETTINGS_MODULE = "conf.develop"
 # 禁用自动探测
 # django_find_project = "false"
 # 测试路径
-testpaths = ["translate/tests"]
+# testpaths = ["translate/tests"]
 # 测试文件匹配模式
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 # 过滤警告
