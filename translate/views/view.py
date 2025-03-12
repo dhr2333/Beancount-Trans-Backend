@@ -293,16 +293,15 @@ class ExpenseHandler:
 
                     expend_set.add(expense_instance.expend)
 
-                if matching_max_order is not None and (
-                        max_order is None or matching_max_order > max_order):  # 如果匹配到的key的matching_max_order大于max_order，则更新max_order
+                # 更新max_order并设置expend
+                if matching_max_order > max_order if max_order is not None else True:
                     max_order = matching_max_order
                     expend = expense_instance.expend
 
-                elif matching_max_order is not None and (
-                        max_order is None or matching_max_order == max_order):  # 如果最大优先级冲突，则将Expend更新为默认Expend.
-                    expend = self.expend
-                    if len(expend_set) == 1:  # 如果所有关键字对应的Expend均一致，则直接调用Expend不使用默认值(Expenses:Other)
-                        expend = expense_instance.expend
+                elif matching_max_order == max_order:
+                    # 在优先级冲突时，更新为最后一个匹配到的expend
+                    expend = expense_instance.expend
+
             return expend
 
         elif self.balance == "收入":
