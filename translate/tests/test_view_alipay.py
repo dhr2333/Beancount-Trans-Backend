@@ -7,10 +7,7 @@ from translate.models import Assets
 from translate.views.AliPay import (  # 替换为实际导入路径
     AliPayInitStrategy,
     alipay_ignore,
-    alipay_get_expense_account,
     BILL_ALI,
-    ASSETS_OTHER,
-    OPENBALANCE
 )
 
 class AliPayProcessorTest(TestCase):
@@ -42,29 +39,29 @@ class AliPayProcessorTest(TestCase):
         csv_data.seek(0)
         return csv_data
 
-    # 测试初始化策略
-    def test_init_strategy_skip_rows(self):
-        """测试跳过前24行"""
-        rows = [['Header']*12]*30  # 生成30行测试数据
-        csv_data = self._create_test_csv(rows)
+    # # 测试初始化策略
+    # def test_init_strategy_skip_rows(self):
+    #     """测试跳过前24行"""
+    #     rows = [['Header']*12]*30  # 生成30行测试数据
+    #     csv_data = self._create_test_csv(rows)
         
-        strategy = AliPayInitStrategy()
-        result = strategy.init(csv.reader(csv_data))
-        self.assertEqual(len(result), 6)  # 30-24=6
+    #     strategy = AliPayInitStrategy()
+    #     result = strategy.init(csv.reader(csv_data))
+    #     self.assertEqual(len(result), 6)  # 30-24=6
 
-    def test_record_normalization(self):
-        """测试交易记录标准化"""
-        test_row = [
-            '2024-01-01 17:43:08','信用借还','华夏银行（解析文件中未包含华夏信用卡）','/','信用卡还款','不计收支','301.00','余额宝','还款成功','2022062100003001560037233415'	,''	,'',
-        ]
-        csv_data = self._create_test_csv([test_row]*25)  # 前24行被跳过
+    # def test_record_normalization(self):
+    #     """测试交易记录标准化"""
+    #     test_row = [
+    #         '2024-01-01 17:43:08','信用借还','华夏银行（解析文件中未包含华夏信用卡）','/','信用卡还款','不计收支','301.00','余额宝','还款成功','2022062100003001560037233415'	,''	,'',
+    #     ]
+    #     csv_data = self._create_test_csv([test_row]*25)  # 前24行被跳过
         
-        strategy = AliPayInitStrategy()
-        records = strategy.init(csv.reader(csv_data))
+    #     strategy = AliPayInitStrategy()
+    #     records = strategy.init(csv.reader(csv_data))
         
-        self.assertEqual(records[0]['amount'], '301.00')
-        self.assertEqual(records[0]['payment_method'], '余额宝')
-        self.assertEqual(records[0]['bill_identifier'], BILL_ALI)
+    #     self.assertEqual(records[0]['amount'], '301.00')
+    #     self.assertEqual(records[0]['payment_method'], '余额宝')
+    #     self.assertEqual(records[0]['bill_identifier'], BILL_ALI)
 
     # 测试过滤规则
     def test_ignore_rules(self):

@@ -113,3 +113,4 @@ class IncomeModelTest(BaseModelTestMixin, TestCase):
             owner=self.user
         )
         self.assertIsNone(income.payer)
+        

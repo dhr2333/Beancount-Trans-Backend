@@ -1,0 +1,86 @@
+[
+{
+  "model": "translate.income",
+  "pk": 32,
+  "fields": {
+    "created": "2024-10-18T16:58:10.720+08:00",
+    "modified": "2024-10-18T16:58:10.720+08:00",
+    "key": "红包",
+    "payer": null,
+    "income": "Income:Receivables:RedPacket",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 33,
+  "fields": {
+    "created": "2024-10-18T16:58:10.726+08:00",
+    "modified": "2024-10-18T16:58:10.726+08:00",
+    "key": "某义",
+    "payer": "老婆",
+    "income": "Liabilities:Payables:Personal:LaoPo",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 34,
+  "fields": {
+    "created": "2024-10-18T16:58:10.735+08:00",
+    "modified": "2024-10-18T16:58:10.735+08:00",
+    "key": "小荷包",
+    "payer": null,
+    "income": "Assets:Savings:Web:XiaoHeBao",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 35,
+  "fields": {
+    "created": "2024-10-18T16:58:10.743+08:00",
+    "modified": "2024-10-18T16:58:10.743+08:00",
+    "key": "老婆",
+    "payer": "老婆",
+    "income": "Liabilities:Payables:Personal:LaoPo",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 36,
+  "fields": {
+    "created": "2024-10-18T16:58:10.751+08:00",
+    "modified": "2024-10-18T16:58:10.751+08:00",
+    "key": "戴某轩",
+    "payer": null,
+    "income": "Assets:Savings:Web:XiaoHeBao:DaiMouXuan",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 37,
+  "fields": {
+    "created": "2024-10-18T16:58:10.759+08:00",
+    "modified": "2024-10-18T16:58:10.759+08:00",
+    "key": "收钱码经营版收款",
+    "payer": null,
+    "income": "Income:Business",
+    "owner": 1
+  }
+},
+{
+  "model": "translate.income",
+  "pk": 38,
+  "fields": {
+    "created": "2024-10-18T16:58:10.767+08:00",
+    "modified": "2024-10-18T16:58:10.767+08:00",
+    "key": "出行账户余额提现",
+    "payer": null,
+    "income": "Income:Sideline:DiDi",
+    "owner": 1
+  }
+}
+]
