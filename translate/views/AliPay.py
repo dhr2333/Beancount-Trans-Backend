@@ -68,6 +68,8 @@ def alipay_get_expense_account(self, assets, ownerid):
             return account_instance.assets
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
+    else:
+        return ASSETS_OTHER
 
 
 def alipay_get_income_account(self, assets, ownerid):
@@ -202,7 +204,7 @@ def alipay_get_amount(data):
 
 def alipay_get_note(data):
     if data['commodity'] == "Transfer":
-        return "无备注转账"
+        return "Transfer(无备注转账)"
     elif data['commodity'] == "发普通红包":
         return "发普通红包"
     elif data['commodity'] == "收到普通红包":
