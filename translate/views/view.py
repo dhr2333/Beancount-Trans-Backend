@@ -63,12 +63,7 @@ class AnalyzeView(View):
 def get_initials_bill(bill):
     first_line = next(bill)[0]
     year = first_line[:4]
-    card_number = None
-
-    try:
-        card_number = card_number_get_key(first_line)
-    except Exception as e:
-        logging.warning(f"Failed to extract card number: {e}")
+    card_number = card_number_get_key(first_line)
     
     strategies = [
         (alipay_csvfile_identifier, AliPayInitStrategy()),

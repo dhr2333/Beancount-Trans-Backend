@@ -177,7 +177,10 @@ def get_card_number(content, sourcefile_identifier):
 
 def card_number_get_key(data):
     """
-    从银行卡号获取后四位尾号
+    从银行卡号或包含末尾四位数字的字符串中提取后四位尾号
+    如果未找到匹配，则返回 None
     """
-    return re.search(r'\d{4}$', data).group()
-
+    if data is None:
+        return None
+    match = re.search(r'\d{4}$', data)
+    return match.group() if match else None
