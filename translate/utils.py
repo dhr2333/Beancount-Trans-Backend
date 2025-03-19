@@ -89,6 +89,8 @@ class FormatData:
 
         if ignore_data.notes(entry):
             formatted_str += "\n    Expenses:Finance:Commission"
+        if entry['discount']:
+            formatted_str += "\n    Income:Other"
 
         return formatted_str + "\n\n"
     

@@ -29,7 +29,8 @@ class AliPayInitStrategy(InitStrategy):
                     'transaction_status': row[8].strip(),  # 交易状态
                     'notes': notes,  # 备注
                     'bill_identifier': BILL_ALI,  # 账单类型
-                    'uuid': row[9].strip()  # 交易单号
+                    'uuid': row[9].strip(),  # 交易单号
+                    'discount': True if "&" in payment_method else False  # 支付方式
                 }
                 records.append(record)
 
