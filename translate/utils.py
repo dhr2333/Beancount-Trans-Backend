@@ -64,33 +64,64 @@ class InitStrategy(ABC):
         pass
 
 
+class FormatConfig:
+    """格式化配置类"""
+    def __init__(
+        self,
+        flag = "*",
+        show_note=True,
+        show_tag=True,
+        show_status=True,
+        show_time=True,
+        show_uuid=True,
+        show_discount = True,
+        income_template=None
+    ):
+        self.flag = flag
+        self.show_note = show_note
+        self.show_tag = show_tag
+        self.show_time = show_time
+        self.show_uuid = show_uuid
+        self.show_status = show_status
+        self.show_discount = show_discount
+        self.income_template = income_template
+
+
 class FormatData:
 
-    def format_instance(entry):
+    def format_instance(entry, config=FormatConfig()):
         ignore_data = IgnoreData(None)
         formatted_str = ""
 
         formatted_str += f"{entry['date']}"
-        formatted_str += f" *"
+        formatted_str += f" {config.flag}"
         formatted_str += f" \"{entry['payee']}\""
-        formatted_str += f" \"{entry['note']}\""
-        if entry['tag'] is not None:
+        if config.show_note:
+            formatted_str += f" \"{entry['note']}\""
+        if entry['tag'] is not None and config.show_tag:
             formatted_str += f" {entry['tag']}"
-        formatted_str += f"\n    time: \"{entry['time']}\"\n"
-        if entry['uuid'] is not None:
-            formatted_str += f"    uuid: \"{entry['uuid']}\"\n"
-        formatted_str += f"    status: \"{entry['status']}\"\n"
-        formatted_str += f"    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} CNY\n"
-        formatted_str += f"    {entry['account']} {entry['account_sign']}"
+        if config.show_time:
+            formatted_str += f"\n    time: \"{entry['time']}\""
+        if entry['uuid'] is not None and config.show_uuid:
+            formatted_str += f"\n    uuid: \"{entry['uuid']}\""
+        if config.show_status:
+            formatted_str += f"\n    status: \"{entry['status']}\""
+        formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} CNY"
+        formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
         if ignore_data.notes(entry):
             formatted_str += f"{entry['actual_amount']} CNY"
         else:
             formatted_str += f"{entry['amount']} CNY"
-
-        if ignore_data.notes(entry):
-            formatted_str += "\n    Expenses:Finance:Commission"
-        if entry['discount']:
-            formatted_str += "\n    Income:Other"
+ 
+        if config.show_discount:
+            if ignore_data.notes(entry):
+                formatted_str += "\n    Expenses:Finance:Commission"
+            elif entry['discount']:
+                # formatted_str += "\n    Income:Other"
+                if config.income_template:
+                    formatted_str += (f"\n    {config.income_template}")
+                else:
+                    formatted_str += ("\n    Income:Other")
 
         return formatted_str + "\n\n"
     

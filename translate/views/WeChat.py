@@ -25,7 +25,8 @@ class WeChatInitStrategy(InitStrategy):
                     'transaction_status': row[7],  # 交易状态
                     'notes': row[10],  # 备注
                     'bill_identifier': BILL_WECHAT,  # 账单类型
-                    'uuid': row[8]  # 交易单号
+                    'uuid': row[8],  # 交易单号
+                    'discount': False
                 }
                 records.append(record)
         except UnicodeDecodeError as e:
@@ -180,6 +181,8 @@ def wechatpay_get_tag(data):
     notes = wechatpay_get_note(data)
     if "#" in notes:
         return "#" + notes.split("#")[1].strip()
+    elif "^" in notes:
+        return "^" + notes.split("^")[1].strip()
     else:
         return None
 
