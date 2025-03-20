@@ -16,12 +16,13 @@ Including another URLconf
 # from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
-from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
+from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet, UserConfigAPI
 # from .views import GoogleLogin
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from .views import authenticateByToken
+
 
 # from mydemo.views import DRFLoginView
 
@@ -39,6 +40,7 @@ urlpatterns = [
     path('docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
     
     # 用户权限相关的urls
+    path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
     path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性

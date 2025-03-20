@@ -51,3 +51,43 @@ class Income(BaseModel):
 
     def __str__(self):
         return self.key
+
+
+class FormatConfig(models.Model):
+    flag = models.CharField(max_length=1, default='*')
+    show_note = models.BooleanField(default=True)
+    show_tag = models.BooleanField(default=True)
+    show_time = models.BooleanField(default=True)
+    show_uuid = models.BooleanField(default=True)
+    show_status = models.BooleanField(default=True)
+    show_discount = models.BooleanField(default=True)
+    income_template = models.CharField(max_length=50, null=True, blank=True)
+    owner = models.ForeignKey(User, related_name='format', on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name = "格式配置"
+        verbose_name_plural = verbose_name
+        # 确保每个用户只有一个配置
+        constraints = [
+            models.UniqueConstraint(
+                fields=['owner'],
+                name='unique_user_config'
+            )
+        ]
+
+    @classmethod
+    def get_user_config(cls, user):
+        """获取或创建用户配置（带默认值）"""
+        return cls.objects.get_or_create(
+            owner=user,
+            defaults={
+                'flag': '*',
+                'show_note': True,
+                'show_tag': True,
+                'show_time': True,
+                'show_uuid': True,
+                'show_status': True,
+                'show_discount': True,
+                'income_template': None
+            }
+        )[0]  # 始终返回配置实例

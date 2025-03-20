@@ -2,6 +2,7 @@ import csv
 import os
 import datetime
 from datetime import timedelta
+from django.contrib.auth import get_user_model
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -9,6 +10,7 @@ from django.views import View
 from mydemo.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from mydemo.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file, read_and_write
 from mydemo.utils.token import get_token_user_id
+from mydemo.utils.tools import get_user_config
 from translate.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
@@ -19,10 +21,13 @@ from translate.views.ICBC_Debit import *
 from translate.views.CCB_Debit import *
 
 
+User = get_user_model()
+
 class AnalyzeView(View):
     def post(self, request):
         args = {key: request.POST.get(key) for key in request.POST}
         owner_id = get_token_user_id(request)  # 根据前端传入的JWT Token获取owner_id,如果是非认证用户或者Token过期则返回1(默认用户)
+        config = get_user_config(User.objects.get(id=owner_id))
         uploaded_file = request.FILES.get('trans', None)  # 获取前端传入的文件
 
         if not uploaded_file:
@@ -47,7 +52,7 @@ class AnalyzeView(View):
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 list = get_initials_bill(bill=csv.reader(csvfile))
-            format_list = beancount_outfile(list, owner_id, args)
+            format_list = beancount_outfile(list, owner_id, args, config)
         except UnsupportedFileTypeError as e:
             return JsonResponse({'error': str(e)}, status=400)
         finally:
@@ -90,7 +95,7 @@ def should_ignore_row(row, ignore_data, args):
             )
     
 
-def beancount_outfile(data, owner_id: int, args):
+def beancount_outfile(data, owner_id: int, args, config):
     ignore_data = IgnoreData(None)
     instance_list = []
     if args["balance"] == "true":
@@ -103,11 +108,11 @@ def beancount_outfile(data, owner_id: int, args):
             if ignore_data.empty(entry):
                 continue
             if args["balance"] == "true":
-                instance = FormatData.balance_instance(entry)
+                instance = FormatData.balance_instance(entry, config=config)
             elif "分期" in row['payment_method']:
                 instance = FormatData.installment_instance(entry)
             else:
-                instance = FormatData.format_instance(entry)
+                instance = FormatData.format_instance(entry, config=config)
             instance_list.append(instance)
             if args["write"] == "true":
                 write_entry_to_file(instance)

@@ -4,8 +4,12 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from .serializers import FormatConfigSerializer
+from rest_framework import status
 
-from translate.models import Expense, Assets, Income
+from translate.models import Expense, Assets, Income, FormatConfig
 from .filters import CurrentUserFilterBackend
 from .permissions import IsOwnerOrAdminReadWriteOnly
 
@@ -151,3 +155,32 @@ class IncomeViewSet(ModelViewSet):
                 id=instance.id).exists():
             raise ValidationError("Accountalready exists.")
         serializer.save(owner=self.request.user)
+
+
+class UserConfigAPI(APIView):
+    """用户个人配置接口"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """获取当前用户配置"""
+        config = FormatConfig.get_user_config(request.user)
+        serializer = FormatConfigSerializer(config)
+        return Response(serializer.data)
+
+    def put(self, request):
+        """更新当前用户配置"""
+        config = FormatConfig.get_user_config(request.user)
+        serializer = FormatConfigSerializer(
+            config,
+            data=request.data,
+            partial=True  # 允许部分更新
+        )
+ 
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+
+        return Response({
+            "status": "error",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
