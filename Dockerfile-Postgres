@@ -1,0 +1,8 @@
+FROM postgres:17.4 AS production-stage
+LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
+
+ENV POSTGRES_DB=beancount-trans
+ENV POSTGRES_USER=root
+ENV POSTGRES_PASSWORD=root
+
+COPY fixtures/20250321_Postgres.sql /docker-entrypoint-initdb.d/Develop.sql
