@@ -37,5 +37,6 @@ def get_user_config(user=None):
         show_uuid=True,
         show_status=True,
         show_discount=True,
-        income_template=None
+        income_template=None,
+        commission_template=None
     )

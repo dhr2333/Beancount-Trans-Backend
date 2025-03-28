@@ -75,7 +75,8 @@ class FormatConfig:
         show_time=True,
         show_uuid=True,
         show_discount = True,
-        income_template=None
+        income_template=None,
+        commission_template=None
     ):
         self.flag = flag
         self.show_note = show_note
@@ -85,6 +86,7 @@ class FormatConfig:
         self.show_status = show_status
         self.show_discount = show_discount
         self.income_template = income_template
+        self.commission_template = commission_template
 
 
 class FormatData:
@@ -115,7 +117,10 @@ class FormatData:
  
         if config.show_discount:
             if ignore_data.notes(entry):
-                formatted_str += "\n    Expenses:Finance:Commission"
+                if config.commission_template:
+                    formatted_str += (f"\n    {config.commission_template}")
+                else:
+                    formatted_str += "\n    Expenses:Other"
             elif entry['discount']:
                 # formatted_str += "\n    Income:Other"
                 if config.income_template:

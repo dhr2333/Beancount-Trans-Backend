@@ -61,7 +61,8 @@ class FormatConfig(models.Model):
     show_uuid = models.BooleanField(default=True)
     show_status = models.BooleanField(default=True)
     show_discount = models.BooleanField(default=True)
-    income_template = models.CharField(max_length=50, null=True, blank=True)
+    income_template = models.CharField(max_length=50,default='Income:Discount',null=True, blank=True)
+    commission_template = models.CharField(max_length=50,default='Expenses:Finance:Commission', null=True, blank=True)
     owner = models.ForeignKey(User, related_name='format', on_delete=models.CASCADE)
 
     class Meta:
@@ -88,6 +89,7 @@ class FormatConfig(models.Model):
                 'show_uuid': True,
                 'show_status': True,
                 'show_discount': True,
-                'income_template': None
+                'income_template': 'Income:Discount',
+                'commission_template': 'Expenses:Finance:Commission'
             }
         )[0]  # 始终返回配置实例
