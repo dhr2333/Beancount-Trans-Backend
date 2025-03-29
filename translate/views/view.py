@@ -159,10 +159,11 @@ def preprocess_transaction_data(data, owner_id):
         installment_granularity = get_installment_granularity(data)  # 分期粒度（年/月/日）
         installment_cycle = get_installment_cycle(data)  # 分期频率
         discount = data['discount']
+        currency = ExpenseHandler(data).get_currency(data, owner_id)
         if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
-            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount}
-        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount}
+            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency}
+        return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency}
     except ValueError as e:
         raise e
 
@@ -319,6 +320,34 @@ class ExpenseHandler:
             elif self.bill == BILL_WECHAT:
                 expend = wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
         return expend
+
+    def get_currency(self,data, ownerid):
+        # self.initialize_key(data)
+        self.initialize_key_list(data, ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
+        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
+            expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
+            if expense_instance:
+                if expense_instance.currency is None:
+                    return "CNY"
+                else:
+                    return expense_instance.currency
+            return "Test"
+        # self.initialize_type(data)
+        # key = self.key
+        # if key in self.key_list:
+        #     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+        #     return account_instance.currency
+        # elif '(' in key and ')' in key:
+        #     digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
+        #     if digits in self.key_list:  # 判断提取到的数字是否在列表中
+        #         account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
+        #         return account_instance.currency
+        #     else:
+        #         return "CNY"  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
+        # else:
+        #     return "CNY"
+        return "COIN"
 
 
 class PayeeHandler:

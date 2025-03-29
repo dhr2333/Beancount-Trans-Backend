@@ -25,18 +25,18 @@ def get_user_config(user=None):
     获取用户配置（带默认值回退）
     用法：config = get_user_config(request.user)
     """
-    print("user = ",user)
     if user and not user.is_anonymous:
         return FormatConfig.get_user_config(user)
     # 返回默认配置（用于未登录状态）
     return FormatConfig(
-        flag="*",
-        show_note=True,
-        show_tag=True,
-        show_time=True,
-        show_uuid=True,
-        show_status=True,
-        show_discount=True,
-        income_template=None,
-        commission_template=None
+        flag = "*",
+        show_note = True,
+        show_tag = True,
+        show_time = True,
+        show_uuid = True,
+        show_status = True,
+        show_discount = True,
+        income_template = None,
+        commission_template = None,
+        currency = 'CNY'
     )

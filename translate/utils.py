@@ -69,14 +69,15 @@ class FormatConfig:
     def __init__(
         self,
         flag = "*",
-        show_note=True,
-        show_tag=True,
-        show_status=True,
-        show_time=True,
-        show_uuid=True,
+        show_note = True,
+        show_tag = True,
+        show_status = True,
+        show_time = True,
+        show_uuid = True,
         show_discount = True,
-        income_template=None,
-        commission_template=None
+        income_template = None,
+        commission_template = None,
+        currency = 'CNY'
     ):
         self.flag = flag
         self.show_note = show_note
@@ -87,6 +88,7 @@ class FormatConfig:
         self.show_discount = show_discount
         self.income_template = income_template
         self.commission_template = commission_template
+        self.currency = currency
 
 
 class FormatData:
@@ -108,12 +110,18 @@ class FormatData:
             formatted_str += f"\n    uuid: \"{entry['uuid']}\""
         if config.show_status:
             formatted_str += f"\n    status: \"{entry['status']}\""
-        formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} CNY"
-        formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
-        if ignore_data.notes(entry):
-            formatted_str += f"{entry['actual_amount']} CNY"
+        if entry['currency'] == config.currency:
+            formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} {config.currency}"
+            formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
         else:
-            formatted_str += f"{entry['amount']} CNY"
+            formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} {entry['currency']} @@ {entry['amount']} {config.currency}"
+            formatted_str += f"\n    {entry['account']} {entry['account_sign']}" 
+        if ignore_data.notes(entry):
+            formatted_str += f"{entry['actual_amount']} {config.currency}"
+            # formatted_str += f"{entry['actual_amount']} CNY"
+        else:
+            formatted_str += f"{entry['amount']} {config.currency}"
+            # formatted_str += f"{entry['amount']} CNY"
  
         if config.show_discount:
             if ignore_data.notes(entry):
