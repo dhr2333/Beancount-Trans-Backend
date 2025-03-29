@@ -1,12 +1,12 @@
 # Register your models here.
 from django.contrib import admin
 
-from .models import Expense, Assets, Income
+from .models import Expense, Assets, Income, FormatConfig
 
 
 @admin.register(Expense)
 class ExpenseMapAdmin(admin.ModelAdmin):
-    list_display = ('key', 'payee', 'expend', 'owner')
+    list_display = ('key', 'payee', 'expend', 'owner','currency')
     list_per_page = 500
     list_filter = ['owner', 'payee']
     search_fields = ['key']
@@ -32,3 +32,9 @@ class IncomeMapAdmin(admin.ModelAdmin):
     list_per_page = 500
     list_filter = ['owner']
     search_fields = ['key']
+
+
+@admin.register(FormatConfig)
+class FormatConfigMapAdmin(admin.ModelAdmin):
+    list_display = ('owner', 'flag', 'show_note', 'show_tag', 'show_uuid', 'show_status', 'show_discount', 'income_template', 'commission_template', 'currency')
+    list_per_page = 500
