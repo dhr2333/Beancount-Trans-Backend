@@ -142,24 +142,27 @@ def preprocess_transaction_data(data, owner_id):
         installment_cycle : 
     """
     try:
+        expense_handler = ExpenseHandler(data)
+        account_handler = AccountHandler(data)
+        payee_handler = PayeeHandler(data)
         date = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
         time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%H:%M:%S")
         uuid = get_uuid(data)
         status = get_status(data)  # 支付状态
         amount = get_amount(data)  # 支付金额
-        payee = PayeeHandler(data).get_payee(data, owner_id)
+        payee = payee_handler.get_payee(data, owner_id)
         note = get_note(data)
         tag = get_tag(data)  # 标签
         balance = get_balance(data)  # 余额
         balance_date = (datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(data)
-        expense = ExpenseHandler(data).get_expense(data, owner_id)
-        account = AccountHandler(data).get_account(data, owner_id)
+        expense = expense_handler.get_expense(data, owner_id)
+        account = account_handler.get_account(data, owner_id)
         commission = get_commission(data)  # 利息
         installment_granularity = get_installment_granularity(data)  # 分期粒度（年/月/日）
         installment_cycle = get_installment_cycle(data)  # 分期频率
         discount = data['discount']
-        currency = ExpenseHandler(data).get_currency(data, owner_id)
+        currency = expense_handler.get_currency()
         if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
             return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note,"tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense,"expenditure_sign": expenditure_sign,"account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency}
@@ -239,6 +242,7 @@ class AccountHandler:
 
 class ExpenseHandler:
     def __init__(self, data):
+        self.selected_expense_instance = None
         self.key_list = None
         self.full_list = None
         self.type = None
@@ -247,6 +251,7 @@ class ExpenseHandler:
         self.bill = data['bill_identifier']
         self.balance = data['transaction_type']
         self.time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").time()
+        self.currency = "CNY"
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -264,45 +269,49 @@ class ExpenseHandler:
         self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
 
     def get_expense(self, data, ownerid):
-        self.initialize_key_list(data, ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
+        self.initialize_key_list(data, ownerid)
         self.initialize_type(data)
         actual_assets = get_default_assets(ownerid=ownerid)
         expend = self.expend
         income = self.income
         foodtime = self.time
-        matching_max_order = None
 
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
-            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
+            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
             max_order = None
-            expend_set = set()
-            for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
+            self.selected_expense_instance = None  # 重置选中的实例
+
+            for matching_key in matching_keys:
                 expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
                 if expense_instance:
+                    # 计算优先级
+                    expend_priority = expense_instance.expend.count(":") * 100
+                    payee_priority = 50 if expense_instance.payee else 0
+                    current_order = expend_priority + payee_priority
 
-                    # 通过Expenses及Payee计算优先级
-                    expend_instance_priority = expense_instance.expend.count(":") * 100
-                    payee_instance_priority = 50 if expense_instance.payee else 0
-                    matching_max_order = expend_instance_priority + payee_instance_priority
+                    # 处理Food时间
+                    modified_expend = expense_instance.expend
+                    if modified_expend == "Expenses:Food":
+                        if TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
+                            modified_expend += ":Breakfast"
+                        elif TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
+                            modified_expend += ":Lunch"
+                        elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
+                            modified_expend += ":Dinner"
 
-                    # 增加早餐中餐午餐判断
-                    if expense_instance.expend == "Expenses:Food" and TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
-                        expense_instance.expend += ":Breakfast"
-                    elif expense_instance.expend == "Expenses:Food" and TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
-                        expense_instance.expend += ":Lunch"
-                    elif expense_instance.expend == "Expenses:Food" and TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
-                        expense_instance.expend += ":Dinner"
+                    # 更新最高优先级实例
+                    if (max_order is None) or (current_order > max_order) or (current_order == max_order):
+                        max_order = current_order
+                        self.selected_expense_instance = expense_instance
+                        self.selected_expense_instance.expend = modified_expend  # 更新expend为可能修改后的值
 
-                    expend_set.add(expense_instance.expend)
-
-                # 更新max_order并设置expend
-                if matching_max_order > max_order if max_order is not None else True:
-                    max_order = matching_max_order
-                    expend = expense_instance.expend
-
-                elif matching_max_order == max_order:
-                    # 在优先级冲突时，更新为最后一个匹配到的expend
-                    expend = expense_instance.expend
+            # 确定最终结果
+            if self.selected_expense_instance:
+                expend = self.selected_expense_instance.expend
+                self.currency = self.selected_expense_instance.currency or "CNY"
+            else:
+                expend = self.expend
+                self.currency = "CNY"
 
             return expend
 
@@ -321,33 +330,8 @@ class ExpenseHandler:
                 expend = wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
         return expend
 
-    def get_currency(self,data, ownerid):
-        # self.initialize_key(data)
-        self.initialize_key_list(data, ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
-        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
-        for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
-            expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
-            if expense_instance:
-                if expense_instance.currency is None:
-                    return "CNY"
-                else:
-                    return expense_instance.currency
-            return "Test"
-        # self.initialize_type(data)
-        # key = self.key
-        # if key in self.key_list:
-        #     account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-        #     return account_instance.currency
-        # elif '(' in key and ')' in key:
-        #     digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
-        #     if digits in self.key_list:  # 判断提取到的数字是否在列表中
-        #         account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
-        #         return account_instance.currency
-        #     else:
-        #         return "CNY"  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
-        # else:
-        #     return "CNY"
-        return "COIN"
+    def get_currency(self):
+        return self.currency
 
 
 class PayeeHandler:
