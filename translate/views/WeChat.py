@@ -191,4 +191,8 @@ def wechatpay_get_commission(data):
     return data['notes'][4:]
 
 
+def wechatpay_get_discount(data):
+    return data['discount']
+
+
 IgnoreData.wechatpay_ignore = wechatpay_ignore

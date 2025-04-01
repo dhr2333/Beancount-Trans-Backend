@@ -11,7 +11,7 @@ from mydemo.models import BaseModel
 
 class Expense(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    payee = models.CharField(max_length=8, null=True, help_text="收款方")
+    payee = models.CharField(max_length=32, null=True, help_text="收款方")
     expend = models.CharField(max_length=64, default="Expenses:Other", null=False, help_text="支出账户")
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
     currency = models.CharField(

@@ -229,5 +229,9 @@ def alipay_installment_cycle(data):
     return 3  # TODO ，硬编码，需修改
 
 
+def alipay_get_discount(data):
+    return data['discount']
+
+
 IgnoreData.alipay_ignore = alipay_ignore
 IgnoreData.alipay_fund_ignore = alipay_fund_ignore
