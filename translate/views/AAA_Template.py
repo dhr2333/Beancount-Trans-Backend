@@ -137,6 +137,19 @@ def bank_type_get_tag(data):
     pass
 
 
+
+def bank_type_get_discount(data):
+    """接收字符串，返回折扣
+
+    Args:
+        data (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    return data['discount']
+
+
 def bank_type_get_commission(data):
     """用于计算利息
 

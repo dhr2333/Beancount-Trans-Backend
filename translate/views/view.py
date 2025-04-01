@@ -161,7 +161,7 @@ def preprocess_transaction_data(data, owner_id):
         commission = get_commission(data)  # 利息
         installment_granularity = get_installment_granularity(data)  # 分期粒度（年/月/日）
         installment_cycle = get_installment_cycle(data)  # 分期频率
-        discount = data['discount']
+        discount = get_discount(data)
         currency = expense_handler.get_currency()
         if data['transaction_type'] == "/":
             actual_amount = calculate_commission(amount, commission)
@@ -513,3 +513,10 @@ def get_installment_cycle(data):
         BILL_ALI: alipay_installment_cycle,
     }
     return get_attribute(data, installment_cycle_handlers)
+
+def get_discount(data):
+    tag_handlers = {
+        BILL_ALI: alipay_get_discount,
+        BILL_WECHAT: wechatpay_get_discount,
+    }
+    return get_attribute(data, tag_handlers)
