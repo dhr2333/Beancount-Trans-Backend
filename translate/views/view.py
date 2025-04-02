@@ -432,6 +432,10 @@ def get_shouzhi(data):
                     return high, loss
             elif "放款成功" in  data['transaction_status']:
                 return loss, high
+            elif "还款成功" in  data['transaction_status']:
+                return high, loss
+            elif ("买入" in data['commodity']) or ("公司" in data['counterparty']):  #TODO  # 目前没找到更合理的规律
+                return high,loss
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
         return loss, high
