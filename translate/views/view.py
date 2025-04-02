@@ -426,10 +426,12 @@ def get_shouzhi(data):
         if data['bill_identifier'] == BILL_ALI:
             if data['commodity'] == "信用卡还款":
                 return high, loss
-            if "花呗主动还款" or "花呗自动还款" in data['commodity']:
+            elif "亲情卡" in data['payment_method']:
                 return high, loss
-            if "亲情卡" in data['payment_method']:
-                return high, loss
+            elif (re.match(pattern["花呗自动还款"], data['commodity'])) or (re.match(pattern["花呗主动还款"], data['commodity'])):
+                    return high, loss
+            elif "放款成功" in  data['transaction_status']:
+                return loss, high
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
         return loss, high
