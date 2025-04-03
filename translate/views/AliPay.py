@@ -43,7 +43,7 @@ class AliPayInitStrategy(InitStrategy):
     
 
 def alipay_ignore(self, data):
-    if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款"]:
+    if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款", "芝麻免押下单成功"]:
         return True
     elif data['bill_identifier'] == BILL_ALI and  re.match(pattern["余额宝"], data['commodity']):
         return True
@@ -113,7 +113,18 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         account = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
         account = assets["ALIPAY"]
-    elif self.type == "信用卡还款" or re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):
+    # elif self.type == "信用卡还款" or re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):
+    #     result = data['payment_method']
+    #     for key in self.key_list:
+    #         if key in result:
+    #             account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+    #             account = account_instance.assets
+    #             return account
+    #         else:
+    #             account = ASSETS_OTHER
+    elif "亲情卡" in data['payment_method']:
+        account = OPENBALANCE
+    else:
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
@@ -122,10 +133,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
                 return account
             else:
                 account = ASSETS_OTHER
-    elif "亲情卡" in data['payment_method']:
-        account = OPENBALANCE
-    else:
-        account = ASSETS_OTHER  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
+        # account = ASSETS_OTHER  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
     return account
 
 

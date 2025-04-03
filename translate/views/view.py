@@ -108,7 +108,7 @@ def beancount_outfile(data, owner_id: int, args, config):
             if ignore_data.empty(entry):
                 continue
             if args["balance"] == "true":
-                instance = FormatData.balance_instance(entry, config=config)
+                instance = FormatData.balance_instance(entry)
             elif "分期" in row['payment_method']:
                 instance = FormatData.installment_instance(entry)
             else:
@@ -243,6 +243,7 @@ class AccountHandler:
 class ExpenseHandler:
     def __init__(self, data):
         self.selected_expense_instance = None
+        self.selected_income_instance = None
         self.key_list = None
         self.full_list = None
         self.type = None
@@ -317,10 +318,24 @@ class ExpenseHandler:
 
         elif self.balance == "收入":
             matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
+            max_order = None
+            self.selected_income_instance = None  # 重置选中的实例
+
             for matching_key in matching_keys:
                 income_instance = Income.objects.filter(owner_id=ownerid, key=matching_key).first()
-                if income_instance:  # 由于作者的收入来源较少，因此暂时不考虑收入来源的优先级问题，直接返回匹配到的第一个收入来源
-                    return income_instance.income
+                if income_instance:
+                    income_priority = income_instance.income.count(":") * 100
+                    # 更新最高优先级实例
+                    if (max_order is None) or (income_priority > max_order) or (income_priority == max_order):
+                        max_order = income_priority
+                        self.selected_income_instance = income_instance
+
+            # 确定最终结果
+            if self.selected_income_instance:
+                income = self.selected_income_instance.income
+            else:
+                income = self.income
+
             return income
 
         elif self.balance == "/" or self.balance == "不计收支":
@@ -411,10 +426,16 @@ def get_shouzhi(data):
         if data['bill_identifier'] == BILL_ALI:
             if data['commodity'] == "信用卡还款":
                 return high, loss
-            if "花呗主动还款" or "花呗自动还款" in data['commodity']:
+            elif "亲情卡" in data['payment_method']:
                 return high, loss
-            if "亲情卡" in data['payment_method']:
+            elif (re.match(pattern["花呗自动还款"], data['commodity'])) or (re.match(pattern["花呗主动还款"], data['commodity'])):
+                    return high, loss
+            elif "放款成功" in  data['transaction_status']:
+                return loss, high
+            elif "还款成功" in  data['transaction_status']:
                 return high, loss
+            elif ("买入" in data['commodity']) or ("公司" in data['counterparty']):  #TODO  # 目前没找到更合理的规律
+                return high,loss
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
         return loss, high
