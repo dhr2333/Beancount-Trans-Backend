@@ -108,7 +108,7 @@ def beancount_outfile(data, owner_id: int, args, config):
             if ignore_data.empty(entry):
                 continue
             if args["balance"] == "true":
-                instance = FormatData.balance_instance(entry, config=config)
+                instance = FormatData.balance_instance(entry)
             elif "分期" in row['payment_method']:
                 instance = FormatData.installment_instance(entry)
             else:
