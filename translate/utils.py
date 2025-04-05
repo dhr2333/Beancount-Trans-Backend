@@ -48,7 +48,8 @@ def get_default_assets(ownerid):
         "支付宝余额": "ALIPAY",
         "支付宝余额宝": "ALIFUND",
         "支付宝花呗": "HUABEI",
-        "支付宝借呗": "JIEBEI"
+        "支付宝借呗": "JIEBEI",
+        "支付宝备用金": "BEIYONGJIN"
     }
     actual_assets = {}
 
