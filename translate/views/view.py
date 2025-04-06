@@ -1,8 +1,11 @@
 import csv
 import os
 import datetime
+import spacy
+from typing import List
 from datetime import timedelta
 from django.contrib.auth import get_user_model
+from functools import lru_cache
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -22,6 +25,7 @@ from translate.views.CCB_Debit import *
 
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 class AnalyzeView(View):
     def post(self, request):
@@ -241,6 +245,15 @@ class AccountHandler:
 
 
 class ExpenseHandler:
+    _nlp = None
+    _candidate_docs = {}
+
+    @classmethod
+    def load_nlp(cls):
+        if cls._nlp is None:
+            cls._nlp = spacy.load("zh_core_web_md", exclude=["parser", "ner", "lemmatizer"])
+        return cls._nlp
+
     def __init__(self, data):
         self.selected_expense_instance = None
         self.selected_income_instance = None
@@ -253,6 +266,22 @@ class ExpenseHandler:
         self.balance = data['transaction_type']
         self.time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").time()
         self.currency = "CNY"
+        self.nlp = self.load_nlp()
+        self.enable_deepseek = False  # 快速切换开关
+
+    def _get_semantic_similarity(self, text: str, candidates: List[str]) -> str:
+        """ 核心语义相似度计算 """
+        doc = self.nlp(text)
+        similarities = {
+            candidate: doc.similarity(self.nlp(candidate))
+            for candidate in candidates
+        }
+        return max(similarities.items(), key=lambda x: x[1])[0]
+
+    def _deepseek_fallback(self, text: str, candidates: List[str]) -> str:
+        """ DeepSeek备用策略 """
+        # 这里留空，后续步骤填充
+        pass
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -281,6 +310,7 @@ class ExpenseHandler:
             matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
             max_order = None
             self.selected_expense_instance = None  # 重置选中的实例
+            conflict_candidates = []
 
             for matching_key in matching_keys:
                 expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
@@ -300,13 +330,37 @@ class ExpenseHandler:
                         elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
                             modified_expend += ":Dinner"
 
-                    # 更新最高优先级实例
-                    if (max_order is None) or (current_order > max_order) or (current_order == max_order):
-                        max_order = current_order
-                        self.selected_expense_instance = expense_instance
-                        self.selected_expense_instance.expend = modified_expend  # 更新expend为可能修改后的值
+                if (max_order is None) or (current_order > max_order):
+                    max_order = current_order
+                    self.selected_expense_instance = expense_instance
+                    self.selected_expense_instance.expend = modified_expend
+                elif current_order == max_order:
+                    conflict_candidates.append( (current_order, expense_instance) )
 
-            # 确定最终结果
+            # 只有出现优先级冲突时才处理
+            if len(conflict_candidates) > 1:
+                # logger.info(f"发现 {len(conflict_candidates)} 个优先级冲突候选: {conflict_candidates}, uuid={data['uuid']}")
+                max_order = max([p for p, _ in conflict_candidates])
+                candidates = [(p, inst) for p, inst in conflict_candidates if p == max_order]
+
+                # AI选择逻辑
+                transaction_text = f"商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
+                try:
+                    if self.enable_deepseek:
+                        selected_key = self._deepseek_fallback(transaction_text, [inst.key for p, inst in candidates])
+                    else:
+                        selected_key = self._get_semantic_similarity(transaction_text, [inst.key for p, inst in candidates])
+
+                    logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}, uuid={data['uuid'] if 'uuid' in data else 'N/A'}")
+                    selected_instance = next(inst for p, inst in candidates if inst.key == selected_key)
+                    self.selected_expense_instance = selected_instance
+                except Exception as e:
+                    logger.error(f"AI处理失败：{str(e)}")
+                    # 按优先级排序后取第一个
+                    sorted_candidates = sorted(candidates, key=lambda x: (-x[0], len(x[1].key)))
+                    self.selected_expense_instance = sorted_candidates[0][1]
+
+            # 最终结果处理
             if self.selected_expense_instance:
                 expend = self.selected_expense_instance.expend
                 self.currency = self.selected_expense_instance.currency or "CNY"

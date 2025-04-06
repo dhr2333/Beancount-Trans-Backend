@@ -9,6 +9,7 @@ RUN pip install --upgrade pip
 RUN pip install setuptools wheel
 RUN pip install uwsgi
 RUN pip install --default-timeout=600 -r requirements.txt
+RUN python -m spacy download zh_core_web_md
 
 # RUN chmod +x /code/beancount-trans/bin/wait-for-it.sh /code/beancount-trans/bin/docker_start.sh
 # ENTRYPOINT ["/code/beancount-trans/bin/wait-for-it.sh","beancount-trans-mysql:3306","--","/code/beancount-trans/bin/docker_start.sh"]
