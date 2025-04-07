@@ -48,11 +48,11 @@ class ExpenseViewSet(ModelViewSet):
         else:
             return super().create(request, *args, **kwargs)  # 如果不是列表，则调用父类方法
 
-    @action(methods=['get'], detail=False)
-    def latest(self, request):
-        expense = Expense.objects.latest('id')
-        serializer = self.get_serializer(expense)
-        return Response(serializer.data)
+    # @action(methods=['get'], detail=False)
+    # def latest(self, request):
+    #     expense = Expense.objects.latest('id')
+    #     serializer = self.get_serializer(expense)
+    #     return Response(serializer.data)
 
     def perform_create(self, serializer):
         if self.request.user.is_anonymous:
@@ -64,9 +64,13 @@ class ExpenseViewSet(ModelViewSet):
 
     def perform_update(self, serializer):
         instance = self.get_object()
-        if Expense.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exclude(
+        key = self.request.data.get('key', instance.key)
+        if Expense.objects.filter(owner_id=self.request.user, key=key).exclude(
                 id=instance.id).exists():
             raise ValidationError("Account already exists.")
+        # if Expense.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exclude(
+        #         id=instance.id).exists():
+        #     raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
     
 

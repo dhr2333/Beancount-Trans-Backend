@@ -8,16 +8,21 @@ class ExpenseSerializer(serializers.HyperlinkedModelSerializer):
     payee = serializers.CharField(allow_blank=True, allow_null=True)
     currency = serializers.CharField(allow_blank=True, allow_null=True)
     owner = serializers.ReadOnlyField(source='owner.username')
+    enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     # mobile = serializers.ReadOnlyField(source='owner.mobile')
 
     class Meta:
         model = Expense
-        fields = ['id', 'url', 'owner', 'key', 'payee', 'expend', 'currency']
+        fields = ['id', 'url', 'owner', 'key', 'payee', 'expend', 'currency', 'enable']
+        extra_kwargs = {
+            'key': {'required': False}  # 允许更新时不传 key
+        }
 
 
 class AssetsSerializer(serializers.HyperlinkedModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.username')
+    enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     # mobile = serializers.ReadOnlyField(source='owner.mobile')
 
@@ -28,6 +33,7 @@ class AssetsSerializer(serializers.HyperlinkedModelSerializer):
 
 class IncomeSerializer(serializers.HyperlinkedModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.username')
+    enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     # mobile = serializers.ReadOnlyField(source='owner.mobile')
 

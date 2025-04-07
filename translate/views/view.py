@@ -291,11 +291,11 @@ class ExpenseHandler:
 
     def initialize_key_list(self, data, ownerid):
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
-            self.key_list = Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+            self.key_list = Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         elif self.balance == "收入":
-            self.key_list = Income.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+            self.key_list = Income.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         elif self.balance == "/" or self.balance == "不计收支":
-            self.key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
+            self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
 
     def get_expense(self, data, ownerid):

@@ -6,6 +6,7 @@ collectstatic
 /conf/develop.py
 logs/*.log
 static
+requirements.txt.bak
 
 # __pycache
 __pycache__/
