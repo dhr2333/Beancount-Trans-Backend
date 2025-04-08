@@ -192,8 +192,8 @@ class AccountHandler:
             self.type = wechatpay_get_type(data)
 
     def initialize_key_list(self, ownerid):
-        self.key_list = Assets.objects.filter(owner_id=ownerid).values_list('key', flat=True)
-        self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
+        self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
+        self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
 
     def initialize_key(self, data):
         if self.bill == BILL_ALI:
@@ -296,7 +296,7 @@ class ExpenseHandler:
             self.key_list = Income.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         elif self.balance == "/" or self.balance == "不计收支":
             self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
-        self.full_list = Assets.objects.filter(owner_id=ownerid).values_list('full', flat=True)
+        self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
 
     def get_expense(self, data, ownerid):
         self.initialize_key_list(data, ownerid)
@@ -313,7 +313,7 @@ class ExpenseHandler:
             conflict_candidates = []
 
             for matching_key in matching_keys:
-                expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
+                expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
                 if expense_instance:
                     # 计算优先级
                     expend_priority = expense_instance.expend.count(":") * 100
@@ -376,7 +376,7 @@ class ExpenseHandler:
             self.selected_income_instance = None  # 重置选中的实例
 
             for matching_key in matching_keys:
-                income_instance = Income.objects.filter(owner_id=ownerid, key=matching_key).first()
+                income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
                 if income_instance:
                     income_priority = income_instance.income.count(":") * 100
                     # 更新最高优先级实例
@@ -411,7 +411,7 @@ class PayeeHandler:
         self.bill = data['bill_identifier']
 
     def get_payee(self, data, ownerid):
-        self.key_list = list(Expense.objects.filter(owner_id=ownerid).values_list('key', flat=True))
+        self.key_list = list(Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True))
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/" and data['transaction_category'] == "信用卡还款":
             return data['counterparty']
         elif data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
@@ -432,7 +432,7 @@ class PayeeHandler:
         matching_keys = [k for k in self.key_list if k in self.payee or k in self.notes]  # 通过列表推导式获取所有匹配的key形成新的列表
         max_order = None
         for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
-            expense_instance = Expense.objects.filter(owner_id=ownerid, key=matching_key).first()
+            expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
             if expense_instance:  # 通过Expenses及Payee计算优先级
                 expend_instance_priority = expense_instance.expend.count(":") * 100
                 payee_instance_priority = 50 if expense_instance.payee else 0

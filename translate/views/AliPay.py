@@ -58,7 +58,7 @@ def alipay_fund_ignore(self, data):
 def alipay_get_expense_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
-        account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+        account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
     elif key == "":
         return assets["ALIPAY"]
@@ -76,14 +76,14 @@ def alipay_get_expense_account(self, assets, ownerid):
 def alipay_get_income_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
-        account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+        account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
     elif key == "":
         return assets["ALIPAY"]
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
         if digits in self.key_list:  # 判断提取到的数字是否在列表中
-            account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
+            account_instance = Assets.objects.filter(key=digits, owner_id=ownerid, enable=True).first()
             return account_instance.assets
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
@@ -102,7 +102,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
             else:
@@ -128,7 +128,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
             else:
@@ -152,7 +152,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
         expend = ASSETS_OTHER
@@ -162,7 +162,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         result = data['counterparty'] + "储蓄卡"  # 例如"宁波银行储蓄卡"
         for full in self.full_list:
             if result in full:
-                expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
     elif re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
@@ -175,14 +175,14 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         result = data['counterparty'] + "信用卡"  # 例如"招商银行信用卡"
         for full in self.full_list:
             if result in full:
-                expend_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
     elif re.match(pattern["基金"], self.type):
         result = data['commodity'][data['commodity'].index("卖出至") + len("卖出至"):]
         for key in self.key_list:
             if result in key:
-                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
         expend = ASSETS_OTHER

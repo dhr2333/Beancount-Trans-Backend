@@ -7,6 +7,7 @@ collectstatic
 logs/*.log
 static
 requirements.txt.bak
+zh_core_web_md-3.8.0-py3-none-any.whl
 
 # __pycache
 __pycache__/

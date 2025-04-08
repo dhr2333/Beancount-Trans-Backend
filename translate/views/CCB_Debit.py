@@ -179,7 +179,7 @@ def ccb_debit_get_account(self, ownerid):
     """
     key = self.key
     if key in self.full_list:
-        account_instance = Assets.objects.filter(full=key, owner_id=ownerid).first()
+        account_instance = Assets.objects.filter(full=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
 
 

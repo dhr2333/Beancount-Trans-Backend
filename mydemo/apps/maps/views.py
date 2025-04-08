@@ -111,7 +111,8 @@ class AssetsViewSet(ModelViewSet):
 
     def perform_update(self, serializer):
         instance = self.get_object()
-        if Assets.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exclude(
+        key = self.request.data.get('key', instance.key)
+        if Assets.objects.filter(owner_id=self.request.user, key=key).exclude(
                 id=instance.id).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
@@ -155,7 +156,8 @@ class IncomeViewSet(ModelViewSet):
 
     def perform_update(self, serializer):
         instance = self.get_object()
-        if Income.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exclude(
+        key = self.request.data.get('key', instance.key)
+        if Income.objects.filter(owner_id=self.request.user, key=key).exclude(
                 id=instance.id).exists():
             raise ValidationError("Accountalready exists.")
         serializer.save(owner=self.request.user)

@@ -46,7 +46,7 @@ def wechatpay_ignore(self, data):
 def wechatpay_get_expense_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
-        account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+        account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
@@ -67,7 +67,7 @@ def wechatpay_get_income_account(self, assets, ownerid):
             key = match.group(1)
 
     if key in self.key_list:  # 6428
-        account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+        account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
 
 
@@ -77,7 +77,7 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
     if self.type == "零钱提现":
         for key in self.key_list:
             if key in data['counterparty']:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
         account = ASSETS_OTHER
@@ -88,7 +88,7 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         result = data['transaction_category'][index + 1:]  # 取来自之后的所有数据，例如"建设银行(5522)"
         for key in self.key_list:
             if key in result:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
         account = ASSETS_OTHER
@@ -98,7 +98,7 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         result = data['payment_method']
         for key in self.key_list:
             if key in result:
-                account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
             else:
@@ -107,7 +107,7 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         result = data['payment_method'] + "储蓄卡"  # 目前无法区分同一家银行的多张储蓄卡
         for full in self.full_list:
             if result in full:
-                account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
     return account
@@ -121,7 +121,7 @@ def wechatpay_get_balance_expense(self, data, assets, ownerid):
     elif self.type == "零钱充值":
         for key in self.key_list:
             if key in data['counterparty']:
-                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
         expend = ASSETS_OTHER
@@ -132,7 +132,7 @@ def wechatpay_get_balance_expense(self, data, assets, ownerid):
         result = data['transaction_category'][index + 2:]  # 取来自之后的所有数据，例如"建设银行(5522)"
         for key in self.key_list:
             if key in result:
-                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
+                expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
                 expend = expend_instance.assets
                 return expend
         expend = ASSETS_OTHER
@@ -140,7 +140,7 @@ def wechatpay_get_balance_expense(self, data, assets, ownerid):
         result = data['counterparty'][:data['counterparty'].index("还款")]  # 例如"华夏银行信用卡"
         for full in self.full_list:
             if result in full:
-                account_instance = Assets.objects.filter(full=full, owner_id=ownerid).first()
+                account_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
                 account = account_instance.assets
                 return account
     elif self.type == "购买理财通":

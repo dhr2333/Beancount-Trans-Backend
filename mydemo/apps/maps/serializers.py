@@ -28,7 +28,7 @@ class AssetsSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Assets
-        fields = ['id', 'url', 'owner', 'key', 'full', 'assets']
+        fields = ['id', 'url', 'owner', 'key', 'full', 'assets', 'enable']
 
 
 class IncomeSerializer(serializers.HyperlinkedModelSerializer):
@@ -39,7 +39,7 @@ class IncomeSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = Income
-        fields = ['id', 'url', 'owner', 'key', 'payer', 'income']
+        fields = ['id', 'url', 'owner', 'key', 'payer', 'income', 'enable']
 
 
 User = get_user_model()
