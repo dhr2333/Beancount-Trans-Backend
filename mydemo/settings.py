@@ -274,7 +274,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
         'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
         # 'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',

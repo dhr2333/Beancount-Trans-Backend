@@ -1,2 +1,63 @@
-collectstatic
+# 通用忽略规则
+**/.git
+**/.gitignore
+**/.vscode
+**/.idea
+**/__pycache__
+**/*.py[cod]
+**/*.swp
+**/*.bak
+**/*~*
+**/.DS_Store
+**/Thumbs.db
+**/env
+**/venv
+**/.env
+
+# 项目特定忽略规则
+# 测试相关
+/tests/
+/htmlcov/
+/coverage.xml
+
+# 日志文件
+# /logs/
+
+# 开发配置
+/conf/develop.py
+/conf/__pycache__/
+
+# 备份文件
+*.tar
+*.bak
+requirements.txt.bak
+
+# 数据库相关
+/fixtures/
+
+# 构建产物
+/collectstatic/
+/static/
+/dist/
+/build/
+*.egg-info/
 beancount-trans-backend.tar
+
+# 文档文件
+/docs/
+
+# 临时文件
+/uwsgi.pid
+
+# CI/CD 文件
+/Jenkinsfile
+
+# Python 环境管理
+/Pipfile
+/Pipfile.lock
+/pyproject.toml
+
+
+# 其他 Dockerfiles
+/Dockerfile-Mysql
+/Dockerfile-Postgres
