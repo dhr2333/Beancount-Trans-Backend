@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/bin/sh
 NAME="beancount-trans" # Name of the application
 DJANGODIR=/code/beancount-trans # Django project directory
+#/usr/bin/env bash
 #USER=root # the user to run as
 #GROUP=root # the group to run as
 #NUM_WORKERS=1 # how many worker processes should Gunicorn spawn
@@ -20,7 +21,7 @@ export PYTHONPATH=$DJANGODIR:$PYTHONPATH
 python manage.py makemigrations && \
 python manage.py migrate && \
 python manage.py collectstatic --noinput && \
-uwsgi --ini conf/uwsgi.ini
+/root/.local/bin/uwsgi --ini conf/uwsgi.ini
 #   && 
 #  python manage.py runserver 0.0.0.0:8000
 # Start your Django Unicorn

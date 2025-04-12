@@ -55,6 +55,8 @@ def wechatpay_get_expense_account(self, assets, ownerid):
             return account_instance.assets
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
+    else:
+        return ASSETS_OTHER
 
 
 def wechatpay_get_income_account(self, assets, ownerid):
@@ -169,9 +171,6 @@ def wechatpay_get_amount(data):
 
 
 def wechatpay_get_note(data):
-    # if data['transaction_category'] == "信用卡还款" and data['transaction_type'] == "/":
-        # return data['counterparty']
-        # return data['transaction_category']
     if data['transaction_type'] == "/":  # 收支为/时，备注为交易类型
         return data['transaction_category']
     return data['commodity']
