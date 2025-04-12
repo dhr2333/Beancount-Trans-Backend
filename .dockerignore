@@ -33,7 +33,7 @@
 requirements.txt.bak
 
 # 数据库相关
-/fixtures/
+# /fixtures/
 
 # 构建产物
 /collectstatic/
