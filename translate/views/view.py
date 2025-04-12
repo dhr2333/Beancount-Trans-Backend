@@ -254,7 +254,7 @@ class ExpenseHandler:
             cls._nlp = spacy.load("zh_core_web_md", exclude=["parser", "ner", "lemmatizer"])
         return cls._nlp
 
-    def __init__(self, data):
+    def __init__(self, data): #TODO
         self.selected_expense_instance = None
         self.selected_income_instance = None
         self.key_list = None
@@ -272,10 +272,12 @@ class ExpenseHandler:
     def _get_semantic_similarity(self, text: str, candidates: List[str]) -> str:
         """ 核心语义相似度计算 """
         doc = self.nlp(text)
+        # print(doc)
         similarities = {
             candidate: doc.similarity(self.nlp(candidate))
             for candidate in candidates
         }
+        # print(similarities)
         return max(similarities.items(), key=lambda x: x[1])[0]
 
     def _deepseek_fallback(self, text: str, candidates: List[str]) -> str:
@@ -290,7 +292,7 @@ class ExpenseHandler:
             self.type = wechatpay_get_type(data)
 
     def initialize_key_list(self, data, ownerid):
-        if self.balance == "支出" or "亲情卡" in data['payment_method']:
+        if self.balance == "支出" or "亲情卡" in data['payment_method']: #TODO
             self.key_list = Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         elif self.balance == "收入":
             self.key_list = Income.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
@@ -306,7 +308,7 @@ class ExpenseHandler:
         income = self.income
         foodtime = self.time
 
-        if self.balance == "支出" or "亲情卡" in data['payment_method']:
+        if self.balance == "支出" or "亲情卡" in data['payment_method']: #TODO
             matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
             max_order = None
             self.selected_expense_instance = None  # 重置选中的实例
@@ -320,31 +322,18 @@ class ExpenseHandler:
                     payee_priority = 50 if expense_instance.payee else 0
                     current_order = expend_priority + payee_priority
 
-                    # 处理Food时间
-                    modified_expend = expense_instance.expend
-                    if modified_expend == "Expenses:Food":
-                        if TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
-                            modified_expend += ":Breakfast"
-                        elif TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
-                            modified_expend += ":Lunch"
-                        elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
-                            modified_expend += ":Dinner"
-
                 if (max_order is None) or (current_order > max_order):
                     max_order = current_order
                     self.selected_expense_instance = expense_instance
-                    self.selected_expense_instance.expend = modified_expend
+                    self.selected_expense_instance.expend = expense_instance.expend
                 elif current_order == max_order:
                     conflict_candidates.append( (current_order, expense_instance) )
 
-            # 只有出现优先级冲突时才处理
+            # 只有出现优先级冲突时才使用AI辅助决策
             if len(conflict_candidates) > 1:
-                # logger.info(f"发现 {len(conflict_candidates)} 个优先级冲突候选: {conflict_candidates}, uuid={data['uuid']}")
                 max_order = max([p for p, _ in conflict_candidates])
                 candidates = [(p, inst) for p, inst in conflict_candidates if p == max_order]
-
-                # AI选择逻辑
-                transaction_text = f"商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
+                transaction_text = f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
                 try:
                     if self.enable_deepseek:
                         selected_key = self._deepseek_fallback(transaction_text, [inst.key for p, inst in candidates])
@@ -360,9 +349,16 @@ class ExpenseHandler:
                     sorted_candidates = sorted(candidates, key=lambda x: (-x[0], len(x[1].key)))
                     self.selected_expense_instance = sorted_candidates[0][1]
 
-            # 最终结果处理
+            # 最终结果处理 #TODO
             if self.selected_expense_instance:
                 expend = self.selected_expense_instance.expend
+                if expend == "Expenses:Food":
+                    if TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
+                        expend += ":Breakfast"
+                    elif TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
+                        expend += ":Lunch"
+                    elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
+                        expend += ":Dinner"
                 self.currency = self.selected_expense_instance.currency or "CNY"
             else:
                 expend = self.expend
@@ -410,7 +406,7 @@ class PayeeHandler:
         self.notes = data['commodity']
         self.bill = data['bill_identifier']
 
-    def get_payee(self, data, ownerid):
+    def get_payee(self, data, ownerid): #TODO
         self.key_list = list(Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True))
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/" and data['transaction_category'] == "信用卡还款":
             return data['counterparty']
@@ -467,7 +463,7 @@ def calculate_commission(total, commission):
     return amount
 
 
-def get_shouzhi(data):
+def get_shouzhi(data): #TODO
     shouzhi = data['transaction_type']
     high = ""
     loss = "-"

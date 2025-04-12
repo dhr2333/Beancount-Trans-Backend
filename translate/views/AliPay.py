@@ -113,15 +113,6 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         account = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
         account = assets["ALIPAY"]
-    # elif self.type == "信用卡还款" or re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):
-    #     result = data['payment_method']
-    #     for key in self.key_list:
-    #         if key in result:
-    #             account_instance = Assets.objects.filter(key=key, owner_id=ownerid).first()
-    #             account = account_instance.assets
-    #             return account
-    #         else:
-    #             account = ASSETS_OTHER
     elif "亲情卡" in data['payment_method']:
         account = OPENBALANCE
     else:
@@ -234,11 +225,11 @@ def alipay_get_commission(data):
 
 
 def alipay_installment_granularity(data):
-    return "MONTHLY"  # 默认以月进行支付
+    return "MONTHLY"  # 默认以月进行支付 #TODO
 
 
 def alipay_installment_cycle(data):
-    return 3  # TODO ，硬编码，需修改
+    return 3  #TODO ，硬编码，需修改
 
 
 def alipay_get_discount(data):
