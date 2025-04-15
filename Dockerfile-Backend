@@ -29,7 +29,7 @@ RUN apk add --no-cache libstdc++
 COPY --from=builder /root/.local /root/.local
 COPY bin ./bin
 COPY conf ./conf
-COPY logs/beancount-trans.log ./logs/beancount-trans.log
+COPY logs ./logs
 COPY translate ./translate
 COPY manage.py ./manage.py
 # COPY static ./static
