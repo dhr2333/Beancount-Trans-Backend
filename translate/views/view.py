@@ -42,6 +42,8 @@ class AnalyzeView(View):
             temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
         except DecryptionError as e:
             return JsonResponse({'error': str(e)}, status=400)
+        except UnsupportedFileTypeError as e:
+            return JsonResponse({'error': str(e)}, status=415)
 
         if args['isCSVOnly'] == "true":
             response = HttpResponse(content_type='text/csv')
@@ -58,7 +60,7 @@ class AnalyzeView(View):
                 list = get_initials_bill(bill=csv.reader(csvfile))
             format_list = beancount_outfile(list, owner_id, args, config)
         except UnsupportedFileTypeError as e:
-            return JsonResponse({'error': str(e)}, status=400)
+            return JsonResponse({'error': str(e)}, status=415)
         finally:
             if 'temp' in locals():
                 os.unlink(temp.name)
@@ -87,7 +89,7 @@ def get_initials_bill(bill):
         if isinstance(first_line, str) and identifier in first_line:
             return parser_function.init(bill, card_number=card_number, year=year)
     
-    raise UnsupportedFileTypeError("当前账单格式不被支持，无法处理。")
+    raise UnsupportedFileTypeError("当前账单不支持")
 
 
 def should_ignore_row(row, ignore_data, args):

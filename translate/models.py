@@ -121,7 +121,19 @@ class FormatConfig(models.Model):
 
     @classmethod
     def get_user_config(cls, user):
-        """获取或创建用户配置（带默认值）"""
+        """获取或创建用户配置（带默认值），未登录时使用用户1的配置"""
+        # 处理未登录用户
+        if user is None or not user.is_authenticated:
+            # 获取默认用户（需确保用户ID=1存在）
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+
+            try:
+                user = User.objects.get(id=1)
+            except User.DoesNotExist:
+                raise ValueError("默认用户（ID=1）不存在，请先创建该用户")
+
+        # 获取或创建配置
         return cls.objects.get_or_create(
             owner=user,
             defaults={
