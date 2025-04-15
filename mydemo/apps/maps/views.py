@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import FormatConfigSerializer
 from rest_framework import status
 
+# from mydemo.utils.tools import get_user_config
 from translate.models import Expense, Assets, Income, FormatConfig
 from .filters import CurrentUserFilterBackend
 from .permissions import IsOwnerOrAdminReadWriteOnly
@@ -38,6 +39,9 @@ class ExpenseViewSet(ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def create(self, request, *args, **kwargs):  # 重写create方法，实现批量创建
+        if self.request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
         serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
         serializer.is_valid(raise_exception=True)
 
@@ -68,23 +72,10 @@ class ExpenseViewSet(ModelViewSet):
         if Expense.objects.filter(owner_id=self.request.user, key=key).exclude(
                 id=instance.id).exists():
             raise ValidationError("Account already exists.")
-        # if Expense.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exclude(
-        #         id=instance.id).exists():
-        #     raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
-    
+
 
 class AssetsViewSet(ModelViewSet):
-    """
-    list:
-    返回资产映射列表数据
-    retrieve:
-    返回资产映射详情数据
-    latest:
-    返回最新的资产映射数据
-    read:
-    修改资产映射
-    """
     queryset = Assets.objects.all()
     serializer_class = AssetsSerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
@@ -94,6 +85,9 @@ class AssetsViewSet(ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def create(self, request, *args, **kwargs):
+        if self.request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
         serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
         serializer.is_valid(raise_exception=True)
 
@@ -105,6 +99,9 @@ class AssetsViewSet(ModelViewSet):
             return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
+        if self.request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
         if Assets.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
@@ -119,17 +116,6 @@ class AssetsViewSet(ModelViewSet):
 
 
 class IncomeViewSet(ModelViewSet):
-    """
-    list:
-    返回收入映射列表数据
-    retrieve:
-    返回收入映射详情数据
-    latest:
-    返回最新的收入映射数据
-    read:
-    修改收入映射
-    """
-
     queryset = Income.objects.all()
     serializer_class = IncomeSerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
@@ -139,6 +125,9 @@ class IncomeViewSet(ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def create(self, request, *args, **kwargs):
+        if self.request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
         serializer = self.get_serializer(data=request.data, many=isinstance(request.data, list))
         serializer.is_valid(raise_exception=True)
 
@@ -150,6 +139,9 @@ class IncomeViewSet(ModelViewSet):
             return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
+        if self.request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
         if Income.objects.filter(owner_id=self.request.user, key=self.request.data["key"]).exists():
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
@@ -162,10 +154,17 @@ class IncomeViewSet(ModelViewSet):
             raise ValidationError("Accountalready exists.")
         serializer.save(owner=self.request.user)
 
+from rest_framework.permissions import AllowAny
 
 class UserConfigAPI(APIView):
     """用户个人配置接口"""
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        """动态权限控制"""
+        if self.request.method == 'GET':  # GET请求允许匿名访问
+            return [AllowAny()]
+        else:  # PUT等写操作需要认证和所有权验证
+            return [IsAuthenticated(), IsOwnerOrAdminReadWriteOnly()]
+    permission_classes = [IsAuthenticated, IsOwnerOrAdminReadWriteOnly]
 
     def get(self, request):
         """获取当前用户配置"""
@@ -181,7 +180,7 @@ class UserConfigAPI(APIView):
             data=request.data,
             partial=True  # 允许部分更新
         )
- 
+
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
