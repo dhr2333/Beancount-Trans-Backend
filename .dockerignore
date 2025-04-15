@@ -46,7 +46,7 @@ beancount-trans-backend.tar
 # 文档文件
 /docs/
 
-# 临时文件
+# 临
 /uwsgi.pid
 
 # CI/CD 文件
@@ -59,5 +59,5 @@ beancount-trans-backend.tar
 
 
 # 其他 Dockerfiles
-/Dockerfile-Mysql
-/Dockerfile-Postgres
+# /Dockerfile-Mysql
+# /Dockerfile-Postgres
