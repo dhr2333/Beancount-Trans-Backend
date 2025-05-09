@@ -42,7 +42,7 @@ class CmbCreditInitStrategy(InitStrategy):
 def cmb_credit_ignore(self, data, cmb_credit_ignore):
     if data['bill_identifier'] == BILL_CMB_CREDIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
         return cmb_credit_ignore == "true"
-        
+
 
 def cmb_credit_pdf_convert_to_csv(content):
     """接收字符串，处理为需要的格式，返回字符串

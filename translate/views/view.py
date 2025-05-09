@@ -2,14 +2,21 @@ import csv
 import os
 import datetime
 import spacy
-from typing import List
+import torch
+import logging
+import requests
+
+from typing import List, Dict, Tuple, Optional
 from datetime import timedelta
-from django.contrib.auth import get_user_model
+from datetime import datetime
 from functools import lru_cache
+from transformers import BertTokenizer, BertModel
+from openai import OpenAI
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
+from django.contrib.auth import get_user_model
 from mydemo.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from mydemo.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file, read_and_write
 from mydemo.utils.token import get_token_user_id
@@ -36,7 +43,7 @@ class AnalyzeView(View):
 
         if not uploaded_file:
             return JsonResponse({'error': 'No file uploaded'}, status=400)
-        
+
         try:
             csv_file = file_convert_to_csv(uploaded_file, args["password"])  # 对文件格式进行判断并转换
             temp, encoding = create_temporary_file(csv_file)  # 创建临时文件并获取文件编码
@@ -54,13 +61,15 @@ class AnalyzeView(View):
             # 关闭并删除临时文件
             os.unlink(temp.name)
             return response
-        
+
         try:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 list = get_initials_bill(bill=csv.reader(csvfile))
             format_list = beancount_outfile(list, owner_id, args, config)
         except UnsupportedFileTypeError as e:
             return JsonResponse({'error': str(e)}, status=415)
+        except ValueError as e:
+            return JsonResponse({'error': str(e)}, status=400)
         finally:
             if 'temp' in locals():
                 os.unlink(temp.name)
@@ -75,7 +84,7 @@ def get_initials_bill(bill):
     first_line = next(bill)[0]
     year = first_line[:4]
     card_number = card_number_get_key(first_line)
-    
+
     strategies = [
         (alipay_csvfile_identifier, AliPayInitStrategy()),
         (wechat_csvfile_identifier, WeChatInitStrategy()),
@@ -88,7 +97,7 @@ def get_initials_bill(bill):
     for identifier, parser_function in strategies:
         if isinstance(first_line, str) and identifier in first_line:
             return parser_function.init(bill, card_number=card_number, year=year)
-    
+
     raise UnsupportedFileTypeError("当前账单不支持")
 
 
@@ -99,7 +108,7 @@ def should_ignore_row(row, ignore_data, args):
             or ignore_data.cmb_credit_ignore(row, args.get("cmb_credit_ignore"))
             or ignore_data.boc_debit_ignore(row, args.get("boc_debit_ignore"))
             )
-    
+
 
 def beancount_outfile(data, owner_id: int, args, config):
     ignore_data = IgnoreData(None)
@@ -110,7 +119,7 @@ def beancount_outfile(data, owner_id: int, args, config):
         if should_ignore_row(row, ignore_data, args):
             continue
         try:
-            entry = preprocess_transaction_data(row, owner_id)
+            entry = preprocess_transaction_data(row, owner_id, config=config)
             if ignore_data.empty(entry):
                 continue
             if args["balance"] == "true":
@@ -123,12 +132,13 @@ def beancount_outfile(data, owner_id: int, args, config):
             if args["write"] == "true":
                 write_entry_to_file(instance)
         except ValueError as e:
-            instance = str(e) + "\n\n"
-            instance_list.append(instance)
+            raise e
+            # instance = str(e) + "\n\n"
+            # instance_list.append(instance)
     return instance_list
 
 
-def preprocess_transaction_data(data, owner_id):
+def preprocess_transaction_data(data, owner_id, config=FormatConfig()):
     """
         date : 日期         2023-04-28
         time : 时间         09:03:00
@@ -148,7 +158,7 @@ def preprocess_transaction_data(data, owner_id):
         installment_cycle : 
     """
     try:
-        expense_handler = ExpenseHandler(data)
+        expense_handler = ExpenseHandler(data, model=config.ai_model,api_key=config.deepseek_apikey)
         account_handler = AccountHandler(data)
         payee_handler = PayeeHandler(data)
         date = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
@@ -245,18 +255,100 @@ class AccountHandler:
             return ccb_debit_get_account(self, ownerid)
         return account
 
+class SimilarityModel:
+    """抽象基类，定义相似度计算接口"""
+    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+        raise NotImplementedError
 
-class ExpenseHandler:
-    _nlp = None
-    _candidate_docs = {}
+class BertSimilarity(SimilarityModel):
+    """BERT相似度计算实现"""
+    _tokenizer = None
+    _model = None
+    _embedding_cache: Dict[str, torch.Tensor] = {}
 
     @classmethod
-    def load_nlp(cls):
+    def load_model(cls):
+        if cls._model is None:
+            cls._tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+            cls._model = BertModel.from_pretrained('bert-base-chinese')
+            cls._model.eval()
+        return cls._tokenizer, cls._model
+
+    def _get_embedding(self, text: str) -> torch.Tensor:
+        """获取文本嵌入，带缓存"""
+        if text in self._embedding_cache:
+            return self._embedding_cache[text]
+
+        tokenizer, model = self.load_model()
+        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=64)
+        with torch.no_grad():
+            outputs = model(**inputs)
+        embedding = outputs.last_hidden_state[:,0,:]
+        self._embedding_cache[text] = embedding
+        return embedding
+
+    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+        text_embed = self._get_embedding(text)
+        similarities = {}
+
+        for candidate in candidates:
+            cand_embed = self._get_embedding(candidate)
+            similarity = torch.cosine_similarity(text_embed, cand_embed, dim=1)
+            similarities[candidate] = similarity.item()
+
+        return max(similarities.items(), key=lambda x: x[1])[0]
+
+class SpacySimilarity(SimilarityModel):
+    """spaCy相似度计算实现"""
+    _nlp = None
+
+    @classmethod
+    def load_model(cls):
         if cls._nlp is None:
             cls._nlp = spacy.load("zh_core_web_md", exclude=["parser", "ner", "lemmatizer"])
         return cls._nlp
 
-    def __init__(self, data): #TODO
+    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+        nlp = self.load_model()
+        doc = nlp(text)
+        similarities = {
+            candidate: doc.similarity(nlp(candidate))
+            for candidate in candidates
+        }
+        return max(similarities.items(), key=lambda x: x[1])[0]
+
+class DeepSeekSimilarity(SimilarityModel):
+    """DeepSeek API相似度计算实现"""
+    def __init__(self, api_key: str, enable_realtime: bool = True):
+        self.api_key = api_key
+        self.enable_realtime = enable_realtime
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+        client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.deepseek.com"
+        )
+
+        prompt = f"""请从以下候选列表中选择最匹配文本的条目：
+        文本内容：{text}
+        候选列表：{", ".join(candidates)}
+        只需返回最匹配的候选值，不要任何解释"""
+
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            result = response.choices[0].message.content.strip()
+            return result if result in candidates else candidates[0]
+        except Exception as e:
+            raise ValueError(f"DeepSeek调用失败，请检查API密钥是否正确")
+            # return candidates[0]
+
+class ExpenseHandler:
+    def __init__(self, data: Dict, model: str, api_key: Optional[str] = None):
         self.selected_expense_instance = None
         self.selected_income_instance = None
         self.key_list = None
@@ -268,134 +360,128 @@ class ExpenseHandler:
         self.balance = data['transaction_type']
         self.time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").time()
         self.currency = "CNY"
-        self.nlp = self.load_nlp()
-        self.enable_deepseek = False  # 快速切换开关
+        self.model = model
 
-    def _get_semantic_similarity(self, text: str, candidates: List[str]) -> str:
-        """ 核心语义相似度计算 """
-        doc = self.nlp(text)
-        # print(doc)
-        similarities = {
-            candidate: doc.similarity(self.nlp(candidate))
-            for candidate in candidates
-        }
-        # print(similarities)
-        return max(similarities.items(), key=lambda x: x[1])[0]
+        # 初始化相似度计算模型
+        if model == "BERT":
+            self.similarity_model = BertSimilarity()
+        elif model == "spaCy":
+            self.similarity_model = SpacySimilarity()
+        elif model == "DeepSeek":
+            if not api_key:
+                raise ValueError("使用DeepSeek模型需要API密钥")
+            self.similarity_model = DeepSeekSimilarity(api_key)
+        else:
+            self.similarity_model = BertSimilarity()  # 默认使用BERT
 
-    def _deepseek_fallback(self, text: str, candidates: List[str]) -> str:
-        """ DeepSeek备用策略 """
-        # 这里留空，后续步骤填充
-        pass
-
-    def initialize_type(self, data):
+    def initialize_type(self, data: Dict) -> None:
+        """初始化交易类型"""
         if self.bill == BILL_ALI:
             self.type = alipay_get_type(data)
         elif self.bill == BILL_WECHAT:
             self.type = wechatpay_get_type(data)
 
-    def initialize_key_list(self, data, ownerid):
-        if self.balance == "支出" or "亲情卡" in data['payment_method']: #TODO
+    def initialize_key_list(self, data: Dict, ownerid: int) -> None:
+        """初始化关键字列表"""
+        if self.balance == "支出" or "亲情卡" in data['payment_method']:
             self.key_list = Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         elif self.balance == "收入":
             self.key_list = Income.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
-        elif self.balance == "/" or self.balance == "不计收支":
+        elif self.balance in ("/", "不计收支"):
             self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
 
-    def get_expense(self, data, ownerid):
-        self.initialize_key_list(data, ownerid)
-        self.initialize_type(data)
-        actual_assets = get_default_assets(ownerid=ownerid)
-        expend = self.expend
-        income = self.income
-        foodtime = self.time
+    def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str) -> object:
+        """解决支出冲突"""
+        try:
+            selected_key = self.similarity_model.calculate_similarity(
+                transaction_text,
+                [inst.key for _, inst in conflict_candidates]
+            )
+            logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
+            return next(inst for _, inst in conflict_candidates if inst.key == selected_key)
+        except ValueError as e:
+            raise e
+        except Exception as e:
+            logger.error(f"AI处理失败：{str(e)}")
+            raise e
+            # 按优先级排序后取第一个
+            # sorted_candidates = sorted(conflict_candidates, key=lambda x: (-x[0], len(x[1].key)))
+            # return sorted_candidates[0][1]
 
-        if self.balance == "支出" or "亲情卡" in data['payment_method']: #TODO
-            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
-            max_order = None
-            self.selected_expense_instance = None  # 重置选中的实例
-            conflict_candidates = []
+    def _determine_food_category(self, foodtime: datetime.time) -> str:
+        """根据时间确定餐饮类别"""
+        if TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
+            return ":Breakfast"
+        elif TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
+            return ":Lunch"
+        elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
+            return ":Dinner"
+        return ""
 
-            for matching_key in matching_keys:
-                expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
-                if expense_instance:
-                    # 计算优先级
-                    expend_priority = expense_instance.expend.count(":") * 100
-                    payee_priority = 50 if expense_instance.payee else 0
-                    current_order = expend_priority + payee_priority
+    def _process_expense(self, data: Dict, ownerid: int) -> str:
+        """处理支出逻辑"""
+        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        conflict_candidates = []
+        max_order = None
 
-                if (max_order is None) or (current_order > max_order):
+        for matching_key in matching_keys:
+            expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
+            if expense_instance:
+                expend_priority = expense_instance.expend.count(":") * 100
+                payee_priority = 50 if expense_instance.payee else 0
+                current_order = expend_priority + payee_priority
+                conflict_candidates.append((current_order, expense_instance))
+
+                if max_order is None or current_order > max_order:
                     max_order = current_order
                     self.selected_expense_instance = expense_instance
-                    self.selected_expense_instance.expend = expense_instance.expend
-                elif current_order == max_order:
-                    conflict_candidates.append( (current_order, expense_instance) )
 
-            # 只有出现优先级冲突时才使用AI辅助决策
-            if len(conflict_candidates) > 1:
-                max_order = max([p for p, _ in conflict_candidates])
-                candidates = [(p, inst) for p, inst in conflict_candidates if p == max_order]
-                transaction_text = f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
-                try:
-                    if self.enable_deepseek:
-                        selected_key = self._deepseek_fallback(transaction_text, [inst.key for p, inst in candidates])
-                    else:
-                        selected_key = self._get_semantic_similarity(transaction_text, [inst.key for p, inst in candidates])
+        if len(conflict_candidates) > 1:
+            self.selected_expense_instance = self._resolve_expense_conflict(conflict_candidates,
+                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")
 
-                    logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}, uuid={data['uuid'] if 'uuid' in data else 'N/A'}")
-                    selected_instance = next(inst for p, inst in candidates if inst.key == selected_key)
-                    self.selected_expense_instance = selected_instance
-                except Exception as e:
-                    logger.error(f"AI处理失败：{str(e)}")
-                    # 按优先级排序后取第一个
-                    sorted_candidates = sorted(candidates, key=lambda x: (-x[0], len(x[1].key)))
-                    self.selected_expense_instance = sorted_candidates[0][1]
-
-            # 最终结果处理 #TODO
-            if self.selected_expense_instance:
-                expend = self.selected_expense_instance.expend
-                if expend == "Expenses:Food":
-                    if TIME_BREAKFAST_START <= foodtime <= TIME_BREAKFAST_END:
-                        expend += ":Breakfast"
-                    elif TIME_LUNCH_START <= foodtime <= TIME_LUNCH_END:
-                        expend += ":Lunch"
-                    elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
-                        expend += ":Dinner"
-                self.currency = self.selected_expense_instance.currency or "CNY"
-            else:
-                expend = self.expend
-                self.currency = "CNY"
-
+        if self.selected_expense_instance:
+            expend = self.selected_expense_instance.expend
+            if expend == "Expenses:Food":
+                expend += self._determine_food_category(self.time)
+            self.currency = self.selected_expense_instance.currency or "CNY"
             return expend
 
+        return self.expend
+
+    def _process_income(self, data: Dict, ownerid: int) -> str:
+        """处理收入逻辑"""
+        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        max_order = None
+
+        for matching_key in matching_keys:
+            income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
+            if income_instance:
+                income_priority = income_instance.income.count(":") * 100
+                if max_order is None or income_priority > max_order:
+                    max_order = income_priority
+                    self.selected_income_instance = income_instance
+
+        return self.selected_income_instance.income if self.selected_income_instance else self.income
+
+    def get_expense(self, data: Dict, ownerid: int) -> str:
+        """主处理方法"""
+        self.initialize_key_list(data, ownerid)
+        self.initialize_type(data)
+
+        if self.balance == "支出" or "亲情卡" in data['payment_method']:
+            return self._process_expense(data, ownerid)
         elif self.balance == "收入":
-            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]  # 通过列表推导式获取所有匹配的key形成新的列表
-            max_order = None
-            self.selected_income_instance = None  # 重置选中的实例
-
-            for matching_key in matching_keys:
-                income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
-                if income_instance:
-                    income_priority = income_instance.income.count(":") * 100
-                    # 更新最高优先级实例
-                    if (max_order is None) or (income_priority > max_order) or (income_priority == max_order):
-                        max_order = income_priority
-                        self.selected_income_instance = income_instance
-
-            # 确定最终结果
-            if self.selected_income_instance:
-                income = self.selected_income_instance.income
-            else:
-                income = self.income
-
-            return income
-
-        elif self.balance == "/" or self.balance == "不计收支":
+            return self._process_income(data, ownerid)
+        elif self.balance in ("/", "不计收支"):
+            actual_assets = get_default_assets(ownerid=ownerid)
             if self.bill == BILL_ALI:
-                expend = alipay_get_balance_expense(self, data, actual_assets, ownerid)
+                return alipay_get_balance_expense(self, data, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
-                expend = wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
-        return expend
+                return wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
+
+        return self.expend
 
     def get_currency(self):
         return self.currency

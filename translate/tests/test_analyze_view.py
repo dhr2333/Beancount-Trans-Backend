@@ -102,7 +102,7 @@ def test_alipay_end_to_end_processing(client, loaded_expenses):
                 status: "ALiPay - 支付成功"
                 Expenses:Health:Medical 0.00 CNY
                 Assets:Savings:Web:AliPay -0.00 CNY
-                
+
             2023-05-18 * "北京卡路里科技有限公司" "连续包月"
                 time: "12:34:02"
                 uuid: "2023051822001499861457916613"
@@ -110,13 +110,13 @@ def test_alipay_end_to_end_processing(client, loaded_expenses):
                 Expenses:Culture:Subscription 19.00 CNY
                 Assets:Savings:Web:AliFund -19.00 CNY
             """).strip()
-        
+
         # 处理可能的列表响应
         if isinstance(result, list):
             actual_content = "".join(result)
         else:
             actual_content = result  # 假设是字符串或其他结构
-        
+
         # 在断言前标准化字符串
         normalized_actual = normalize_string(actual_content)
         normalized_expected = normalize_string(expected_output)
