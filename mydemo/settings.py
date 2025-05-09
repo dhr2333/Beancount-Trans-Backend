@@ -124,7 +124,7 @@ SOCIALACCOUNT_LOGIN_ON_GET = False
 # Social Account Providers Configuration
 SOCIALACCOUNT_PROVIDERS = {
     'dummy':{
-        
+
     },
     'google': {
         'APPS': [

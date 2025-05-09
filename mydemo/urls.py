@@ -38,20 +38,20 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('admin/', admin.site.urls),  # 管理地址
     path('docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
-    
+
     # 用户权限相关的urls
     path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
     path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
     path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
-    
+
     # allauth
     path("api/accounts/", include("allauth.urls")),
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
-    
-    
+
+
     # 业务相关的urls
     path('api/translate/', include('translate.urls')),  # 解析地址
     path('api/owntracks/', include('owntracks.urls')),  # owntracks服务

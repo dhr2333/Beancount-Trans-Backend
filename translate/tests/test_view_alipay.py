@@ -15,7 +15,7 @@ class AliPayProcessorTest(TestCase):
         # 创建测试用户和资产
         self.user = User.objects.create_user(username='testuser', password='testpass')
         self.key_list = ['icbc', 'cmb']
-        
+
         # 创建测试资产账户
         Assets.objects.create(
             key='icbc',
@@ -44,7 +44,7 @@ class AliPayProcessorTest(TestCase):
     #     """测试跳过前24行"""
     #     rows = [['Header']*12]*30  # 生成30行测试数据
     #     csv_data = self._create_test_csv(rows)
-        
+
     #     strategy = AliPayInitStrategy()
     #     result = strategy.init(csv.reader(csv_data))
     #     self.assertEqual(len(result), 6)  # 30-24=6
@@ -55,10 +55,10 @@ class AliPayProcessorTest(TestCase):
     #         '2024-01-01 17:43:08','信用借还','华夏银行（解析文件中未包含华夏信用卡）','/','信用卡还款','不计收支','301.00','余额宝','还款成功','2022062100003001560037233415'	,''	,'',
     #     ]
     #     csv_data = self._create_test_csv([test_row]*25)  # 前24行被跳过
-        
+
     #     strategy = AliPayInitStrategy()
     #     records = strategy.init(csv.reader(csv_data))
-        
+
     #     self.assertEqual(records[0]['amount'], '301.00')
     #     self.assertEqual(records[0]['payment_method'], '余额宝')
     #     self.assertEqual(records[0]['bill_identifier'], BILL_ALI)
@@ -71,6 +71,6 @@ class AliPayProcessorTest(TestCase):
             {'bill_identifier': BILL_ALI,  'transaction_status': '支付成功', 'commodity': '余额宝-2022.10.12-收益发放'},
             {'bill_identifier': 'OTHER', 'transaction_status': '支付成功'}
         ]
-        
+
         results = [alipay_ignore(None, d) for d in test_data]
         self.assertEqual(results, [True, True, False])

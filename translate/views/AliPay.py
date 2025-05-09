@@ -40,7 +40,7 @@ class AliPayInitStrategy(InitStrategy):
             logging.error(f"Unexpected error: {str(e)}")
 
         return records
-    
+
 
 def alipay_ignore(self, data):
     if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款", "芝麻免押下单成功"]:

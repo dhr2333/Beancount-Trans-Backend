@@ -68,7 +68,7 @@ def show_maps(request):
 def show_log_dates(request):
     dates = OwnTrackLog.objects.values_list('creation_time', flat=True)
     results = list(sorted(set(map(lambda x: x.strftime('%Y-%m-%d'), dates)), reverse=True))
-    
+
     serializer = LogDatesSerializer({'results': results})
     return Response(serializer.data)
 

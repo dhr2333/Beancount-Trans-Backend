@@ -45,7 +45,7 @@ class BocDebitInitStrategy(InitStrategy):
 def boc_debit_ignore(self, data, boc_debit_ignore):
     if data['bill_identifier'] == BILL_BOC_DEBIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
         return boc_debit_ignore == "true"
-    
+
 
 def boc_debit_pdf_convert_to_string(file, password):
     """接收PDF文件，返回字符串
@@ -130,8 +130,8 @@ def boc_debit_get_account(self, ownerid):
 
 def boc_debit_get_balance(data):
     return data['balance']
-    
-    
+
+
 def boc_debit_get_card_number(content):
     """
     从账单文件中获取中国银行卡号

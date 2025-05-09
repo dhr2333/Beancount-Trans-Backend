@@ -79,7 +79,8 @@ class FormatConfig:
         show_discount = True,
         income_template = None,
         commission_template = None,
-        currency = 'CNY'
+        currency = 'CNY',
+        deepseek_apikey = ''
     ):
         self.flag = flag
         self.show_note = show_note
@@ -91,6 +92,7 @@ class FormatConfig:
         self.income_template = income_template
         self.commission_template = commission_template
         self.currency = currency
+        self.deepseek_apikey = deepseek_apikey
 
 
 class FormatData:
@@ -139,7 +141,7 @@ class FormatData:
                     formatted_str += ("\n    Income:Other")
 
         return formatted_str + "\n\n"
-    
+
     def balance_instance(entry):
         formatted_str = ""
 
@@ -153,10 +155,10 @@ class FormatData:
         formatted_str += f" Assets:Other"
 
         return formatted_str + "\n\n"
-    
+
     def installment_instance(entry):
         formatted_str = ""
-        
+
         formatted_str += f"{entry['date']}"
         formatted_str += f" #"
         formatted_str += f" \"{entry['payee']}"
@@ -174,8 +176,7 @@ class FormatData:
         formatted_str += f" {float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY\n"
         formatted_str += f"    {entry['account']} {entry['account_sign']}"
         formatted_str += f"{float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY"
-        
-        
+
         return formatted_str + "\n\n"
 
 
@@ -188,7 +189,7 @@ class IgnoreData:
 
     def notes(self, data):
         return data["note"] == "零钱提现" or data["note"] == "信用卡还款" or data["note"] == "提现-实时提现" or data["note"] == "余额宝-转出到银行卡"
-    
+
     def balance(self, data):
         from datetime import datetime
 

@@ -170,10 +170,10 @@ def handle_pdf(file, password):
     pdf = PyPDF2.PdfReader(file)
     if pdf.is_encrypted:
         if not pdf.decrypt(password):
-            raise DecryptionError("Decryption failed", 401)
-        
+            raise DecryptionError("PDF解密失败", 401)
+
     content = extract_text_from_pdf(pdf)
-    
+
     # 根据内容处理PDF
     if cmb_credit_sourcefile_identifier in content:
         return cmb_credit_pdf_convert_to_csv(content).encode()
@@ -194,7 +194,7 @@ def extract_text_from_pdf(pdf):
 
 def read_and_write(reader,writer):
     import csv
-    
+
     reader = csv.reader(reader)
     writer = csv.writer(writer)
     for row in reader:
