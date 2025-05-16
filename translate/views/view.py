@@ -4,12 +4,11 @@ import datetime
 import spacy
 import torch
 import logging
-import requests
 
+from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from datetime import timedelta
 from datetime import datetime
-from functools import lru_cache
 from transformers import BertTokenizer, BertModel
 from openai import OpenAI
 
@@ -269,8 +268,13 @@ class BertSimilarity(SimilarityModel):
     @classmethod
     def load_model(cls):
         if cls._model is None:
-            cls._tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
-            cls._model = BertModel.from_pretrained('bert-base-chinese')
+            local_model_path = Path(__file__).parent.parent.parent / "models" / "bert-base-chinese"
+            try:
+                cls._tokenizer = BertTokenizer.from_pretrained(local_model_path)
+                cls._model = BertModel.from_pretrained(local_model_path)
+            except OSError:
+                cls._tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+                cls._model = BertModel.from_pretrained('bert-base-chinese')
             cls._model.eval()
         return cls._tokenizer, cls._model
 

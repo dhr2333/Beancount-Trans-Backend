@@ -1,32 +1,50 @@
 # FROM python:3.12-slim AS builder
-FROM python:3.12-alpine AS builder
+FROM python:3.12-slim AS builder
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn \
-    PIP_DEFAULT_TIMEOUT=600 \
+    PIP_DEFAULT_TIMEOUT=6000 \
     PIP_RETRIES=5
+
 WORKDIR /build
-COPY requirements.txt .
-COPY zh_core_web_md-3.8.0-py3-none-any.whl .
-RUN apk add --no-cache --virtual .build-deps \
-    build-base \
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     python3-dev \
-    linux-headers \
-    && pip install --upgrade pip \
-    && pip install --no-cache-dir --user wheel uwsgi \
-    && pip install --no-cache-dir --user zh_core_web_md-3.8.0-py3-none-any.whl \
-    && pip install --no-cache-dir --user -r requirements.txt \
-    && apk del .build-deps
+    && rm -rf /var/lib/apt/lists/*
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --upgrade pip \
+    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user wheel uwsgi
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user -r requirements.txt
+
+COPY models/ /build/models
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0 \
+    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user openai \
+    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user pandas \
+    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user transformers \
+    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user spacy \
+    && pip install --no-cache-dir --user /build/models/zh_core_web_md-3.8.0-py3-none-any.whl \
+    && apt-get purge -y --auto-remove build-essential python3-dev
 
 # 第二阶段：生产镜像
 # FROM python:3.12-slim
-FROM python:3.12-alpine
+FROM python:3.12-slim
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 ENV PYTHONUNBUFFERED=1 \
     PATH="/root/.local/bin:${PATH}"
 WORKDIR /code/beancount-trans/
-RUN apk add --no-cache libstdc++
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /root/.local /root/.local
+COPY --from=builder /build/models/bert-base-chinese /code/beancount-trans/models/bert-base-chinese
 COPY bin ./bin
 COPY conf ./conf
 COPY logs ./logs
