@@ -112,28 +112,46 @@ def should_ignore_row(row, ignore_data, args):
 def beancount_outfile(data, owner_id: int, args, config):
     ignore_data = IgnoreData(None)
     instance_list = []
+
     if args["balance"] == "true":
         data = ignore_data.balance(data)
-    for row in data:
-        if should_ignore_row(row, ignore_data, args):
-            continue
+
+    # 过滤阶段保持顺序执行
+    filtered_data = [
+        row for row in data
+        if not should_ignore_row(row, ignore_data, args)
+    ]
+
+    # 并行处理阶段
+    from mydemo.utils.parallel import batch_process
+
+    def _process_row(row):
         try:
             entry = preprocess_transaction_data(row, owner_id, config=config)
             if ignore_data.empty(entry):
-                continue
+                return None
+
             if args["balance"] == "true":
                 instance = FormatData.balance_instance(entry)
             elif "分期" in row['payment_method']:
                 instance = FormatData.installment_instance(entry)
             else:
                 instance = FormatData.format_instance(entry, config=config)
-            instance_list.append(instance)
+
             if args["write"] == "true":
                 write_entry_to_file(instance)
+            return instance
         except ValueError as e:
-            raise e
-            # instance = str(e) + "\n\n"
-            # instance_list.append(instance)
+            return str(e)
+
+    # 根据硬件配置调整参数（建议4-8 workers）
+    instance_list = batch_process(
+        filtered_data,
+        process_func=_process_row,
+        max_workers=2 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
+        batch_size=50
+    )
+
     return instance_list
 
 
