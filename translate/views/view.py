@@ -148,7 +148,7 @@ def beancount_outfile(data, owner_id: int, args, config):
     instance_list = batch_process(
         filtered_data,
         process_func=_process_row,
-        max_workers=2 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
+        max_workers= 2 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
         batch_size=50
     )
 
@@ -459,10 +459,15 @@ class ExpenseHandler:
                     max_order = current_order
                     self.selected_expense_instance = expense_instance
 
-        if len(conflict_candidates) > 1:
+        if len(conflict_candidates) > 1 and self.model != "None":
             self.selected_expense_instance = self._resolve_expense_conflict(conflict_candidates,
                 f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")
-
+        elif len(conflict_candidates) > 1 and self.model == "None":
+            # 根据expend和payee规则计算优先级，如果最高的冲突，则选择第一个并输出日志，日志内容包括候选列表和选中结果还有优先级
+            sorted_candidates = sorted(conflict_candidates, key=lambda x: (-x[0], len(x[1].key)))
+            self.selected_expense_instance = sorted_candidates[0][1]
+            logger.info(f"无AI选择结果: 选中关键字 '{self.selected_expense_instance.key}'，候选列表: {conflict_candidates}")
+            
         if self.selected_expense_instance:
             expend = self.selected_expense_instance.expend
             if expend == "Expenses:Food":
