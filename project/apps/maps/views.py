@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import FormatConfigSerializer
 from rest_framework import status
 
-# from mydemo.utils.tools import get_user_config
+# from project.utils.tools import get_user_config
 from translate.models import Expense, Assets, Income, FormatConfig
 from .filters import CurrentUserFilterBackend
 from .permissions import IsOwnerOrAdminReadWriteOnly

@@ -1,4 +1,4 @@
-"""mydemo URL Configuration
+"""project URL Configuration
 
 The `urlpatterns` list routes URLs to view.py. For more information please see:
     https://docs.djangoproject.com/en/4.0/topics/http/urls/
@@ -24,7 +24,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import authenticateByToken
 
 
-# from mydemo.views import DRFLoginView
+# from project.views import DRFLoginView
 
 # from users.views import UserViewSet, GroupViewSet, CreateUserView, LoginView, GitHubLogin
 

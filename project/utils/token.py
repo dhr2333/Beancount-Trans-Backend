@@ -8,12 +8,12 @@ from django.contrib.sessions.backends.base import SessionBase
 from allauth.headless.internal import sessionkit
 
 settings_module = os.environ.get('DJANGO_SETTINGS_MODULE')
-if settings_module == 'conf.prod':
-    from conf.prod import *
-elif settings_module == 'conf.develop':
-    from conf.develop import *
+if settings_module == 'project.settings.prod':
+    from project.settings.prod import *
+elif settings_module == 'project.settings.develop':
+    from project.settings.develop import *
 else:
-    from mydemo.settings import *
+    from project.settings.settings import *
 
 class JWTTokenStrategy(AbstractTokenStrategy):
     def create_access_token(self, request: HttpRequest) -> str:

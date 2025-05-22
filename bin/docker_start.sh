@@ -6,7 +6,7 @@ DJANGODIR=/code/beancount-trans # Django project directory
 #GROUP=root # the group to run as
 #NUM_WORKERS=1 # how many worker processes should Gunicorn spawn
 #DJANGO_SETTINGS_MODULE=djangoblog.settings # which settings file should Django use
-#DJANGO_WSGI_MODULE=mydemo.wsgi # WSGI module name
+#DJANGO_WSGI_MODULE=project.wsgi # WSGI module name
 
 
 echo "Starting $NAME as `whoami`"

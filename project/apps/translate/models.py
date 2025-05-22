@@ -3,7 +3,7 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
-from mydemo.models import BaseModel
+from project.models import BaseModel
 
 
 # Create your models here.

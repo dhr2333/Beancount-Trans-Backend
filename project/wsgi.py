@@ -1,5 +1,5 @@
 """
-WSGI config for mydemo project.
+WSGI config for project project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,7 +11,7 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mydemo.settings')
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'conf.prod')
+# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.prod')
 
 application = get_wsgi_application()

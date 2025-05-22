@@ -22,14 +22,14 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user -r requirements.txt
 
-COPY models/ /build/models
+COPY pretrained_models/ /build/pretrained_models
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0 \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user openai \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user pandas \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user transformers \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user spacy \
-    && pip install --no-cache-dir --user /build/models/zh_core_web_md-3.8.0-py3-none-any.whl \
+    && pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl \
     && apt-get purge -y --auto-remove build-essential python3-dev
 
 # 第二阶段：生产镜像
@@ -44,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /root/.local /root/.local
-COPY --from=builder /build/models/bert-base-chinese /code/beancount-trans/models/bert-base-chinese
+COPY --from=builder /build/pretrained_models/bert-base-chinese /code/beancount-trans/pretrained_models/bert-base-chinese
 COPY bin ./bin
 COPY conf ./conf
 COPY logs ./logs
@@ -52,7 +52,7 @@ COPY translate ./translate
 COPY manage.py ./manage.py
 # COPY static ./static
 # COPY collectstatic ./collectstatic
-COPY mydemo ./mydemo
+COPY project ./project
 COPY templates ./templates
 RUN chmod +x /code/beancount-trans/bin/docker_start.sh
 ENTRYPOINT ["/code/beancount-trans/bin/docker_start.sh"]

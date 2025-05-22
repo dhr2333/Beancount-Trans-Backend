@@ -2,19 +2,17 @@
 .coverage
 /media/
 collectstatic
-/conf/prod.py
-/conf/develop.py
+/project/settings/prod.py
+/project/settings/develop.py
 logs/*.log
 static
 requirements.txt.bak
-models
+pretrained_models
 # zh_core_web_md-3.8.0-py3-none-any.whl
 
 # __pycache
 __pycache__/
-myapp/__pycache__/
-myapp/migrations/__pycache__/
-mydemo/__pycache__/
+project/__pycache__/
 translate/__pycache__/
 translate/migrations/__pycache__/
 conf/__pycache_/
