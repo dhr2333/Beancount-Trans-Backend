@@ -2,7 +2,7 @@ import re
 import logging
 
 from translate.utils import InitStrategy, BILL_CCB_DEBIT
-from translate.models import Assets
+from maps.models import Assets
 from datetime import datetime
 
 ccb_debit_sourcefile_identifier = "中国建设银行个人活期账户全部交易明细"  # 能唯一标识所属银行及账单类型的原始上传文件

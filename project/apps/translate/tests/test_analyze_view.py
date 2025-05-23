@@ -25,7 +25,7 @@ def django_db_setup(django_db_setup, django_db_blocker):
 @pytest.fixture
 def loaded_expenses(django_db_setup):
     """返回已加载的 Expense 数据查询集"""
-    from translate.models import Expense
+    from maps.models import Expense
     return Expense.objects.all()
 
 def normalize_string(s):

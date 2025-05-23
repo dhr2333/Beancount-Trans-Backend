@@ -2,7 +2,7 @@ import re
 import logging
 import pdfplumber
 
-from translate.models import Assets
+from maps.models import Assets
 from translate.utils import InitStrategy, IgnoreData, BILL_BOC_DEBIT
 
 boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"

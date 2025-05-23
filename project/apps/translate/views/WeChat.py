@@ -1,7 +1,7 @@
 import logging
 import re
 
-from translate.models import Assets
+from maps.models import Assets
 from translate.utils import InitStrategy, IgnoreData, ASSETS_OTHER, BILL_WECHAT
 
 wechat_csvfile_identifier = "微信支付账单明细"

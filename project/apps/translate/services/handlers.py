@@ -1,7 +1,7 @@
 import datetime
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
-from translate.models import Expense, Income
+from maps.models import Expense, Income
 from translate.utils import *
 from translate.views.AliPay import *
 from translate.views.WeChat import *

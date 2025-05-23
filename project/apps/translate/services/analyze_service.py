@@ -67,31 +67,6 @@ class AnalyzeService:
                 or ignore_data.cmb_credit_ignore(row, args.get("cmb_credit_ignore"))
                 or ignore_data.boc_debit_ignore(row, args.get("boc_debit_ignore")))
 
-    # def beancount_outfile(self, data, owner_id: int, args, config):
-    #     ignore_data = IgnoreData(None)
-    #     instance_list = []
-    #     if args.get("balance", False):
-    #         data = ignore_data.balance(data)
-    #     for row in data:
-    #         if self.should_ignore_row(row, ignore_data, args):
-    #             continue
-    #         try:
-    #             entry = self.preprocess_transaction_data(row, owner_id, config=config)
-    #             if ignore_data.empty(entry):
-    #                 continue
-    #             if args.get("balance", False):
-    #                 instance = FormatData.balance_instance(entry)
-    #             elif "分期" in row['payment_method']:
-    #                 instance = FormatData.installment_instance(entry)
-    #             else:
-    #                 instance = FormatData.format_instance(entry, config=config)
-    #             instance_list.append(instance)
-    #             if args.get("write", False):
-    #                 write_entry_to_file(instance)
-    #         except ValueError as e:
-    #             raise e
-    #     return instance_list
-
     def beancount_outfile(self, data, owner_id: int, args, config):
         # 并行处理
         ignore_data = IgnoreData(None)
@@ -101,8 +76,7 @@ class AnalyzeService:
             data = ignore_data.balance(data)
 
         filtered_data = [
-            row for row in data
-            if not self.should_ignore_row(row, ignore_data, args)
+            row for row in data if not self.should_ignore_row(row, ignore_data, args)
         ]
 
         from project.utils.parallel import batch_process
@@ -130,7 +104,7 @@ class AnalyzeService:
         instance_list = batch_process(
             filtered_data,
             process_func=_process_row,
-            max_workers= 2 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
+            max_workers= 1 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
             batch_size=50
         )
 

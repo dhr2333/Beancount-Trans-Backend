@@ -1,6 +1,6 @@
 import re
 from datetime import time
-from .models import Assets
+from maps.models import Assets
 from abc import ABC, abstractmethod
 
 BILL_ALI = "alipay"

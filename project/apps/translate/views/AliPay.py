@@ -1,7 +1,7 @@
 import re
 import logging
 
-from translate.models import Assets
+from maps.models import Assets
 from translate.utils import ASSETS_OTHER, OPENBALANCE, BILL_ALI, pattern, IgnoreData, InitStrategy
 
 alipay_csvfile_identifier = "------------------------------------------------------------------------------------"

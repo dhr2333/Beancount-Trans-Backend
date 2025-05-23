@@ -2,7 +2,7 @@ import re
 import pdfplumber
 import logging
 
-from translate.models import Assets
+from maps.models import Assets
 from translate.utils import InitStrategy, BILL_ICBC_DEBIT
 
 icbc_debit_sourcefile_identifier = "中国工商银行借记账户历史明细"

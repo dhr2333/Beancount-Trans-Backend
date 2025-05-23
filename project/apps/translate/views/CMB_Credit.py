@@ -4,7 +4,7 @@ import re
 import logging
 
 from datetime import datetime
-from translate.models import Assets
+from maps.models import Assets
 from translate.utils import InitStrategy, IgnoreData, ASSETS_OTHER, BILL_CMB_CREDIT
 
 cmb_credit_sourcefile_identifier = "CMB Credit Card Statement"
