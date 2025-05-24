@@ -129,7 +129,7 @@ def bank_type_get_note(data):
 
 
 def bank_type_get_tag(data):
-    """支付宝、微信识别 "#" 用于添加tag标签 
+    """支付宝、微信识别 "#" 用于添加tag标签
 
     Args:
         data (_type_): _description_

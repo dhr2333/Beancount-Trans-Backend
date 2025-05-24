@@ -119,14 +119,14 @@ class FormatData:
             formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
         else:
             formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} {entry['currency']} @@ {entry['amount']} {config.currency}"
-            formatted_str += f"\n    {entry['account']} {entry['account_sign']}" 
+            formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
         if ignore_data.notes(entry):
             formatted_str += f"{entry['actual_amount']} {config.currency}"
             # formatted_str += f"{entry['actual_amount']} CNY"
         else:
             formatted_str += f"{entry['amount']} {config.currency}"
             # formatted_str += f"{entry['amount']} CNY"
- 
+
         if config.show_discount:
             if ignore_data.notes(entry):
                 if config.commission_template:

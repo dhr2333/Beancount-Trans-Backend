@@ -140,7 +140,7 @@ class AnalyzeService:
         except ValueError as e:
             raise e
 
-    def calculate_commission(total, commission):
+    def calculate_commission(self, total, commission):
         if commission != "":
             amount = "{:.2f}".format(float(total.split()[0]) - float(commission.split()[0]))
         else:

@@ -46,6 +46,7 @@ ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
 
 # Application definition
 INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
+    # 系统应用
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -57,13 +58,11 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django.contrib.sites',
     'coreapi',
     'corsheaders',
-    'translate',
-    'owntracks',
-    # 'account.apps.AccountConfig',
+
+    # 第三方应用
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
-    'maps.apps.MapsConfig',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -74,6 +73,12 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     "allauth.usersessions",
     'dj_rest_auth',
     'dj_rest_auth.registration',
+
+    # 本地应用
+    'project.apps.account.apps.AccountConfig',
+    'project.apps.maps.apps.MapsConfig',
+    'project.apps.owntracks.apps.OwntracksConfig',
+    'project.apps.translate.apps.TranslateConfig',
 ]
 
 MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理

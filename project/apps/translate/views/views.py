@@ -1,4 +1,3 @@
-
 import logging
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
@@ -22,7 +21,6 @@ from maps.permissions import IsOwnerOrAdminReadWriteOnly
 from rest_framework.permissions import AllowAny
 
 
-
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
@@ -41,7 +39,7 @@ class AnalyzeView(APIView):
         uploaded_file = request.FILES.get('trans', None)
         if not uploaded_file:
             return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         service = AnalyzeService(owner_id, config)
         try:
             result = service.analyze(uploaded_file, serializer.validated_data)
@@ -55,9 +53,24 @@ class AnalyzeView(APIView):
         except Exception as e:
             logger.exception(e)
             return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     def get(self, request):
         return render(request, "translate/trans.html", {"title": "trans"})
+
+
+# 上传文件
+class UploadFileView(APIView):
+    pass
+
+
+# 单条解析
+class AnalyzeSingleView(APIView):
+    pass
+
+
+# AI解析反馈
+class AnalyzeSingleFeedbackView(APIView):
+    pass
 
 
 class UserConfigAPI(APIView):

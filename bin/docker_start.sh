@@ -22,7 +22,7 @@ python manage.py makemigrations && \
 python manage.py migrate && \
 python manage.py collectstatic --noinput && \
 /root/.local/bin/uwsgi --ini conf/uwsgi.ini
-#   && 
+#   &&
 #  python manage.py runserver 0.0.0.0:8000
 # Start your Django Unicorn
 # Programs meant to be run under supervisor should not daemonize themselves (do not use --daemon)

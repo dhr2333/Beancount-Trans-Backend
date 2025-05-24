@@ -71,6 +71,8 @@ def wechatpay_get_income_account(self, assets, ownerid):
     if key in self.key_list:  # 6428
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
         return account_instance.assets
+    else:
+        return ASSETS_OTHER
 
 
 def wechatpay_get_balance_account(self, data, assets, ownerid):

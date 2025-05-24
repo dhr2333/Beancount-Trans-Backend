@@ -160,7 +160,7 @@ def file_convert_to_csv(file, password=None):
         return handle_pdf(file, password)
 
 def handle_excel(file):
-    string_content = ccb_debit_xls_convert_to_string(file) 
+    string_content = ccb_debit_xls_convert_to_string(file)
     for row in string_content:
         if any(pd.notnull(item) and ccb_debit_sourcefile_identifier in str(item) for item in row):
             convert_content = ccb_debit_string_convert_to_csv(string_content)
@@ -179,7 +179,7 @@ def handle_pdf(file, password):
         return cmb_credit_pdf_convert_to_csv(content).encode()
     elif boc_debit_sourcefile_identifier in content:
         card_number = get_card_number(content, boc_debit_sourcefile_identifier)
-        string_content = boc_debit_pdf_convert_to_string(file, password) 
+        string_content = boc_debit_pdf_convert_to_string(file, password)
         return boc_debit_string_convert_to_csv(string_content, card_number).encode()
     elif icbc_debit_sourcefile_identifier in content:
         card_number = get_card_number(content, icbc_debit_sourcefile_identifier)

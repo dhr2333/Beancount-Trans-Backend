@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view,permission_classes,authentication_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated 
+from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import OwnTrackLog
@@ -64,7 +64,7 @@ def show_maps(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@authentication_classes([JWTAuthentication]) 
+@authentication_classes([JWTAuthentication])
 def show_log_dates(request):
     dates = OwnTrackLog.objects.values_list('creation_time', flat=True)
     results = list(sorted(set(map(lambda x: x.strftime('%Y-%m-%d'), dates)), reverse=True))

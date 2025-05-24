@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
-from translate.views.view import UserConfigAPI
+from translate.views.views import UserConfigAPI
 # from .views import GoogleLogin
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls

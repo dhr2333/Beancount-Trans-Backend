@@ -74,9 +74,9 @@ def test_alipay_end_to_end_processing(client, loaded_expenses):
         }
 
         # 6. 模拟关键函数
-        with patch("translate.views.view.get_token_user_id") as mock_user_id, \
-             patch("translate.views.view.create_temporary_file") as mock_create_temp, \
-             patch("translate.views.view.file_convert_to_csv") as mock_convert:
+        with patch("translate.views.views.get_token_user_id") as mock_user_id, \
+             patch("translate.views.views.create_temporary_file") as mock_create_temp, \
+             patch("translate.views.views.file_convert_to_csv") as mock_convert:
 
             # 设置返回值
             mock_user_id.return_value = 1

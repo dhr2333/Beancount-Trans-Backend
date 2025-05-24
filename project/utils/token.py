@@ -1,4 +1,4 @@
-import os 
+import os
 import jwt
 import typing
 from django.http import HttpRequest
