@@ -98,9 +98,15 @@ class FormatConfig:
 class FormatData:
 
     def format_instance(entry, config=FormatConfig()):
+        # if isinstance(entry, tuple) and len(entry) > 0:
+        #     entry = entry[0]  # 获取字典数据
+        # else:
+        #     entry = entry  # 防止意外结构
+
         ignore_data = IgnoreData(None)
         formatted_str = ""
 
+        # print(entry)
         formatted_str += f"{entry['date']}"
         formatted_str += f" {config.flag}"
         formatted_str += f" \"{entry['payee']}\""

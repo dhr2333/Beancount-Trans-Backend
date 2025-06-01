@@ -3,11 +3,13 @@ from translate.models import FormatConfig
 
 
 class AnalyzeSerializer(serializers.Serializer):
-    password = serializers.CharField(required=False, allow_blank=True)
-    isCSVOnly = serializers.BooleanField(required=False, default=False)
-    balance = serializers.BooleanField(required=False, default=False)
+    cmb_credit_ignore = serializers.CharField(required=False, allow_blank=False)
+    boc_debit_ignore = serializers.CharField(required=False, allow_blank=False)
     write = serializers.BooleanField(required=False, default=False)
-    # 其他参数
+    password = serializers.CharField(required=False, allow_blank=True)
+    balance = serializers.BooleanField(required=False, default=False)
+    isCSVOnly = serializers.BooleanField(required=False, default=False)
+    csrfmiddlewaretoken = serializers.CharField(required=False, allow_blank=False)
 
 
 class FormatConfigSerializer(serializers.ModelSerializer):

@@ -25,7 +25,7 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
-class AnalyzeView(APIView):
+class SingleBillAnalyzeView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -63,13 +63,13 @@ class UploadFileView(APIView):
     pass
 
 
-# 单条解析
-class AnalyzeSingleView(APIView):
+# 多账单解析
+class MultipleBillAnalyzeView(APIView):
     pass
 
 
-# AI解析反馈
-class AnalyzeSingleFeedbackView(APIView):
+# 单条目解析(AI解析反馈)
+class SingleEntryAnalyzeView(APIView):
     pass
 
 
@@ -106,3 +106,21 @@ class UserConfigAPI(APIView):
             "status": "error",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UnifiedAnalyzeView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # 1. 判断请求类型
+        # 例如通过参数 distinguish_type: 'single'/'multi'/'entry'
+        req_type = request.data.get('type', 'single')
+        if req_type == 'single':
+            return SingleBillAnalyzeView().post(request)
+        elif req_type == 'multi':
+            return MultipleBillAnalyzeView().post(request)
+        elif req_type == 'entry':
+            return SingleEntryAnalyzeView().post(request)
+        else:
+            return Response({'error': '未知解析类型'}, status=400)

@@ -97,6 +97,8 @@ class ExpenseHandler:
         self.time = datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S").time()
         self.currency = "CNY"
         self.model = model
+        self.selected_expense_key = None
+        self.expense_candidates_with_score = []  # 如果你想带分数
 
         # 初始化相似度计算模型
         if model == "BERT":
@@ -127,17 +129,25 @@ class ExpenseHandler:
             self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
         self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
 
-    def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str) -> object:
-        """解决支出冲突"""
+    def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str):
         try:
-            selected_key = self.similarity_model.calculate_similarity(
-                transaction_text,
-                [inst.key for _, inst in conflict_candidates]
-            )
+            keys = [inst.key for _, inst in conflict_candidates]
+            # 新的 similarity 返回 dict
+            sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)
+            # logger.info(sim_result)
+            selected_key = sim_result["best_match"]
+            scores = sim_result["scores"]
             logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
+            self.selected_expense_key = selected_key
+            # 结构化候选项
+            self.expense_candidates_with_score = [
+                {
+                    "key": inst.key,
+                    "score": round(scores.get(inst.key, 0), 4)
+                }
+                for _, inst in conflict_candidates
+            ]
             return next(inst for _, inst in conflict_candidates if inst.key == selected_key)
-        except ValueError as e:
-            raise e
         except Exception as e:
             logger.error(f"AI处理失败：{str(e)}")
             raise e
@@ -174,22 +184,33 @@ class ExpenseHandler:
                     self.selected_expense_instance = expense_instance
 
         if len(conflict_candidates) > 1 and self.model != "None":
-            self.selected_expense_instance = self._resolve_expense_conflict(conflict_candidates,
+            # print(conflict_candidates)
+            selected_instance = self._resolve_expense_conflict(conflict_candidates,
                 f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")
-        elif len(conflict_candidates) > 1 and self.model == "None":
-            # 根据expend和payee规则计算优先级，如果最高的冲突，则选择第一个并输出日志，日志内容包括候选列表和选中结果还有优先级
-            sorted_candidates = sorted(conflict_candidates, key=lambda x: (-x[0], len(x[1].key)))
-            self.selected_expense_instance = sorted_candidates[0][1]
-            logger.info(f"无AI选择结果: 选中关键字 '{self.selected_expense_instance.key}'，候选列表: {conflict_candidates}")
+            # logger.info(selected_instance)
+            self.selected_expense_instance = selected_instance
+            self.selected_expense_key = selected_instance.key
+        else:
+            # 只有一个候选或无候选，直接给分数
+            self.expense_candidates_with_score = [
+                {
+                    "key": inst.key,
+                    "score": 1.0
+                }
+                for _, inst in conflict_candidates
+            ]
+            if self.selected_expense_instance:
+                self.selected_expense_key = self.selected_expense_instance.key
 
         if self.selected_expense_instance:
             expend = self.selected_expense_instance.expend
             if expend == "Expenses:Food":
                 expend += self._determine_food_category(self.time)
             self.currency = self.selected_expense_instance.currency or "CNY"
-            return expend
+            return expend, self.selected_expense_key, self.expense_candidates_with_score
 
-        return self.expend
+        # print(self.expend,self.selected_expense_key,self.expense_candidates)
+        return self.expend, self.selected_expense_key, self.expense_candidates_with_score
 
     def _process_income(self, data: Dict, ownerid: int) -> str:
         """处理收入逻辑"""
@@ -212,19 +233,23 @@ class ExpenseHandler:
         self.initialize_type(data)
 
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
-            return self._process_expense(data, ownerid)
+            expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
+            return expend, selected_expense_key, expense_candidates_with_score
         elif self.balance == "收入":
-            return self._process_income(data, ownerid)
+            income = self._process_income(data, ownerid)
+            return income, None, []
         elif self.balance in ("/", "不计收支"):
             actual_assets = get_default_assets(ownerid=ownerid)
             if self.bill == BILL_ALI:
-                return alipay_get_balance_expense(self, data, actual_assets, ownerid)
+                expend = alipay_get_balance_expense(self, data, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
-                return wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
+                expend = wechatpay_get_balance_expense(self, data, actual_assets, ownerid)
+            else:
+                expend = self.expend
+            return expend, None, []
+        return self.expend, None, []
 
-        return self.expend
-
-    def get_currency(self):
+    def get_currency(self) -> str:
         return self.currency
 
 

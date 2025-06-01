@@ -5,5 +5,8 @@ from django.urls import path
 from translate.views import views
 
 urlpatterns = [
-    path('trans', views.AnalyzeView.as_view(), name='trans'),
+    path('analyze', views.UnifiedAnalyzeView.as_view(), name='analyze'),
+    path('trans', views.SingleBillAnalyzeView.as_view(), name='trans'),
+    path('multi', views.MultipleBillAnalyzeView.as_view(), name='multi'),
+    path('entry', views.SingleEntryAnalyzeView.as_view(), name='entry'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

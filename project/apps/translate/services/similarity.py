@@ -1,4 +1,3 @@
-
 import spacy
 import torch
 import logging
@@ -46,16 +45,18 @@ class BertSimilarity(SimilarityModel):
         self._embedding_cache[text] = embedding
         return embedding
 
-    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+    def calculate_similarity(self, text: str, candidates: List[str]) -> Dict[str, float]:
+        """返回每个候选词的相似度分数及最高分条目"""
         text_embed = self._get_embedding(text)
-        similarities = {}
+        scores = {}
 
         for candidate in candidates:
             cand_embed = self._get_embedding(candidate)
             similarity = torch.cosine_similarity(text_embed, cand_embed, dim=1)
-            similarities[candidate] = similarity.item()
+            scores[candidate] = similarity.item()
 
-        return max(similarities.items(), key=lambda x: x[1])[0]
+        best_match = max(scores.items(), key=lambda x: x[1])[0]
+        return {"best_match": best_match, "scores": scores}
 
 
 class SpacySimilarity(SimilarityModel):
@@ -68,14 +69,18 @@ class SpacySimilarity(SimilarityModel):
             cls._nlp = spacy.load("zh_core_web_md", exclude=["parser", "ner", "lemmatizer"])
         return cls._nlp
 
-    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+    def calculate_similarity(self, text: str, candidates: List[str]) -> Dict[str, float]:
+        """返回每个候选词的相似度分数及最高分条目"""
         nlp = self.load_model()
         doc = nlp(text)
-        similarities = {
-            candidate: doc.similarity(nlp(candidate))
-            for candidate in candidates
-        }
-        return max(similarities.items(), key=lambda x: x[1])[0]
+        scores = {}
+
+        for candidate in candidates:
+            cand_doc = nlp(candidate)
+            scores[candidate] = doc.similarity(cand_doc)
+
+        best_match = max(scores.items(), key=lambda x: x[1])[0]
+        return {"best_match": best_match, "scores": scores}
 
 
 class DeepSeekSimilarity(SimilarityModel):
@@ -85,7 +90,7 @@ class DeepSeekSimilarity(SimilarityModel):
         self.enable_realtime = enable_realtime
         logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    def calculate_similarity(self, text: str, candidates: List[str]) -> str:
+    def calculate_similarity(self, text: str, candidates: List[str]) -> dict:
         client = OpenAI(
             api_key=self.api_key,
             base_url="https://api.deepseek.com"
@@ -103,7 +108,9 @@ class DeepSeekSimilarity(SimilarityModel):
                 temperature=0.1
             )
             result = response.choices[0].message.content.strip()
-            return result if result in candidates else candidates[0]
+            best_match = result if result in candidates else candidates[0]
+            # DeepSeek没有分数，全部置为None或0
+            scores = {c: (1.0 if c == best_match else 0.0) for c in candidates}
+            return {"best_match": best_match, "scores": scores}
         except Exception as e:
             raise ValueError(f"DeepSeek调用失败，请检查API密钥是否正确")
-            # return candidates[0]
