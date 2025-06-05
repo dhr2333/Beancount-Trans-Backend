@@ -76,6 +76,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
 
     # 本地应用
     'project.apps.account.apps.AccountConfig',
+    'project.apps.file_manager.apps.FileManagerConfig',
     'project.apps.maps.apps.MapsConfig',
     'project.apps.owntracks.apps.OwntracksConfig',
     'project.apps.translate.apps.TranslateConfig',
@@ -458,3 +459,13 @@ LOGGING = {
         },
     }
 }
+
+# MinIO配置
+MINIO_ENDPOINT = '127.0.0.1:9000'
+MINIO_ACCESS_KEY = ''
+MINIO_SECRET_KEY = ''
+MINIO_USE_SSL = False
+
+# 文件上传限制
+DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB

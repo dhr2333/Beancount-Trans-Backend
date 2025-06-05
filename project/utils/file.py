@@ -3,6 +3,7 @@ import tempfile
 import PyPDF2
 import chardet
 import pandas as pd
+import hashlib
 
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from translate.utils import get_card_number
@@ -191,7 +192,6 @@ def extract_text_from_pdf(pdf):
         content += page.extract_text() or ""
     return content
 
-
 def read_and_write(reader,writer):
     import csv
 
@@ -199,3 +199,18 @@ def read_and_write(reader,writer):
     writer = csv.writer(writer)
     for row in reader:
         writer.writerow(row)
+
+def calculate_file_hash(file_obj, chunk_size=8192):
+    """计算文件内容的SHA256哈希值"""
+    sha256 = hashlib.sha256()
+
+    # 确保从文件开头读取
+    file_obj.seek(0)
+
+    for chunk in iter(lambda: file_obj.read(chunk_size), b''):
+        sha256.update(chunk)
+
+    # 重置文件指针
+    file_obj.seek(0)
+
+    return sha256.hexdigest()

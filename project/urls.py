@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
 from translate.views.views import UserConfigAPI
+from file_manager.views import BillFileViewSet
 # from .views import GoogleLogin
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
@@ -33,6 +34,7 @@ router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")
 router.register(r'aassets', AssetsViewSet, basename="assets")
 router.register(r'income', IncomeViewSet, basename="income")
+router.register(r'files', BillFileViewSet, basename='file')
 # router.register(r'account', AccountViewSet, basename="account")
 
 urlpatterns = [
@@ -52,8 +54,8 @@ urlpatterns = [
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
-
     # 业务相关的urls
     path('api/translate/', include('translate.urls')),  # 解析地址
     path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
+    path('api/files/<uuid:pk>/download/', BillFileViewSet.as_view({'get': 'download'}), name='file-download'),
 ]
