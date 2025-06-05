@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 
 
 class SingleBillAnalyzeView(APIView):
+    """账单解析接口 v1 版本
+
+    Args:
+        APIView (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     authentication_classes = []
     permission_classes = [AllowAny]
 
@@ -58,19 +66,53 @@ class SingleBillAnalyzeView(APIView):
         return render(request, "translate/trans.html", {"title": "trans"})
 
 
-# 上传文件
 class UploadFileView(APIView):
+    """文件上传接口
+
+    该接口用于接收用户上传的文件，并将其存储在minio中
+    """
     pass
 
 
-# 多账单解析
-class MultipleBillAnalyzeView(APIView):
+class BillAnalyzeView(APIView):
+    """账单解析接口 v2 版本
+
+    该接口实现解析单个/多个文件
+
+    Args:
+        APIView (_type_): _description_
+    """
     pass
 
 
-# 单条目解析(AI解析反馈)
-class SingleEntryAnalyzeView(APIView):
+class ReparseEntryView(APIView):
+    """AI反馈重新解析接口
+
+    此视图处理AI反馈条目的重新解析请求，对指定条目执行新的分析并返回更新后的解析结果。
+
+    Args:
+        entry_id (str): 要重新解析的条目ID
+        user_selected_key (str): 用户选择的映射关键字
+
+    Returns:
+        entry_id (str): 要重新解析的条目ID
+        formatted (str): 解析后的条目内容
+    """
     pass
+    # authentication_classes = []
+    # permission_classes = [AllowAny]
+
+    # def post(self, request):
+    #     serializer = AnalyzeSerializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
+
+    #     owner_id = get_token_user_id(request)
+    #     config = get_user_config(User.objects.get(id=owner_id))
+
+    #     uploaded_file = request
+    #     service = AnalyzeService(owner_id, config)
+    #     result = service.analyze(uploaded_file, serializer.validated_data)
+    #     return Response(result, status=status.HTTP_200_OK)
 
 
 class UserConfigAPI(APIView):
@@ -119,8 +161,8 @@ class UnifiedAnalyzeView(APIView):
         if req_type == 'single':
             return SingleBillAnalyzeView().post(request)
         elif req_type == 'multi':
-            return MultipleBillAnalyzeView().post(request)
+            return BillAnalyzeView().post(request)
         elif req_type == 'entry':
-            return SingleEntryAnalyzeView().post(request)
+            return ReparseEntryView().post(request)
         else:
             return Response({'error': '未知解析类型'}, status=400)

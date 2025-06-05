@@ -132,14 +132,16 @@ class ExpenseHandler:
     def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str):
         try:
             keys = [inst.key for _, inst in conflict_candidates]
-            # 新的 similarity 返回 dict
-            sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)
-            # logger.info(sim_result)
+            # print('transaction_text = ', transaction_text, 'keys = ', keys)
+            sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)  # 使用相似度模型计算相似度
             selected_key = sim_result["best_match"]
+            # self.similarity_model.collect_training_data(transaction_text, keys, selected_key)  # AI反馈数据收集
             scores = sim_result["scores"]
             logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
             self.selected_expense_key = selected_key
-            # 结构化候选项
+            # 将候选项和分数存储到实例变量中
+            # 生成候选项列表，包含分数
+            # 这里的分数是相似度分数，保留四位小数
             self.expense_candidates_with_score = [
                 {
                     "key": inst.key,
@@ -184,10 +186,8 @@ class ExpenseHandler:
                     self.selected_expense_instance = expense_instance
 
         if len(conflict_candidates) > 1 and self.model != "None":
-            # print(conflict_candidates)
             selected_instance = self._resolve_expense_conflict(conflict_candidates,
-                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")
-            # logger.info(selected_instance)
+                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")  # 构造语义化查询
             self.selected_expense_instance = selected_instance
             self.selected_expense_key = selected_instance.key
         else:
@@ -209,7 +209,6 @@ class ExpenseHandler:
             self.currency = self.selected_expense_instance.currency or "CNY"
             return expend, self.selected_expense_key, self.expense_candidates_with_score
 
-        # print(self.expend,self.selected_expense_key,self.expense_candidates)
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
 
     def _process_income(self, data: Dict, ownerid: int) -> str:

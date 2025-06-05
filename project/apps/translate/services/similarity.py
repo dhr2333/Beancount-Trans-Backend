@@ -17,10 +17,11 @@ class BertSimilarity(SimilarityModel):
     """BERT相似度计算实现"""
     _tokenizer = None
     _model = None
-    _embedding_cache: Dict[str, torch.Tensor] = {}
+    _embedding_cache: Dict[str, torch.Tensor] = {}  # 嵌入缓存字典
 
     @classmethod
     def load_model(cls):
+        # 模型加载逻辑（本地/Hugging Face Hub）
         if cls._model is None:
             local_model_path = Path(__file__).parent.parent.parent.parent.parent / "pretrained_models" / "bert-base-chinese"
             try:
@@ -29,34 +30,54 @@ class BertSimilarity(SimilarityModel):
             except OSError:
                 cls._tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
                 cls._model = BertModel.from_pretrained('bert-base-chinese')
-            cls._model.eval()
+            cls._model.eval()  # 设置为评估模式
         return cls._tokenizer, cls._model
 
     def _get_embedding(self, text: str) -> torch.Tensor:
-        """获取文本嵌入，带缓存"""
+        """核心AI操作：生成文本向量表示，带缓存"""
         if text in self._embedding_cache:
             return self._embedding_cache[text]
 
+        # BERT处理流程
         tokenizer, model = self.load_model()
         inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=64)
-        with torch.no_grad():
+        with torch.no_grad():  # 禁用梯度计算
             outputs = model(**inputs)
-        embedding = outputs.last_hidden_state[:,0,:]
-        self._embedding_cache[text] = embedding
+        embedding = outputs.last_hidden_state[:,0,:]  # 获取[CLS]标记的表示作为文本嵌入
+        self._embedding_cache[text] = embedding  # 缓存结果
         return embedding
 
     def calculate_similarity(self, text: str, candidates: List[str]) -> Dict[str, float]:
         """返回每个候选词的相似度分数及最高分条目"""
-        text_embed = self._get_embedding(text)
+        text_embed = self._get_embedding(text)  # 获取查询文本嵌入
         scores = {}
 
+        # 计算与每个候选的余弦相似度
         for candidate in candidates:
             cand_embed = self._get_embedding(candidate)
             similarity = torch.cosine_similarity(text_embed, cand_embed, dim=1)
-            scores[candidate] = similarity.item()
+            scores[candidate] = similarity.item()  # 保存相似度分数
 
-        best_match = max(scores.items(), key=lambda x: x[1])[0]
+        best_match = max(scores.items(), key=lambda x: x[1])[0]  # 找出最佳匹配
         return {"best_match": best_match, "scores": scores}
+
+    def collect_training_data(self, transaction_text, candidates, selected_key):
+        """自动收集训练数据"""
+        import json
+        from datetime import datetime
+
+        data_point = {
+            "timestamp": datetime.now().isoformat(),
+            "transaction_text": transaction_text,
+            "candidates": candidates,
+            "selected_key": selected_key
+        }
+
+        # 追加到数据文件
+        with open("training_data.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(data_point, ensure_ascii=False) + "\n")
+
+        return f"已收集 {len(candidates)} 个样本"
 
 
 class SpacySimilarity(SimilarityModel):

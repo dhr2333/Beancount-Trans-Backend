@@ -24,7 +24,6 @@ class AnalyzeService:
         self.expense_candidates = []
 
     def analyze(self, uploaded_file, args):
-        print(args)
         try:
             csv_file = file_convert_to_csv(uploaded_file, args.get("password", ""))
             temp, encoding = create_temporary_file(csv_file)
@@ -41,7 +40,6 @@ class AnalyzeService:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 bill_list = self.get_initials_bill(csv.reader(csvfile))
             result_list = self.beancount_outfile(bill_list, self.owner_id, args, self.config)
-            # print(result_list)
         finally:
             if os.path.exists(temp.name):
                 os.unlink(temp.name)
@@ -109,7 +107,6 @@ class AnalyzeService:
         def _process_row(row):
             try:
                 entry = self.preprocess_transaction_data(row, owner_id, config=config)
-                # print(entry)  # {'date': '2020-12-06', 'time': '18:57:50', 'uuid': '2020120622001474565711411307', 'status': 'ALiPay - 交易成功', 'payee': '永和大王(九亭地铁站)', 'note': '永和大王九亭地铁站店', 'tag': None, 'balance': None, 'balance_date': '2020-12-07', 'expense': 'Expenses:Food:Dinner', 'expenditure_sign': '', 'account': 'Liabilities:CreditCard:Web:HuaBei', 'account_sign': '-', 'amount': '28.00', 'installment_granularity': 'MONTHLY', 'installment_cycle': 3, 'discount': False, 'currency': 'CNY', 'selected_expense_key': '永和大王', 'expense_candidates_with_score': [{'key': '地铁', 'score': 0.2903}, {'key': '永和大王', 'score': 0.5999}]}
                 if ignore_data.empty(entry):
                     return None
 
@@ -127,8 +124,6 @@ class AnalyzeService:
                     "selected_expense_key": entry.get("selected_expense_key"),
                     "expense_candidates_with_score": entry.get("expense_candidates_with_score", []),
                     "uuid": entry.get("uuid"),
-                    "流水号": entry.get("流水号"),
-                    # ... 其他你需要的字段
                 }
             except Exception as e:
                 raise RuntimeError(f"Error processing row {row.get('流水号', 0)}: {e}")
@@ -160,8 +155,6 @@ class AnalyzeService:
             balance_date = (datetime.strptime(data['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
             expenditure_sign, account_sign = get_shouzhi(data)
             expense,selected_expense_key, expense_candidates_with_score = expense_handler.get_expense(data, owner_id)
-            # print(selected_expense_key,expense_candidates_with_score)
-            # expense = EXPENSES_OTHER
             account = account_handler.get_account(data, owner_id)
             commission = get_commission(data)
             installment_granularity = get_installment_granularity(data)
@@ -170,8 +163,8 @@ class AnalyzeService:
             currency = expense_handler.get_currency()
             if data['transaction_type'] == "/":
                 actual_amount = self.calculate_commission(amount, commission)
-                return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note, "tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense, "expenditure_sign": expenditure_sign, "account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency}
-            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note, "tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense, "expenditure_sign": expenditure_sign, "account": account, "account_sign": account_sign, "amount": amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency, "selected_expense_key": selected_expense_key,"expense_candidates_with_score":expense_candidates_with_score}
+                return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note, "tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense, "expenditure_sign": expenditure_sign, "account": account, "account_sign": account_sign, "amount": amount, "actual_amount": actual_amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency, "selected_expense_key": selected_expense_key, "expense_candidates_with_score":expense_candidates_with_score}
+            return {"date": date, "time": time, "uuid": uuid, "status": status, "payee": payee, "note": note, "tag": tag, "balance": balance, "balance_date": balance_date, "expense": expense, "expenditure_sign": expenditure_sign, "account": account, "account_sign": account_sign, "amount": amount, "installment_granularity": installment_granularity, "installment_cycle": installment_cycle, "discount": discount, "currency": currency, "selected_expense_key": selected_expense_key, "expense_candidates_with_score":expense_candidates_with_score}
         except ValueError as e:
             raise e
 

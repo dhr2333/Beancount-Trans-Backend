@@ -1,5 +1,6 @@
 .idea
 .coverage
+.vscode
 /media/
 collectstatic
 /project/settings/prod.py
@@ -20,3 +21,4 @@ htmlcov/
 uwsgi.pid
 fixtures/Develop.sql
 beancount-trans-backend.tar
+training_data.jsonl

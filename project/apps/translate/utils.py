@@ -98,15 +98,9 @@ class FormatConfig:
 class FormatData:
 
     def format_instance(entry, config=FormatConfig()):
-        # if isinstance(entry, tuple) and len(entry) > 0:
-        #     entry = entry[0]  # 获取字典数据
-        # else:
-        #     entry = entry  # 防止意外结构
-
         ignore_data = IgnoreData(None)
         formatted_str = ""
 
-        # print(entry)
         formatted_str += f"{entry['date']}"
         formatted_str += f" {config.flag}"
         formatted_str += f" \"{entry['payee']}\""
@@ -128,10 +122,8 @@ class FormatData:
             formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
         if ignore_data.notes(entry):
             formatted_str += f"{entry['actual_amount']} {config.currency}"
-            # formatted_str += f"{entry['actual_amount']} CNY"
         else:
             formatted_str += f"{entry['amount']} {config.currency}"
-            # formatted_str += f"{entry['amount']} CNY"
 
         if config.show_discount:
             if ignore_data.notes(entry):
@@ -140,7 +132,6 @@ class FormatData:
                 else:
                     formatted_str += "\n    Expenses:Other"
             elif entry['discount']:
-                # formatted_str += "\n    Income:Other"
                 if config.income_template:
                     formatted_str += (f"\n    {config.income_template}")
                 else:
@@ -213,7 +204,6 @@ class IgnoreData:
         # 将 transaction_time 转换回字符串
         for record in result:
             record["transaction_time"] = record["transaction_time"].strftime("%Y-%m-%d %H:%M:%S")
-        # 输出结果
         return result
 
 
