@@ -1,126 +1,194 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+import os
 from django.shortcuts import get_object_or_404
-from .models import BillFile
-from .serializers import BillFileSerializer
-from project.utils.minio_utils import MinIOClient
-from project.utils.file import calculate_file_hash
-from maps.permissions import IsOwnerOrAdminReadWriteOnly
-from maps.filters import CurrentUserFilterBackend
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from minio import Minio
+from minio.error import S3Error
+from .models import Directory, File
+from .serializers import DirectorySerializer, FileSerializer
 from rest_framework_simplejwt.authentication import JWTAuthentication
-import logging
+from django.conf import settings
+from maps.filters import CurrentUserFilterBackend
+from maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.utils.file import generate_file_hash
 
-logger = logging.getLogger(__name__)
 
-class BillFileViewSet(viewsets.ModelViewSet):
-    queryset = BillFile.objects.filter(is_active=True)
-    serializer_class = BillFileSerializer
-    # permission_classes = [IsAuthenticated]
+# 初始化 MinIO 客户端
+minio_client = Minio(
+    settings.MINIO_CONFIG['ENDPOINT'],
+    access_key=settings.MINIO_CONFIG['ACCESS_KEY'],
+    secret_key=settings.MINIO_CONFIG['SECRET_KEY'],
+    secure=settings.MINIO_CONFIG['USE_HTTPS']
+)
+
+class DirectoryViewSet(viewsets.ModelViewSet):
+    queryset = Directory.objects.all()
+    serializer_class = DirectorySerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
-    # filter_backends = [CurrentUserFilterBackend]
-    http_method_names = ['get', 'post', 'delete']  # 禁用put/patch
+    filter_backends = [CurrentUserFilterBackend]
     authentication_classes = [JWTAuthentication]
 
-    # def get_queryset(self):
-    #     """确保用户只能访问自己的文件"""
-    #     return self.queryset.filter(user=self.request.user)
+    @action(detail=True, methods=['get'])
+    def contents(self, request, pk=None):
+        directory = self.get_object()
+        
+        # 获取子目录
+        subdirs = Directory.objects.filter(parent=directory)
+        dir_serializer = DirectorySerializer(subdirs, many=True)
+        
+        # 获取文件
+        files = File.objects.filter(directory=directory)
+        file_serializer = FileSerializer(files, many=True)
+        
+        return Response({
+            'directory': dir_serializer.data,
+            'files': file_serializer.data,
+            'id': directory.id
+        })
 
-    def perform_destroy(self, instance):
-        """软删除而非物理删除"""
-        instance.is_active = False
-        instance.save()
+    @action(detail=False, methods=['get'])
+    def root_contents(self, request):
+        # 获取当前用户的根目录（parent为null的目录）
+        try:
+            root_dir = Directory.objects.get(owner=request.user, parent__isnull=True)
+        except Directory.DoesNotExist:
+            return Response({
+                'directory': [],
+                'files': [],
+            }, status=status.HTTP_200_OK)
+        except Directory.MultipleObjectsReturned:
+            # 如果意外有多个根目录，取第一个
+            root_dir = Directory.objects.filter(owner=request.user, parent__isnull=True).first()
+        
+        # 获取根目录下的内容
+        subdirs = Directory.objects.filter(parent=root_dir)
+        dir_serializer = DirectorySerializer(subdirs, many=True)
+        
+        files = File.objects.filter(directory=root_dir)
+        file_serializer = FileSerializer(files, many=True)
+        
+        return Response({
+            'directory': dir_serializer.data,
+            'files': file_serializer.data,
+            'id': root_dir.id,
+            'root_name': '/  ' + root_dir.name
+        })
+
+
+class FileViewSet(viewsets.ModelViewSet):
+    queryset = File.objects.all()
+    serializer_class = FileSerializer
+    permission_classes = [IsOwnerOrAdminReadWriteOnly]
+    filter_backends = [CurrentUserFilterBackend]
+    authentication_classes = [JWTAuthentication]
 
     def create(self, request):
-        """文件上传处理"""
-        if 'file' not in request.FILES:
-            return Response(
-                {"error": "No file provided"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        file_obj = request.FILES['file']
-        minio_client = MinIOClient()
-
-        try:
-            # 计算文件哈希
-            file_hash = calculate_file_hash(file_obj)
-            
-            # 检查文件是否已存在（包括已软删除的）
-            existing_file = BillFile.objects.filter(
-                owner=request.user,
-                file_hash=file_hash
-            ).first()
+        directory_id = request.data.get('directory')
+        directory = get_object_or_404(Directory, id=directory_id)
+        uploaded_file = request.FILES['file']
+        file_hash = generate_file_hash(uploaded_file)
+        file_extension = os.path.splitext(uploaded_file.name)[1]
+        storage_name = f"{file_hash}{file_extension}"
         
-            if existing_file:
-                # 如果文件存在但被软删除，则重新激活
-                if not existing_file.is_active:
-                    existing_file.is_active = True
-                    existing_file.original_name = file_obj.name  # 更新文件名（如果需要）
-                    existing_file.save()
-                
-                return Response(
-                    {
-                        "message": "文件已存在并已重新激活",
-                        "existing_file": BillFileSerializer(existing_file).data
-                    },
-                    status=status.HTTP_200_OK
-                )
-
-            # 上传到MinIO
-            object_name = minio_client.upload_file(
-                bucket_name="beancount-trans",
-                file_obj=file_obj,
-                file_name=file_obj.name
+        try:
+            # 上传到 MinIO
+            minio_client.put_object(
+                settings.MINIO_CONFIG['BUCKET_NAME'],
+                storage_name,
+                uploaded_file,
+                length=uploaded_file.size,
+                content_type=uploaded_file.content_type
             )
-
+            
             # 保存到数据库
-            bill_file = BillFile.objects.create(
+            file_obj = File.objects.create(
+                name=uploaded_file.name,
+                directory=directory,
+                storage_name=storage_name,
+                size=uploaded_file.size,
                 owner=request.user,
-                original_name=file_obj.name,
-                storage_path=object_name,
-                file_size=file_obj.size,
-                file_hash=file_hash
+                content_type=uploaded_file.content_type
             )
+            
+            return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
+        
+        except S3Error as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            serializer = self.get_serializer(bill_file)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        except Exception as e:
-            logger.error(f"File upload failed: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "文件上传失败"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
-        """文件下载"""
-        bill_file = get_object_or_404(
-            BillFile, 
-            pk=pk, 
-            owner=request.user,
-            is_active=True
-        )
-        minio_client = MinIOClient()
-
+        file_obj = self.get_object()
+        
         try:
-            file_stream = minio_client.get_file(
-                bucket_name="beancount-trans",
-                object_name=bill_file.storage_path
+            # 从 MinIO 获取文件
+            response = minio_client.get_object(
+                settings.MINIO_CONFIG['BUCKET_NAME'],
+                file_obj.storage_name
             )
-            
-            response = Response(file_stream.getvalue())
-            response['Content-Type'] = 'application/octet-stream'
-            response['Content-Disposition'] = (
-                f'attachment; filename="{bill_file.original_name}"'
-            )
-            return response
+            from urllib.parse import quote
 
-        except Exception as e:
-            logger.error(f"File download failed: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "文件下载失败"},
-                status=status.HTTP_404_NOT_FOUND
+            safe_name = quote(file_obj.name)
+            content_disposition = f"attachment; filename*=UTF-8''{safe_name}"
+            
+            # 创建 Django 文件响应
+            from django.http import HttpResponse
+            res = HttpResponse(response.data)
+            res['Content-Type'] = file_obj.content_type
+            res['Content-Disposition'] = content_disposition
+            res['Access-Control-Expose-Headers'] = 'Content-Disposition'
+            return res
+        
+        except S3Error as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        finally:
+            response.close()
+            response.release_conn()
+
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        query = request.query_params.get('q', '')
+        if not query:
+            return Response({"error": "缺少搜索参数"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 搜索当前用户的所有文件（全局）
+        files = File.objects.filter(
+            owner=request.user,
+            name__icontains=query
+        ).select_related('directory').order_by('-uploaded_at')
+        
+        # 搜索当前用户的所有目录（全局）
+        directories = Directory.objects.filter(
+            owner=request.user,
+            name__icontains=query
+        ).order_by('-created_at')
+        
+        file_serializer = FileSerializer(files, many=True)
+        dir_serializer = DirectorySerializer(directories, many=True)
+        
+        return Response({
+            'files': file_serializer.data,
+            'directories': dir_serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        file_obj = self.get_object()
+        storage_name = file_obj.storage_name
+        
+        try:
+            # 先删除MinIO中的文件
+            minio_client.remove_object(
+                settings.MINIO_CONFIG['BUCKET_NAME'],
+                storage_name
             )
+        except S3Error as e:
+            # 如果文件不存在则继续删除数据库记录，否则返回错误
+            if e.code != "NoSuchKey":
+                return Response({"error": f"MinIO删除失败: {str(e)}"}, 
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # 删除数据库记录
+        file_obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

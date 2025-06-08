@@ -1,25 +1,34 @@
 from django.db import models
-from django.utils import timezone
 from django.contrib.auth.models import User
-import uuid
 
-class BillFile(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False,help_text="文件唯一标识符")
-    owner = models.ForeignKey(User, related_name='billfile',on_delete=models.CASCADE,help_text="文件所有者")
-    original_name = models.CharField(max_length=255,help_text="原始文件名")
-    storage_path = models.CharField(max_length=1024, unique=True,help_text="minIO存储路径")
-    file_size = models.PositiveIntegerField(help_text="文件大小（字节）")
-    file_hash = models.CharField(max_length=64,blank=True,help_text="文件内容哈希值，用于去重")
-    uploaded_at = models.DateTimeField(default=timezone.now,help_text="上传时间")
-    is_active = models.BooleanField(default=True,help_text="是否启用，软删除标志")
+class Directory(models.Model):
+    name = models.CharField(max_length=255)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, 
+                              null=True, blank=True, related_name='children')
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        app_label = 'file_manager'
-        ordering = ['-uploaded_at']
-        indexes = [
-            models.Index(fields=['owner', 'uploaded_at'])
-        ]
-        verbose_name = 'Managed File'
+        unique_together = ('name', 'parent')
+    
+    def get_path(self):
+        if not self.parent:
+            return self.name
+        return f"{self.parent.get_path()}/{self.name}"
 
-    def __str__(self):
-        return f"{self.original_name} ({self.file_size} bytes)"
+class File(models.Model):
+    name = models.CharField(max_length=255)
+    directory = models.ForeignKey(Directory, on_delete=models.CASCADE, related_name='files')
+    storage_name = models.CharField(max_length=1024)
+    size = models.BigIntegerField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    content_type = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ('name', 'directory')
+
+    @property
+    def minio_path(self):
+        """返回MinIO中的存储路径"""
+        return self.storage_name

@@ -200,17 +200,10 @@ def read_and_write(reader,writer):
     for row in reader:
         writer.writerow(row)
 
-def calculate_file_hash(file_obj, chunk_size=8192):
-    """计算文件内容的SHA256哈希值"""
-    sha256 = hashlib.sha256()
-
-    # 确保从文件开头读取
-    file_obj.seek(0)
-
-    for chunk in iter(lambda: file_obj.read(chunk_size), b''):
-        sha256.update(chunk)
-
-    # 重置文件指针
-    file_obj.seek(0)
-
-    return sha256.hexdigest()
+def generate_file_hash(file):
+    """生成文件哈希值"""
+    hasher = hashlib.sha256()
+    for chunk in file.chunks():
+        hasher.update(chunk)
+    file.seek(0)  # 重置文件指针
+    return hasher.hexdigest()

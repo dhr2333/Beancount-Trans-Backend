@@ -460,12 +460,15 @@ LOGGING = {
     }
 }
 
-# MinIO配置
-MINIO_ENDPOINT = '127.0.0.1:9000'
-MINIO_ACCESS_KEY = ''
-MINIO_SECRET_KEY = ''
-MINIO_USE_SSL = False
-
 # 文件上传限制
 DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
+
+# MinIO配置
+MINIO_CONFIG = {
+    'ENDPOINT': '127.0.0.1:9000',  # MinIO服务器地址
+    'ACCESS_KEY': 'minioadmin',  # MinIO访问密钥
+    'SECRET_KEY': 'minioadmin',  # MinIO密钥
+    'BUCKET_NAME': 'beancount-trans',  # 默认存储桶名称
+    'USE_HTTPS': False  # 是否使用SSL
+}

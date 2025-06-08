@@ -1,28 +1,28 @@
 from rest_framework import serializers
-from .models import BillFile
-from django.urls import reverse
-import humanize  # 用于友好显示文件大小
+from .models import Directory, File
 
-class BillFileSerializer(serializers.ModelSerializer):
-    download_url = serializers.SerializerMethodField()
-    file_size_display = serializers.SerializerMethodField()
-    owner = serializers.StringRelatedField()  # 显示用户名而非ID
-
+class DirectorySerializer(serializers.ModelSerializer):
+    path = serializers.SerializerMethodField()
+    owner = serializers.ReadOnlyField(source='owner.username')
+    
     class Meta:
-        model = BillFile
-        fields = [
-            'id', 'owner', 'original_name', 
-            'file_size', 'file_size_display',
-            'uploaded_at', 'download_url',
-            'is_active'
-        ]
-        read_only_fields = fields
+        model = Directory
+        fields = ['id', 'owner', 'name', 'parent', 'path', 'created_at']
+    
+    def create(self, validated_data):
+        validated_data['owner'] = self.context['request'].user
+        return super().create(validated_data)
 
-    def get_download_url(self, obj):
-        request = self.context.get('request')
-        return request.build_absolute_uri(
-            reverse('file-download', kwargs={'pk': obj.id})
-        ) if request else None
+    def get_path(self, obj):
+        return obj.get_path()
 
-    def get_file_size_display(self, obj):
-        return humanize.naturalsize(obj.file_size)
+class FileSerializer(serializers.ModelSerializer):
+    owner = serializers.ReadOnlyField(source='owner.username')
+    directory_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = File
+        fields = ['id', 'directory', 'owner', 'name', 'size', 'uploaded_at', 'content_type', 'directory_name']
+    
+    def get_directory_name(self, obj):
+        return obj.directory.name
