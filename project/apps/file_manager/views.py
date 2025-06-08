@@ -12,15 +12,8 @@ from django.conf import settings
 from maps.filters import CurrentUserFilterBackend
 from maps.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
+from project.utils.minio import minio_client
 
-
-# 初始化 MinIO 客户端
-minio_client = Minio(
-    settings.MINIO_CONFIG['ENDPOINT'],
-    access_key=settings.MINIO_CONFIG['ACCESS_KEY'],
-    secret_key=settings.MINIO_CONFIG['SECRET_KEY'],
-    secure=settings.MINIO_CONFIG['USE_HTTPS']
-)
 
 class DirectoryViewSet(viewsets.ModelViewSet):
     queryset = Directory.objects.all()
@@ -32,15 +25,15 @@ class DirectoryViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def contents(self, request, pk=None):
         directory = self.get_object()
-        
+
         # 获取子目录
         subdirs = Directory.objects.filter(parent=directory)
         dir_serializer = DirectorySerializer(subdirs, many=True)
-        
+
         # 获取文件
         files = File.objects.filter(directory=directory)
         file_serializer = FileSerializer(files, many=True)
-        
+
         return Response({
             'directory': dir_serializer.data,
             'files': file_serializer.data,
@@ -53,21 +46,18 @@ class DirectoryViewSet(viewsets.ModelViewSet):
         try:
             root_dir = Directory.objects.get(owner=request.user, parent__isnull=True)
         except Directory.DoesNotExist:
-            return Response({
-                'directory': [],
-                'files': [],
-            }, status=status.HTTP_200_OK)
+            root_dir = Directory.objects.create(name=f"Root", owner=request.user, parent=None)
         except Directory.MultipleObjectsReturned:
             # 如果意外有多个根目录，取第一个
             root_dir = Directory.objects.filter(owner=request.user, parent__isnull=True).first()
-        
+
         # 获取根目录下的内容
         subdirs = Directory.objects.filter(parent=root_dir)
         dir_serializer = DirectorySerializer(subdirs, many=True)
-        
+
         files = File.objects.filter(directory=root_dir)
         file_serializer = FileSerializer(files, many=True)
-        
+
         return Response({
             'directory': dir_serializer.data,
             'files': file_serializer.data,
@@ -90,7 +80,7 @@ class FileViewSet(viewsets.ModelViewSet):
         file_hash = generate_file_hash(uploaded_file)
         file_extension = os.path.splitext(uploaded_file.name)[1]
         storage_name = f"{file_hash}{file_extension}"
-        
+
         try:
             # 上传到 MinIO
             minio_client.put_object(
@@ -100,7 +90,7 @@ class FileViewSet(viewsets.ModelViewSet):
                 length=uploaded_file.size,
                 content_type=uploaded_file.content_type
             )
-            
+
             # 保存到数据库
             file_obj = File.objects.create(
                 name=uploaded_file.name,
@@ -110,9 +100,9 @@ class FileViewSet(viewsets.ModelViewSet):
                 owner=request.user,
                 content_type=uploaded_file.content_type
             )
-            
+
             return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
-        
+
         except S3Error as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -121,7 +111,7 @@ class FileViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
         file_obj = self.get_object()
-        
+
         try:
             # 从 MinIO 获取文件
             response = minio_client.get_object(
@@ -132,7 +122,7 @@ class FileViewSet(viewsets.ModelViewSet):
 
             safe_name = quote(file_obj.name)
             content_disposition = f"attachment; filename*=UTF-8''{safe_name}"
-            
+
             # 创建 Django 文件响应
             from django.http import HttpResponse
             res = HttpResponse(response.data)
@@ -140,7 +130,7 @@ class FileViewSet(viewsets.ModelViewSet):
             res['Content-Disposition'] = content_disposition
             res['Access-Control-Expose-Headers'] = 'Content-Disposition'
             return res
-        
+
         except S3Error as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         finally:
@@ -152,22 +142,22 @@ class FileViewSet(viewsets.ModelViewSet):
         query = request.query_params.get('q', '')
         if not query:
             return Response({"error": "缺少搜索参数"}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 搜索当前用户的所有文件（全局）
         files = File.objects.filter(
             owner=request.user,
             name__icontains=query
         ).select_related('directory').order_by('-uploaded_at')
-        
+
         # 搜索当前用户的所有目录（全局）
         directories = Directory.objects.filter(
             owner=request.user,
             name__icontains=query
         ).order_by('-created_at')
-        
+
         file_serializer = FileSerializer(files, many=True)
         dir_serializer = DirectorySerializer(directories, many=True)
-        
+
         return Response({
             'files': file_serializer.data,
             'directories': dir_serializer.data
@@ -176,7 +166,7 @@ class FileViewSet(viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         file_obj = self.get_object()
         storage_name = file_obj.storage_name
-        
+
         try:
             # 先删除MinIO中的文件
             minio_client.remove_object(
@@ -186,9 +176,9 @@ class FileViewSet(viewsets.ModelViewSet):
         except S3Error as e:
             # 如果文件不存在则继续删除数据库记录，否则返回错误
             if e.code != "NoSuchKey":
-                return Response({"error": f"MinIO删除失败: {str(e)}"}, 
+                return Response({"error": f"MinIO删除失败: {str(e)}"},
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
         # 删除数据库记录
         file_obj.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

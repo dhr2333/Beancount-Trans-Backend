@@ -4,14 +4,14 @@ sequenceDiagram
     participant Backend
     participant MinIO
     participant Database
-    
+
     User->>Frontend: 选择文件解析(单个/批量)
     alt 文件管理页面
         Frontend->>Backend: POST /api/files/{file_id}/parse
     else 解析页面直接上传
         Frontend->>Backend: POST /api/parse (包含文件)
     end
-    
+
     Backend->>MinIO: 获取文件内容
     MinIO-->>Backend: 返回文件数据
     Backend->>Backend: 解析文件

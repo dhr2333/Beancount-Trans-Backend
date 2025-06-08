@@ -3,7 +3,7 @@ sequenceDiagram
     participant Frontend
     participant Backend
     participant Database
-    
+
     User->>Frontend: 修改条目分类
     Frontend->>Backend: POST /api/entries/{transaction_id}/reparse
     Backend->>Database: 获取BillEntry记录

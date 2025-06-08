@@ -4,7 +4,7 @@ sequenceDiagram
     participant Backend
     participant MinIO
     participant Database
-    
+
     User->>Frontend: 选择账单文件
     Frontend->>Backend: POST /api/files/upload
     Backend->>MinIO: 上传文件(bucket: beancount-trans)

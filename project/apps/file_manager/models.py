@@ -3,14 +3,14 @@ from django.contrib.auth.models import User
 
 class Directory(models.Model):
     name = models.CharField(max_length=255)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, 
+    parent = models.ForeignKey('self', on_delete=models.CASCADE,
                               null=True, blank=True, related_name='children')
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('name', 'parent')
-    
+
     def get_path(self):
         if not self.parent:
             return self.name
