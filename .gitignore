@@ -9,6 +9,8 @@ logs/*.log
 static
 requirements.txt.bak
 pretrained_models
+# 用户账单文件存储路径
+/Assets/
 # zh_core_web_md-3.8.0-py3-none-any.whl
 
 # __pycache

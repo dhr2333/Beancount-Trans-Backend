@@ -12,7 +12,7 @@ from django.conf import settings
 from maps.filters import CurrentUserFilterBackend
 from maps.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
-from project.utils.minio import minio_client
+from project.utils.minio import get_minio_client
 
 
 class DirectoryViewSet(ModelViewSet):
@@ -78,6 +78,7 @@ class DirectoryViewSet(ModelViewSet):
 
     def delete_directory_files(self, directory):
         """递归删除目录下所有文件"""
+        minio_client = get_minio_client()
         for file in directory.files.all():
             storage_name = file.storage_name
             # 检查是否有其他文件引用相同的MinIO文件
@@ -111,6 +112,7 @@ class FileViewSet(ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def create(self, request):
+        minio_client = get_minio_client()
         directory_id = request.data.get('directory')
         directory = get_object_or_404(Directory, id=directory_id)
         uploaded_file = request.FILES['file']
@@ -147,6 +149,7 @@ class FileViewSet(ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
+        minio_client = get_minio_client()
         file_obj = self.get_object()
 
         try:
@@ -201,6 +204,7 @@ class FileViewSet(ModelViewSet):
         })
 
     def destroy(self, request, *args, **kwargs):
+        minio_client = get_minio_client()
         file_obj = self.get_object()
         storage_name = file_obj.storage_name
 

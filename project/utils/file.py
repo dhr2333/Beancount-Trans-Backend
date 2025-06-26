@@ -11,15 +11,8 @@ from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit
 from translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv, icbc_debit_sourcefile_identifier
 from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv, cmb_credit_sourcefile_identifier
 from translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string, ccb_debit_sourcefile_identifier
+from django.conf import settings
 
-settings_module = os.environ.get('DJANGO_SETTINGS_MODULE')
-
-if settings_module == 'project.settings.prod':
-    from project.settings.prod import *
-elif settings_module == 'project.settings.develop':
-    from project.settings.develop import *
-else:
-    from project.settings.settings import *
 
 SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf']
 
@@ -125,7 +118,7 @@ def write_entry_to_file(content):
     try:
         year = content[0:4]
         month = content[5:7]
-        file_path = os.path.join(os.path.dirname(BASE_DIR), "Beancount-Trans-Assets", year, f"{month}-expenses.bean")
+        file_path = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year, f"{month}-expenses.bean")
         init_project_file(file_path)
         with open(file_path, mode='a') as file:
             file.write(content)

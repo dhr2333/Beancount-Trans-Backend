@@ -12,6 +12,7 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -42,17 +43,17 @@ WORKDIR /code/beancount-trans/
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libexpat1 \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /root/.local /root/.local
 COPY --from=builder /build/pretrained_models/bert-base-chinese /code/beancount-trans/pretrained_models/bert-base-chinese
 COPY bin ./bin
 COPY conf ./conf
 COPY logs ./logs
-COPY translate ./translate
-COPY manage.py ./manage.py
 # COPY static ./static
 # COPY collectstatic ./collectstatic
-COPY project ./project
 COPY templates ./templates
+COPY manage.py ./manage.py
+COPY project ./project
 RUN chmod +x /code/beancount-trans/bin/docker_start.sh
 ENTRYPOINT ["/code/beancount-trans/bin/docker_start.sh"]
