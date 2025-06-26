@@ -30,17 +30,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)k
 DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
 
 ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "http://127.0.0.1:38001",
-    "http://localhost:38001",
-    "http://127.0.0.1:38000",
-    "http://localhost:38000",
-    "http://127.0.0.1:80",
-    "http://localhost:80",
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-    "trans.dhr2333.cn",
+    "127.0.0.1",
+    "localhost",
     "*",
 ]
 
@@ -73,6 +64,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     "allauth.usersessions",
     'dj_rest_auth',
     'dj_rest_auth.registration',
+    'mptt',
 
     # 本地应用
     'project.apps.account.apps.AccountConfig',
@@ -80,6 +72,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.maps.apps.MapsConfig',
     'project.apps.owntracks.apps.OwntracksConfig',
     'project.apps.translate.apps.TranslateConfig',
+    'project.apps.fava_instances.apps.FavaInstancesConfig',
 ]
 
 MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理
@@ -460,10 +453,6 @@ LOGGING = {
     }
 }
 
-# 文件上传限制
-DATA_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 100 * 1024 * 1024  # 100MB
-
 # MinIO配置
 MINIO_CONFIG = {
     'ENDPOINT': '127.0.0.1:9000',  # MinIO服务器地址
@@ -472,3 +461,11 @@ MINIO_CONFIG = {
     'BUCKET_NAME': 'beancount-trans',  # 默认存储桶名称
     'USE_HTTPS': False  # 是否使用SSL
 }
+
+# Traefik 配置
+TRAEFIK_NETWORK = "shared-network"  # 与Traefik共享的Docker网络
+FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker专用镜像
+BEANCOUNT_ROOT = "/home/daihaorui/桌面/GitHub/Beancount-Trans/Beancount-Trans-Backend/Assets"  # Beancount文件存储根目录(宿主机路径)
+
+# 容器生命周期 (1小时)
+FAVA_CONTAINER_LIFETIME = datetime.timedelta(hours=1)

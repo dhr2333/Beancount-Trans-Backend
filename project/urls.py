@@ -24,23 +24,21 @@ from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from .views import authenticateByToken
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
-from drf_yasg import openapi
-
-
+# from rest_framework import permissions
+# from drf_yasg.views import get_schema_view
+# from drf_yasg import openapi
 # from project.views import DRFLoginView
 
 # from users.views import UserViewSet, GroupViewSet, CreateUserView, LoginView, GitHubLogin
-schema_view = get_schema_view(
-    openapi.Info(
-        title="文件管理API",
-        default_version='v1',
-        description="文件上传、管理和检索接口文档",
-    ),
-    public=True,
-    permission_classes=(permissions.AllowAny,),
-)
+# schema_view = get_schema_view(
+#     openapi.Info(
+#         title="文件管理API",
+#         default_version='v1',
+#         description="文件上传、管理和检索接口文档",
+#     ),
+#     public=True,
+#     permission_classes=(permissions.AllowAny,),
+# )
 
 router = routers.DefaultRouter()
 router.register(r'expense', ExpenseViewSet, basename="expense")
@@ -50,12 +48,13 @@ router.register(r'income', IncomeViewSet, basename="income")
 router.register(r'directories', DirectoryViewSet, basename='directory')
 router.register(r'files', FileViewSet, basename='files')
 
+
 urlpatterns = [
     path('api/', include(router.urls)),
     path('admin/', admin.site.urls),  # 管理地址
     path('docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
-    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
-    path('redoc/', schema_view.with_ui('redoc', cache_timeout=0)),
+    # path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
+    # path('redoc/', schema_view.with_ui('redoc', cache_timeout=0)),
 
     # 用户权限相关的urls
     path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
@@ -71,5 +70,6 @@ urlpatterns = [
 
     # 业务相关的urls
     path('api/translate/', include('translate.urls')),  # 解析地址
-    path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
+    path('api/fava/', include('fava_instances.urls')),  # fava容器服务
+    # path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
 ]
