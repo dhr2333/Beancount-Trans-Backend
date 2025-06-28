@@ -26,8 +26,12 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'project/apps'))  # 系统的导包路
 
 
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf')
+
 DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
+REDIS_HOST = os.environ.get("TRANS_REDIS_HOST", "127.0.0.1")
+REDIS_PORT = os.environ.get("TRANS_REDIS_PORT", "6379")
+REDIS_PASSWORD = os.environ.get("TRANS_REDIS_PASSWORD", "root")
 
 ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
     "127.0.0.1",
@@ -65,6 +69,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'dj_rest_auth',
     'dj_rest_auth.registration',
     'mptt',
+    'django_celery_beat',
 
     # 本地应用
     'project.apps.account.apps.AccountConfig',
@@ -274,33 +279,28 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('TRANS_MYSQL_DATABASE') or 'beancount-trans',
-        'USER': os.environ.get('TRANS_MYSQL_USER') or 'root',
-        # 'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',
-        'PASSWORD': os.environ.get('TRANS_MYSQL_PASSWORD') or 'root',
-        'HOST': os.environ.get('TRANS_MYSQL_HOST') or '127.0.0.1',
-        'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
-        # 'PORT': os.environ.get('TRANS_MYSQL_PORT') or '3306',
+        'NAME': os.environ.get('TRANS_POSTGRESQL_DATABASE', 'beancount-trans'),
+        'USER': os.environ.get('TRANS_POSTGRESQL_USER', 'root'),
+        'PASSWORD': os.environ.get('TRANS_POSTGRESQL_PASSWORD', 'root'),
+        'HOST': os.environ.get('TRANS_POSTGRESQL_HOST', '127.0.0.1'),
+        'PORT': os.environ.get('TRANS_POSTGRESQL_PORT', '5432'),
         'TIME_ZONE': 'Asia/Shanghai',
     }
 }
-
 
 # Cache Configuration
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': os.environ.get("TRANS_REDIS_URL", f'redis://127.0.0.1:36379/0'),
-        'OPTIONS': {
-            'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
-        },
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/0',
+        'OPTIONS':
+            {'password': REDIS_PASSWORD},
     },
     'session': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': os.environ.get("TRANS_REDIS_URL", f'redis://127.0.0.1:36379/1'),
-        'OPTIONS': {
-            'password': os.environ.get("TRANS_REDIS_PASSWORD") or 'root',
-        },
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
+        'OPTIONS':
+            {'password': REDIS_PASSWORD},
     },
 }
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"  # 会话存储后端（数据库、缓存、文件系统）
@@ -468,4 +468,16 @@ FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker�
 BEANCOUNT_ROOT = "/home/daihaorui/桌面/GitHub/Beancount-Trans/Beancount-Trans-Backend/Assets"  # Beancount文件存储根目录(宿主机路径)
 
 # 容器生命周期 (1小时)
-FAVA_CONTAINER_LIFETIME = datetime.timedelta(hours=1)
+FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)
+
+# Celery 配置
+CELERY_BROKER_URL = f'redis://default:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/2'
+CELERY_RESULT_BACKEND = f'redis://default:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/3'
+CELERY_BEAT_SCHEDULE = {
+    'cleanup_fava_containers': {
+        'task': 'fava_instances.tasks.cleanup_fava_containers',
+        'schedule': datetime.timedelta(seconds=60),  # 每1分钟执行一次清理任务
+    },
+}
+
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

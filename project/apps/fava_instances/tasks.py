@@ -5,7 +5,7 @@ from fava_instances.models import FavaInstance
 from fava_instances.services.fava_manager import FavaContainerManager
 from django.conf import settings
 
-@shared_task
+@shared_task(name="fava_instances.tasks.cleanup_fava_containers")
 def cleanup_fava_containers():
     expiry = timezone.now() - settings.FAVA_CONTAINER_LIFETIME
     instances = FavaInstance.objects.filter(

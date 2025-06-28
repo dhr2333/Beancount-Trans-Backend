@@ -5,6 +5,7 @@
 collectstatic
 /project/settings/prod.py
 /project/settings/develop.py
+/project/settings/docker_local.py
 logs/*.log
 static
 requirements.txt.bak
