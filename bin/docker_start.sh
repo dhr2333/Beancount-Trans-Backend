@@ -18,8 +18,8 @@ export PYTHONPATH=$DJANGODIR:$PYTHONPATH
 #pip install -Ur requirements.txt -i http://pypi.douban.com/simple/  --trusted-host pypi.douban.com && \
 #        pip install gunicorn  -i http://pypi.douban.com/simple/ --trusted-host pypi.douban.com
 
-python manage.py makemigrations && \
-python manage.py migrate && \
+# python manage.py makemigrations && \
+# python manage.py migrate && \
 python manage.py collectstatic --noinput && \
 /root/.local/bin/uwsgi --ini conf/uwsgi.ini
 #   &&

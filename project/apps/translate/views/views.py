@@ -66,14 +66,6 @@ class SingleBillAnalyzeView(APIView):
         return render(request, "translate/trans.html", {"title": "trans"})
 
 
-class UploadFileView(APIView):
-    """文件上传接口
-
-    该接口用于接收用户上传的文件，并将其存储在minio中
-    """
-    pass
-
-
 class BillAnalyzeView(APIView):
     """账单解析接口 v2 版本
 

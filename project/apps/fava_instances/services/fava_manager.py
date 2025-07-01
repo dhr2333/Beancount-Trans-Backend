@@ -18,7 +18,7 @@ class FavaContainerManager:
         container = self.client.containers.run(
             image=self.fava_image,
             name=container_name,
-            volumes={bean_file_path: {'bind': '/Assets/main.bean', 'mode': 'rw'}},
+            volumes={bean_file_path: {'bind': '/Assets', 'mode': 'rw'}},
             network=self.network,
             ports={'5000/tcp': None},
             detach=True,
