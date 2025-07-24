@@ -1,12 +1,12 @@
+# project/apps/translate/services/analyze_service.py
 import csv
 import os
-import datetime
-from datetime import timedelta
-from datetime import datetime
+# import datetime
+from datetime import timedelta, datetime
 from translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
 from translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
-from project.utils.file import create_temporary_file, file_convert_to_csv, write_entry_to_file
+from project.utils.file import create_temporary_file, convert_to_csv_bytes, write_entry_to_file
 from translate.utils import *
 from translate.views.AliPay import *
 from translate.views.WeChat import *
@@ -14,6 +14,17 @@ from translate.views.BOC_Debit import *
 from translate.views.CMB_Credit import *
 from translate.views.ICBC_Debit import *
 from translate.views.CCB_Debit import *
+from .pipeline import BillParsingPipeline
+from .steps import (
+    ConvertToCSVStep,
+    InitializeBillStep,
+    PreFilterStep,
+    ParseStep,
+    PostFilterStep,
+    FormatStep,
+    CacheStep,
+    FileWritingStep
+)
 
 
 class AnalyzeService:
@@ -25,7 +36,7 @@ class AnalyzeService:
 
     def analyze(self, uploaded_file, args):
         try:
-            csv_file = file_convert_to_csv(uploaded_file, args.get("password", ""))
+            csv_file = convert_to_csv_bytes(uploaded_file, args.get("password", ""))
             temp, encoding = create_temporary_file(csv_file)
         except (DecryptionError, UnsupportedFileTypeError) as e:
             raise e
@@ -40,6 +51,7 @@ class AnalyzeService:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 bill_list = self.get_initials_bill(csv.reader(csvfile))
             result_list = self.beancount_outfile(bill_list, self.owner_id, args, self.config)
+            print(result_list)
         finally:
             if os.path.exists(temp.name):
                 os.unlink(temp.name)
@@ -68,6 +80,7 @@ class AnalyzeService:
         }
 
     def get_initials_bill(self, bill):
+        # print(bill)
         first_line = next(bill)[0]
         year = first_line[:4]
         card_number = card_number_get_key(first_line)
@@ -135,6 +148,7 @@ class AnalyzeService:
             max_workers= 1 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
             batch_size=50
         )
+        # print(instance_list)
 
         return instance_list
 
@@ -174,3 +188,47 @@ class AnalyzeService:
         else:
             amount = total
         return amount
+
+
+    def analyze_single_file(self, uploaded_file, args):
+        """解析单个文件"""
+        # 创建初始上下文
+        context = {
+            "owner_id": self.owner_id,
+            "config": self.config,
+            "args": args,
+            "uploaded_file": uploaded_file,
+            "csv_file_object": None,  # 转换后的CSV数据文件对象
+            # <_io.StringIO object at 0x7fd6b0e82440>
+            "initialized_bill": [],  # 初始化获取各账单可用的字段（字典列表）
+            # [{'transaction_time': '2024-02-25 20:01:48', 'transaction_category': '母婴亲子', 'counterparty': '十月**店', 'commodity': '【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件', 'transaction_type': '/', 'amount': 14.8, 'payment_method': '亲情卡(凯义(王凯义))', 'transaction_status': '交易成功', 'notes': '/', 'bill_identifier': 'alipay', 'uuid': '2024022522001174561439593142', 'discount': False}]
+            "parsed_data": [],  # 解析后的数据（包含格式化所需的所有字段以及AI字典信息）
+            # [{'date': '2024-02-25', 'time': '20:01:48', 'uuid': '2024022522001174561439593142', 'status': 'ALiPay - 交易成功', 'payee': '十月结晶', 'note': '【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件', 'tag': None, 'balance': None, 'balance_date': '2024-02-26', 'expense': 'Expenses:Shopping:Parent', 'expenditure_sign': '', 'account': 'Equity:OpenBalance', 'account_sign': '-', 'amount': '14.80', 'installment_granularity': 'MONTHLY', 'installment_cycle': 3, 'discount': False, 'currency': 'CNY', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5471}, {'key': '出行', 'score': 0.557}, {'key': '**', 'score': 0.5499}, {'key': '十月结晶', 'score': 0.5642}], 'actual_prices': '14.80'}]
+            "formatted_data": [],  # 格式化结果(FormatStep输出)
+            # [{'formatted': '2024-02-25 * "十月结晶" "【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件"\n    time: "20:01:48"\n    uuid: "2024022522001174561439593142"\n    status: "ALiPay - 交易成功"\n    Expenses:Shopping:Parent 14.80 CNY\n    Equity:OpenBalance -14.80 CNY\n\n', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5432}, {'key': '出行', 'score': 0.5528}, {'key': '**', 'score': 0.5475}, {'key': '十月结晶', 'score': 0.5606}], 'uuid': '2024022522001174561439593142'}
+            "status": "pending",  # 状态标识
+        }
+        
+        # 创建管道
+        pipeline = BillParsingPipeline([
+            ConvertToCSVStep(),
+            InitializeBillStep(),
+            PreFilterStep(),
+            ParseStep(),
+            PostFilterStep(),
+            CacheStep(),
+            FormatStep(),
+            FileWritingStep()  # 仅在需要写入文件时执行
+        ])
+        
+        # 执行管道
+        result_context = pipeline.process(context)
+        # [{'formatted': '2024-02-25 * "十月结晶" "【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件"\n    time: "20:01:48"\n    uuid: "2024022522001174561439593142"\n    status: "ALiPay - 交易成功"\n    Expenses:Shopping:Parent 14.80 CNY\n    Equity:OpenBalance -14.80 CNY\n\n', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5432}, {'key': '出行', 'score': 0.5528}, {'key': '**', 'score': 0.5475}, {'key': '十月结晶', 'score': 0.5606}], 'uuid': '2024022522001174561439593142'}
+        return result_context["formatted_data"]
+        
+        # 返回格式化结果
+        # return {
+        #     "status": "success",
+        #     "results": result_context["formatted_data"],
+        #     "summary": {"count": len(result_context["formatted_data"])},
+        # }

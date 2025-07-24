@@ -1,3 +1,4 @@
+# project/apps/translate/services/handlers.py
 import datetime
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
@@ -137,7 +138,7 @@ class ExpenseHandler:
             selected_key = sim_result["best_match"]
             # self.similarity_model.collect_training_data(transaction_text, keys, selected_key)  # AI反馈数据收集
             scores = sim_result["scores"]
-            logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
+            # logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
             self.selected_expense_key = selected_key
             # 将候选项和分数存储到实例变量中
             # 生成候选项列表，包含分数

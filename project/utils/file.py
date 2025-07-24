@@ -1,3 +1,5 @@
+# project/utils/file.py
+import io
 import os
 import tempfile
 import PyPDF2
@@ -126,7 +128,7 @@ def write_entry_to_file(content):
         print(f"Failed to write to file: {e}")
 
 
-def file_convert_to_csv(file, password=None):
+def convert_to_csv_bytes(file, password=None):
     """
     转换为CSV格式以供程序读取解析。
 
@@ -185,13 +187,43 @@ def extract_text_from_pdf(pdf):
         content += page.extract_text() or ""
     return content
 
-def read_and_write(reader,writer):
-    import csv
+def convert_to_utf8(content_bytes: bytes) -> bytes:
+    """将任意编码内容转换为UTF-8字节"""
+    try:
+        # 检测原始编码
+        detected = chardet.detect(content_bytes)
+        source_encoding = detected['encoding'] or 'utf-8'
+        
+        # 处理中文编码特例
+        if source_encoding.lower() in ['gb2312', 'gbk', 'gb18030']:
+            source_encoding = 'gb18030'
+        
+        # 转换为UTF-8
+        try:
+            decoded = content_bytes.decode(source_encoding, errors='ignore')
+            return decoded.encode('utf-8')
+        except (UnicodeDecodeError, LookupError):
+            # 回退到常见编码
+            for encoding in ['utf-8', 'latin1', 'iso-8859-1']:
+                try:
+                    decoded = content_bytes.decode(encoding, errors='ignore')
+                    return decoded.encode('utf-8')
+                except:
+                    continue
+            
+            # 最终回退
+            return content_bytes.decode('utf-8', errors='ignore').encode('utf-8')
+            
+    except Exception as e:
+        return content_bytes
+        
+# def read_and_write(reader,writer):
+#     import csv
 
-    reader = csv.reader(reader)
-    writer = csv.writer(writer)
-    for row in reader:
-        writer.writerow(row)
+#     reader = csv.reader(reader)
+#     writer = csv.writer(writer)
+#     for row in reader:
+#         writer.writerow(row)
 
 def generate_file_hash(file):
     """生成文件哈希值"""
@@ -200,3 +232,34 @@ def generate_file_hash(file):
         hasher.update(chunk)
     file.seek(0)  # 重置文件指针
     return hasher.hexdigest()
+
+# from django.core.files.uploadedfile import InMemoryUploadedFile
+
+# def create_in_memory_file(original_name: str, content: bytes) -> InMemoryUploadedFile:
+#     """创建内存中的CSV文件对象"""
+#     # 创建新文件名
+#     base_name, _ = os.path.splitext(original_name)
+#     csv_name = f"{base_name}_converted.csv"
+    
+#     # 创建内存文件
+#     file = io.BytesIO(content)
+#     file.seek(0)
+    
+#     return InMemoryUploadedFile(
+#         file=file,
+#         field_name='csv_file',
+#         name=csv_name,
+#         content_type='text/csv',
+#         size=len(content),
+#         charset='utf-8'
+#     )
+
+def create_text_stream(original_name: str, content: bytes) -> io.StringIO:
+    """创建UTF-8编码的文本流对象"""
+    # 将字节内容解码为字符串
+    content_str = content.decode('utf-8', errors='ignore')
+    
+    # 创建内存文本流
+    text_stream = io.StringIO(content_str)
+    text_stream.name = f"{os.path.splitext(original_name)[0]}_converted.csv"
+    return text_stream

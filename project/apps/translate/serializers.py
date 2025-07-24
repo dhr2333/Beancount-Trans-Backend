@@ -1,10 +1,13 @@
+# project/apps/translate/serializers.py
 from rest_framework import serializers
 from translate.models import FormatConfig
 
 
 class AnalyzeSerializer(serializers.Serializer):
-    cmb_credit_ignore = serializers.CharField(required=False, allow_blank=False)
-    boc_debit_ignore = serializers.CharField(required=False, allow_blank=False)
+    # cmb_credit_ignore = serializers.CharField(required=False, allow_blank=False)
+    # boc_debit_ignore = serializers.CharField(required=False, allow_blank=False)
+    cmb_credit_ignore = serializers.BooleanField(required=False, default=False)
+    boc_debit_ignore = serializers.BooleanField(required=False, default=False)
     write = serializers.BooleanField(required=False, default=False)
     password = serializers.CharField(required=False, allow_blank=True)
     balance = serializers.BooleanField(required=False, default=False)

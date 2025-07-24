@@ -1,3 +1,4 @@
+# project/apps/translate/views/WeChat.py
 import logging
 import re
 
