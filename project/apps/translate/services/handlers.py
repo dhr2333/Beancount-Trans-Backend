@@ -85,9 +85,10 @@ class AccountHandler:
 
 
 class ExpenseHandler:
-    def __init__(self, data: Dict, model: str, api_key: Optional[str] = None):
+    def __init__(self, data: Dict, model: str, api_key: Optional[str] = None, selected_key: Optional[str] = None):
         self.selected_expense_instance = None
         self.selected_income_instance = None
+        self.selected_key = selected_key
         self.key_list = None
         self.full_list = None
         self.type = None
@@ -170,6 +171,7 @@ class ExpenseHandler:
 
     def _process_expense(self, data: Dict, ownerid: int) -> str:
         """处理支出逻辑"""
+
         matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
         conflict_candidates = []
         max_order = None
@@ -204,11 +206,19 @@ class ExpenseHandler:
                 self.selected_expense_key = self.selected_expense_instance.key
 
         if self.selected_expense_instance:
-            expend = self.selected_expense_instance.expend
-            if expend == "Expenses:Food":
-                expend += self._determine_food_category(self.time)
-            self.currency = self.selected_expense_instance.currency or "CNY"
-            return expend, self.selected_expense_key, self.expense_candidates_with_score
+            if self.selected_key:
+                self.selected_expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=self.selected_key).first()
+                expend = self.selected_expense_instance.expend
+                if expend == "Expenses:Food":
+                    expend += self._determine_food_category(self.time)
+                self.currency = self.selected_expense_instance.currency or "CNY"
+                return expend, self.selected_key, self.expense_candidates_with_score
+            elif self.selected_key is None:
+                expend = self.selected_expense_instance.expend
+                if expend == "Expenses:Food":
+                    expend += self._determine_food_category(self.time)
+                self.currency = self.selected_expense_instance.currency or "CNY"
+                return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
 

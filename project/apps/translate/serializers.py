@@ -34,3 +34,23 @@ class FormatConfigSerializer(serializers.ModelSerializer):
         """创建时自动关联当前用户"""
         user = self.context['request'].user
         return FormatConfig.objects.create(owner=user, **validated_data)
+
+
+# class ReparseSerializer(serializers.Serializer):
+#     """解析器配置序列化器"""
+#     ai_model = serializers.CharField(required=False, allow_blank=True, default='deepseek-chat')
+#     deepseek_apikey = serializers.CharField(required=False, allow_blank=True, default='')
+#     flag = serializers.CharField(required=False, allow_blank=True, default='*')
+#     selected_key = serializers.CharField(required=False, allow_blank=True, default=None)
+#     enable_realtime = serializers.BooleanField(required=False, default=True)
+
+#     def validate(self, attrs):
+#         """验证配置"""
+#         if not attrs.get('ai_model'):
+#             raise serializers.ValidationError("AI模型不能为空")
+#         return attrs
+
+class ReparseSerializer(serializers.Serializer):
+    """解析器配置序列化器"""
+    entry_id = serializers.CharField(required=True)
+    selected_key = serializers.CharField(required=True)

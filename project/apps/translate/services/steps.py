@@ -33,7 +33,7 @@ class ConvertToCSVStep(Step):
             # 创建内存文件对象
             # csv_file_object = create_in_memory_file(uploaded_file.name, utf8_csv_bytes)
             csv_file_object = create_text_stream(uploaded_file.name, utf8_csv_bytes)
-            print(csv_file_object)
+            # print(csv_file_object)
   
             # 存储到上下文
             context['csv_file_object'] = csv_file_object
@@ -93,6 +93,7 @@ class ParseStep(Step):
     """交易解析步骤：解析账单中的交易数据"""
     def execute(self,  context: Dict) -> Dict:
         print("Parsing transaction data...")
+        import hashlib
         owner_id = context['owner_id']
         config = context['config']
         bill_data = context['prefilter_bill']
@@ -100,7 +101,17 @@ class ParseStep(Step):
         try:
             for row in bill_data:
                 # 解析单条交易记录
-                parsed_entry = single_parse_transaction(row, owner_id, config)
+                parsed_entry = single_parse_transaction(row, owner_id, config, None)
+                # 存入原始数据
+                parsed_entry['_original_row'] = row
+                # 生成缓存键
+                if parsed_entry['uuid']:
+                    cache_key = parsed_entry['uuid']
+                else:
+                    # 使用哈希值作为唯一标识符
+                    row_str = str(row)
+                    cache_key = hashlib.md5(row_str.encode()).hexdigest()
+                parsed_entry['cache_key'] = cache_key
                 
                 # 添加解析结果到上下文
                 if 'parsed_data' not in context:
@@ -132,6 +143,19 @@ class CacheStep(Step):
     """结果缓存步骤：将处理结果缓存到数据库或其他存储中供重新解析步骤使用"""
     def execute(self,  context: Dict) -> Dict:
         print("Caching processed results for future use...")
+        from django.core.cache import cache
+
+
+        parsed_data = context['parsed_data']
+        for entry in parsed_data:
+            cache_key = entry['cache_key']
+            original_row = entry.pop('_original_row')
+            cache_data = {
+                "parsed_entry": entry,
+                "original_row": original_row,
+            }
+            # print(cache_data)
+            cache.set(cache_key, cache_data, timeout=3600)
         return context
 
 

@@ -5,7 +5,7 @@ from translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHan
 from translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
 
 
-def single_parse_transaction(row: Dict, owner_id: int, config: Dict) -> Dict:
+def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_key: str) -> Dict:
     """解析单条交易记录
 
     Args:
@@ -17,7 +17,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict) -> Dict:
         Dict: 解析后的交易记录
     """
     try:
-        expense_handler = ExpenseHandler(row, model=config.ai_model, api_key=config.deepseek_apikey)
+        expense_handler = ExpenseHandler(row, model=config.ai_model, api_key=config.deepseek_apikey, selected_key=selected_key)
         account_handler = AccountHandler(row)
         payee_handler = PayeeHandler(row)
         date = datetime.strptime(row['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")

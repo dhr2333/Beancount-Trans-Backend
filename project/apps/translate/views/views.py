@@ -1,12 +1,13 @@
 # project/apps/translate/views/views.py
 import logging
+from django.core.cache import cache
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.utils.token import get_token_user_id
 from project.utils.tools import get_user_config
 from translate.models import FormatConfig
-from translate.serializers import AnalyzeSerializer, FormatConfigSerializer
+from translate.serializers import AnalyzeSerializer, FormatConfigSerializer, ReparseSerializer
 from translate.services.analyze_service import AnalyzeService
 from maps.permissions import IsOwnerOrAdminReadWriteOnly
 from rest_framework.response import Response
@@ -14,6 +15,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from translate.utils import FormatData
+from translate.services.parse.transaction_parser import single_parse_transaction
 
 
 User = get_user_model()
@@ -164,20 +167,45 @@ class ReparseEntryView(APIView):
         entry_id (str): 要重新解析的条目ID
         formatted (str): 解析后的条目内容
     """
-    # authentication_classes = []
-    # permission_classes = [AllowAny]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
-    # def post(self, request):
-    #     serializer = AnalyzeSerializer(data=request.data)
-    #     serializer.is_valid(raise_exception=True)
+    def post(self, request):
+        serializer = ReparseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    #     owner_id = get_token_user_id(request)
-    #     config = get_user_config(User.objects.get(id=owner_id))
+        entry_id = serializer.validated_data['entry_id']
+        selected_key = serializer.validated_data['selected_key']
+        cache_key = entry_id
+        cache_data = cache.get(cache_key)
 
-    #     uploaded_file = request
-    #     service = AnalyzeService(owner_id, config)
-    #     result = service.analyze(uploaded_file, serializer.validated_data)
-    #     return Response(result, status=status.HTTP_200_OK)
+        if not cache_data:
+            return Response({'error': '缓存已过期或记录不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        original_row = cache_data['original_row']
+        owner_id = get_token_user_id(request)
+        config = get_user_config(User.objects.get(id=owner_id))
+        # 重新解析交易记录
+        try:
+            parsed_entry = single_parse_transaction(original_row, owner_id, config, selected_key)
+            # print(parsed_entry['expense_candidates_with_score'])
+
+            formatted = FormatData.format_instance(parsed_entry, config=config)
+
+            # 更新缓存
+            cache.set(cache_key, {
+                "parsed_entry": parsed_entry,
+                "original_row": original_row,
+            }, timeout=3600)
+            return Response({
+                "id": entry_id,
+                "formatted": formatted,
+                "ai_choose": selected_key,
+                "ai_candidates": parsed_entry['expense_candidates_with_score']
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception(e)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class MultiBillAnalyzeView(APIView):

@@ -51,7 +51,7 @@ class AnalyzeService:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 bill_list = self.get_initials_bill(csv.reader(csvfile))
             result_list = self.beancount_outfile(bill_list, self.owner_id, args, self.config)
-            print(result_list)
+            # print(result_list)
         finally:
             if os.path.exists(temp.name):
                 os.unlink(temp.name)
