@@ -120,20 +120,22 @@ class SingleBillAnalyzeView(APIView):
         service = AnalyzeService(owner_id, config)
         results = []
         try:
-            result_list = service.analyze_single_file(uploaded_file, serializer.validated_data)
-            # print(result_list)
-            for entry in result_list:
-                if isinstance(entry, dict):
+            context = service.analyze_single_file(uploaded_file, serializer.validated_data)
+            formatted_data_list = context["formatted_data"]
+            for formatted_data in formatted_data_list:
+                if isinstance(formatted_data, dict):
                     results.append({
-                        "id": entry.get("uuid") or str(hash(str(entry))),
-                        "formatted": entry.get("formatted"),
-                        "ai_choose": entry.get("selected_expense_key"),
-                        "ai_candidates": entry.get("expense_candidates_with_score", []),
+                        # "id": formatted_data.get("uuid") or formatted_data.get("id"),
+                        "id": formatted_data.get("id"),
+                        "formatted": formatted_data.get("formatted"),
+                        "ai_choose": formatted_data.get("selected_expense_key"),
+                        "ai_candidates": formatted_data.get("expense_candidates_with_score", []),
                     })
                 else:
                     results.append({
-                        "id": str(hash(str(entry))),
-                        "formatted": entry,
+                        # "id": formatted_data.get("uuid") or formatted_data.get("id"),
+                        "id": formatted_data.get("id"),
+                        "formatted": formatted_data,
                         "ai_choose": None,
                         "ai_candidates": [],
                     })
@@ -188,7 +190,6 @@ class ReparseEntryView(APIView):
         # 重新解析交易记录
         try:
             parsed_entry = single_parse_transaction(original_row, owner_id, config, selected_key)
-            # print(parsed_entry['expense_candidates_with_score'])
 
             formatted = FormatData.format_instance(parsed_entry, config=config)
 

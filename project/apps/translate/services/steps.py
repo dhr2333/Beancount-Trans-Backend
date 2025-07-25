@@ -33,7 +33,6 @@ class ConvertToCSVStep(Step):
             # 创建内存文件对象
             # csv_file_object = create_in_memory_file(uploaded_file.name, utf8_csv_bytes)
             csv_file_object = create_text_stream(uploaded_file.name, utf8_csv_bytes)
-            # print(csv_file_object)
   
             # 存储到上下文
             context['csv_file_object'] = csv_file_object
@@ -56,12 +55,15 @@ class InitializeBillStep(Step):
 
         # 读取第一行
         first_line = csv_file.readline().strip()
+        year = first_line[:4]
+        card_number = card_number_get_key(first_line)
+
         try:
             # 工厂方法创建策略
             strategy = InitFactory.create_strategy(first_line)
             
             # 策略执行初始化
-            initialized_bill = strategy.init(csv_file)
+            initialized_bill = strategy.init(csv_file, card_number=card_number, year=year)
 
             # 结果存入上下文
             context['initialized_bill'] = initialized_bill
@@ -92,7 +94,6 @@ class PreFilterStep(Step):
 class ParseStep(Step):
     """交易解析步骤：解析账单中的交易数据"""
     def execute(self,  context: Dict) -> Dict:
-        print("Parsing transaction data...")
         import hashlib
         owner_id = context['owner_id']
         config = context['config']
@@ -126,7 +127,6 @@ class ParseStep(Step):
 class PostFilterStep(Step):
     """后过滤步骤：基于解析后的结构化数据进行过滤"""
     def execute(self, context: Dict) -> Dict:
-        print("Post-filtering parsed transaction data...")
         parsed_data = context['parsed_data']
         args = context['args']
         try:
@@ -142,7 +142,6 @@ class PostFilterStep(Step):
 class CacheStep(Step):
     """结果缓存步骤：将处理结果缓存到数据库或其他存储中供重新解析步骤使用"""
     def execute(self,  context: Dict) -> Dict:
-        print("Caching processed results for future use...")
         from django.core.cache import cache
 
 
@@ -154,7 +153,6 @@ class CacheStep(Step):
                 "parsed_entry": entry,
                 "original_row": original_row,
             }
-            # print(cache_data)
             cache.set(cache_key, cache_data, timeout=3600)
         return context
 
@@ -162,7 +160,6 @@ class CacheStep(Step):
 class FormatStep(Step):
     """交易格式化步骤：将交易数据格式化为.bean文本格式"""
     def execute(self,  context: Dict) -> Dict:
-        print("Formatting transaction data into .bean text format...")
         parsed_data = context['filtered_data']
         args = context['args']
         config = context['config']
@@ -177,7 +174,8 @@ class FormatStep(Step):
                 "formatted": formatted,
                 "selected_expense_key": entry.get("selected_expense_key"),
                 "expense_candidates_with_score": entry.get("expense_candidates_with_score", []),
-                "uuid": entry.get("uuid"),
+                # "uuid": entry.get("uuid"),
+                "id": entry.get("cache_key"),
             }
             context['formatted_data'].append(formatted_dict)
         return context
@@ -186,5 +184,4 @@ class FormatStep(Step):
 class FileWritingStep(Step):
     """文件写入步骤：将处理后的数据写入文件（可选）"""
     def execute(self,  context: Dict) -> Dict:
-        print("Writing processed data to file...")
         return context

@@ -42,17 +42,5 @@ class AccountViewSet(ModelViewSet):
             raise ValidationError("Account already exists.")
         serializer.save(owner=self.request.user)
 
-        # path = os.path.join(os.path.dirname(settings.BASE_DIR), 'Beancount-Trans-Assets', 'account', 'integration.bean')
-        # with open(path, 'r', encoding='utf-8') as file:
-        #     file_contents = file.readlines()
-        #     print(file_contents)
-        #     for i, line in enumerate(file_contents):
-        #         if "Assets:Savings:Web:AliPay1" in line:
-        #             line_index = i
-        #             break
-        #     data = serializer.validated_data
-        #     output = f"{data['date']} {data['status']} {data['account']} {data['currency']} ; {data['note']}"
-        #     file.write(output)
-
     def perform_destroy(self, instance):
         pass

@@ -1,6 +1,11 @@
 # project/apps/translate/services/init/bill_init_factory.py
 from translate.services.init.strategies.alipay_init_strategy import AlipayInitStrategy
+from translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
+from translate.services.init.strategies.ccb_debit_init_strategy import CCBDebitInitStrategy
+from translate.services.init.strategies.cmb_credit_init_strategy import CMBCreditInitStrategy
+from translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
 from translate.services.init.strategies.wechat_init_strategy import WeChatPayInitStrategy
+
 from translate.services.init.strategies.base_bill_init_strategy import InitStrategy
 # from abc import ABC, abstractmethod
 
@@ -50,3 +55,8 @@ class InitFactory:
 
 
 InitFactory.register_strategy(AlipayInitStrategy)
+InitFactory.register_strategy(BOCDebitInitStrategy)
+InitFactory.register_strategy(CCBDebitInitStrategy)
+InitFactory.register_strategy(CMBCreditInitStrategy)
+InitFactory.register_strategy(ICBCDebitInitStrategy)
+InitFactory.register_strategy(WeChatPayInitStrategy)

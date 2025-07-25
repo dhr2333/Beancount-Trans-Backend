@@ -134,7 +134,6 @@ class ExpenseHandler:
     def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str):
         try:
             keys = [inst.key for _, inst in conflict_candidates]
-            # print('transaction_text = ', transaction_text, 'keys = ', keys)
             sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)  # 使用相似度模型计算相似度
             selected_key = sim_result["best_match"]
             # self.similarity_model.collect_training_data(transaction_text, keys, selected_key)  # AI反馈数据收集

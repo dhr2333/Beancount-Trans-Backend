@@ -90,7 +90,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         }
         if row['transaction_type'] == "/":
             actual_amount  = "{:.2f}".format(float(amount.split()[0]) - float(commission.split()[0])) if commission != "" else amount
-            result["actual_prices"] = actual_amount  # 实际交易金额(扣除佣金后的金额)
+            result["actual_amount"] = actual_amount  # 实际交易金额(扣除佣金后的金额)
         
         return result
     except ValueError as e:

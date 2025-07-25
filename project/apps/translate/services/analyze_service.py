@@ -51,7 +51,6 @@ class AnalyzeService:
             with open(temp.name, newline='', encoding=encoding, errors="ignore") as csvfile:
                 bill_list = self.get_initials_bill(csv.reader(csvfile))
             result_list = self.beancount_outfile(bill_list, self.owner_id, args, self.config)
-            # print(result_list)
         finally:
             if os.path.exists(temp.name):
                 os.unlink(temp.name)
@@ -80,7 +79,6 @@ class AnalyzeService:
         }
 
     def get_initials_bill(self, bill):
-        # print(bill)
         first_line = next(bill)[0]
         year = first_line[:4]
         card_number = card_number_get_key(first_line)
@@ -148,7 +146,6 @@ class AnalyzeService:
             max_workers= 1 if config.ai_model == "BERT" else min(16, (os.cpu_count() or 4)),
             batch_size=50
         )
-        # print(instance_list)
 
         return instance_list
 
@@ -223,12 +220,5 @@ class AnalyzeService:
         
         # 执行管道
         result_context = pipeline.process(context)
-        # [{'formatted': '2024-02-25 * "十月结晶" "【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件"\n    time: "20:01:48"\n    uuid: "2024022522001174561439593142"\n    status: "ALiPay - 交易成功"\n    Expenses:Shopping:Parent 14.80 CNY\n    Equity:OpenBalance -14.80 CNY\n\n', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5432}, {'key': '出行', 'score': 0.5528}, {'key': '**', 'score': 0.5475}, {'key': '十月结晶', 'score': 0.5606}], 'uuid': '2024022522001174561439593142'}
-        return result_context["formatted_data"]
-        
-        # 返回格式化结果
-        # return {
-        #     "status": "success",
-        #     "results": result_context["formatted_data"],
-        #     "summary": {"count": len(result_context["formatted_data"])},
-        # }
+
+        return result_context
