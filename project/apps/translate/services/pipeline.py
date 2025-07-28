@@ -1,4 +1,4 @@
-# project/apps/translate/services/parsing/pipeline.py
+# project/apps/translate/services/pipeline.py
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 import logging

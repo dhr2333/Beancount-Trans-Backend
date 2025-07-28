@@ -1,4 +1,4 @@
-# project/apps/translate/services/parsing/strategies/base_strategy.py
+# project/apps/translate/services/init/strategies/base_bill_init_strategy.py
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 

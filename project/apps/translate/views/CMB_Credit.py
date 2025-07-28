@@ -3,6 +3,7 @@ import csv
 import io
 import re
 import logging
+from typing import Dict
 
 from datetime import datetime
 from maps.models import Assets
@@ -40,9 +41,9 @@ class CmbCreditInitStrategy(InitStrategy):
         return records
 
 
-def cmb_credit_ignore(self, data, cmb_credit_ignore):
+def cmb_credit_ignore(data: Dict) -> bool:
     if data['bill_identifier'] == BILL_CMB_CREDIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
-        return cmb_credit_ignore == "true"
+        return True
 
 
 def cmb_credit_pdf_convert_to_csv(content):

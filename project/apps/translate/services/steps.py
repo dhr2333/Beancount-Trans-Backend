@@ -1,4 +1,4 @@
-# project/apps/translate/services/parsing/steps.py
+# project/apps/translate/services/steps.py
 from typing import Dict
 from .pipeline import Step
 from project.utils.file import  convert_to_csv_bytes,convert_to_utf8, create_text_stream
@@ -67,7 +67,7 @@ class InitializeBillStep(Step):
 
             # 结果存入上下文
             context['initialized_bill'] = initialized_bill
-            # context['bill_type'] = strategy.__class__.__name__
+            context['bill_type'] = initialized_bill[0]['bill_identifier']
             return context
         
         except ValueError as e:  # 无匹配策略
@@ -81,11 +81,14 @@ class PreFilterStep(Step):
     def execute(self, context):
         bill_data = context['initialized_bill']
         args = context['args']
+        bill_type = context['bill_type']
+        # print(context['bill_type'])  # alipay
         try:
-            filter = TransactionFilter(args)
-            filter_data = filter.apply_bill_filters(bill_data)
+            filter = TransactionFilter(args, bill_type)
+            # print(bill_data)  # [{'transaction_time': '2024-02-25 20:01:48', 'transaction_category': '母婴亲子', 'counterparty': '十月**店', 'commodity': '【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件', 'transaction_type': '/', 'amount': 14.8, 'payment_method': '亲情卡(凯义(王凯义))', 'transaction_status': '交易成功', 'notes': '/', 'bill_identifier': 'alipay', 'uuid': '2024022522001174561439593142', 'discount': False}]
+            filter_data = filter.apply_pre_filters(bill_data)
             context['prefilter_bill'] = filter_data
-            # logger.info(f"过滤后剩余记录数: {len(filter_data)}/{len(bill_data)}")
+            logger.info(f"预过滤后剩余记录数: {len(filter_data)}/{len(bill_data)}")
             return context
         except Exception as e:
             return self._error(context, f"预过滤步骤异常: {str(e)}")
@@ -129,11 +132,13 @@ class PostFilterStep(Step):
     def execute(self, context: Dict) -> Dict:
         parsed_data = context['parsed_data']
         args = context['args']
+        bill_type = context['bill_type']
         try:
-            filter = TransactionFilter(args)
-            filtered_data = filter.apply_entry_filters(parsed_data)
+            filter = TransactionFilter(args, bill_type)
+            # print(parsed_data)  # [{'date': '2024-02-25', 'time': '20:01:48', 'uuid': '2024022522001174561439593142', 'status': 'ALiPay - 交易成功', 'payee': '十月结晶', 'note': '【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件', 'tag': None, 'balance': None, 'balance_date': '2024-02-26', 'expense': 'Expenses:Shopping:Parent', 'expenditure_sign': '', 'account': 'Equity:OpenBalance', 'account_sign': '-', 'amount': '14.80', 'installment_granularity': 'MONTHLY', 'installment_cycle': 3, 'discount': False, 'currency': 'CNY', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5471}, {'key': '出行', 'score': 0.557}, {'key': '**', 'score': 0.5499}, {'key': '十月结晶', 'score': 0.5642}], 'actual_amount': '14.80', '_original_row': {'transaction_time': '2024-02-25 20:01:48', 'transaction_category': '母婴亲子', 'counterparty': '十月**店', 'commodity': '【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件', 'transaction_type': '/', 'amount': 14.8, 'payment_method': '亲情卡(凯义(王凯义))', 'transaction_status': '交易成功', 'notes': '/', 'bill_identifier': 'alipay', 'uuid': '2024022522001174561439593142', 'discount': False}, 'cache_key': '2024022522001174561439593142'}]
+            filtered_data = filter.apply_post_filters(parsed_data)
             context['filtered_data'] = filtered_data
-            # logger.info(f"后过滤后剩余记录数: {len(filtered_data)}/{len(parsed_data)}")
+            logger.info(f"后过滤后剩余记录数: {len(filtered_data)}/{len(parsed_data)}")
             return context
         except Exception as e:
             return self._error(context, f"后过滤步骤异常: {str(e)}")
