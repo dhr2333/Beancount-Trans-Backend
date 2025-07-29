@@ -102,20 +102,20 @@ class UserConfigAPI(APIView):
 class SingleBillAnalyzeView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    
+
     def post(self, request):
         serializer = AnalyzeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         # 获取用户ID和配置
         owner_id = get_token_user_id(request)
         config = get_user_config(User.objects.get(id=owner_id))
-        
+
         # 获取上传文件
         uploaded_file = request.FILES.get('trans', None)
         if not uploaded_file:
             return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 创建服务并解析
         service = AnalyzeService(owner_id, config)
         results = []

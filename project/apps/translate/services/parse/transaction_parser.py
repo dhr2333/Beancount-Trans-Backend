@@ -39,7 +39,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         installment_cycle = get_installment_cycle(row)
         discount = get_discount(row)
         currency = expense_handler.get_currency()
-        
+
         # 根据beancount规范重新制订返回的字段
         # result = {
         #     "date": date, # 交易日期
@@ -67,31 +67,31 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         #     "expense_candidates_with_score": expense_candidates_with_score  # AI模型返回的候选支出类型及其分数
         # }
         result = {
-            "date": date, 
-            "time": time, 
-            "uuid": uuid, 
-            "status": status, 
-            "payee": payee, 
-            "note": note, 
-            "tag": tag, 
-            "balance": balance, 
-            "balance_date": balance_date, 
-            "expense": expense, 
-            "expenditure_sign": expenditure_sign, 
-            "account": account, 
-            "account_sign": account_sign, 
-            "amount": amount, 
-            "installment_granularity": installment_granularity, 
-            "installment_cycle": installment_cycle, 
-            "discount": discount, 
-            "currency": currency, 
-            "selected_expense_key": selected_expense_key, 
+            "date": date,
+            "time": time,
+            "uuid": uuid,
+            "status": status,
+            "payee": payee,
+            "note": note,
+            "tag": tag,
+            "balance": balance,
+            "balance_date": balance_date,
+            "expense": expense,
+            "expenditure_sign": expenditure_sign,
+            "account": account,
+            "account_sign": account_sign,
+            "amount": amount,
+            "installment_granularity": installment_granularity,
+            "installment_cycle": installment_cycle,
+            "discount": discount,
+            "currency": currency,
+            "selected_expense_key": selected_expense_key,
             "expense_candidates_with_score":expense_candidates_with_score
         }
         if row['transaction_type'] == "/":
             actual_amount  = "{:.2f}".format(float(amount.split()[0]) - float(commission.split()[0])) if commission != "" else amount
             result["actual_amount"] = actual_amount  # 实际交易金额(扣除佣金后的金额)
-        
+
         return result
     except ValueError as e:
         raise e

@@ -9,10 +9,10 @@ import itertools
 
 class AlipayInitStrategy(InitStrategy):
     """支付宝账单初始化策略"""
-    
+
     HEADER_MARKER = "-" * 84
     SKIP_ROWS = 24
-    
+
     def init(self, bill: Any, **kwargs) -> List[Dict[str, Any]]:
         csv_reader = csv.reader(bill)
         data_rows = itertools.islice(csv_reader, self.SKIP_ROWS, None)  # 跳过前指定行
@@ -46,7 +46,7 @@ class AlipayInitStrategy(InitStrategy):
             logging.error(f"Unexpected error: {str(e)}")
 
         return records
-    
+
     @classmethod
     def identifier(cls, first_line: str) -> bool:
         """判断是否为支付宝账单"""

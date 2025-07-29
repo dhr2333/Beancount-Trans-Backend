@@ -13,7 +13,7 @@ class FavaContainerManager:
     def start_container(self, user, bean_file_path, instance):
         # 生成唯一容器名称
         container_name = f"fava-{user.username}-{int(time.time())}"
-        
+
         # 创建容器
         container = self.client.containers.run(
             image=self.fava_image,

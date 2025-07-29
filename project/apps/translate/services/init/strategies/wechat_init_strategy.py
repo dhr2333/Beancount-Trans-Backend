@@ -42,7 +42,7 @@ class WeChatPayInitStrategy(InitStrategy):
             logging.error("Unexpected error: %s", e)
 
         return records
-    
+
     @classmethod
     def identifier(cls, first_line: str) -> bool:
         """判断是否为微信账单"""

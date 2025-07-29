@@ -11,7 +11,7 @@ class Step(ABC):
     @abstractmethod
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """执行步骤逻辑，处理输入数据并返回结果
-        
+
         Args:
         context (Dict[str, Any]): 上下文信息，包含管道执行的相关配置和状态
         Returns:        Dict[str, Any]: 输出数据，包含当前步骤的处理结果
@@ -37,18 +37,18 @@ class Step(ABC):
 
 class BillParsingPipeline:
     """账单解析管道
-    
+
     通过传入多个PipelineStep依次执行解析流程
     """
     def __init__(self, steps: List[Step]):
         self.steps = steps
-    
+
     def process(self, context: Dict) -> Dict:
         """执行管道流程
-        
+
         Args:
             initial_context (Dict): 初始上下文数据
-            
+
         Returns:
             Dict: 处理完成后的最终上下文数据
         """

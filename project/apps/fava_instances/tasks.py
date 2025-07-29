@@ -12,17 +12,17 @@ def cleanup_fava_containers():
         last_accessed__lt=expiry,
         status__in=['running', 'starting']
     )
-    
+
     manager = FavaContainerManager()
     for instance in instances:
         instance.status = 'stopping'
         instance.save()
-        
+
         if manager.stop_container(instance.container_id):
             instance.status = 'stopped'
             instance.container_id = ''
             instance.container_name = ''
         else:
             instance.status = 'error'
-        
+
         instance.save()

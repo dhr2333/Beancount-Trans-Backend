@@ -205,7 +205,7 @@ class AnalyzeService:
             # [{'formatted': '2024-02-25 * "十月结晶" "【天猫U先】十月结晶会员尊享精致妈咪出行必备生活随心包4件套 等多件"\n    time: "20:01:48"\n    uuid: "2024022522001174561439593142"\n    status: "ALiPay - 交易成功"\n    Expenses:Shopping:Parent 14.80 CNY\n    Equity:OpenBalance -14.80 CNY\n\n', 'selected_expense_key': '十月结晶', 'expense_candidates_with_score': [{'key': '等多件', 'score': 0.5432}, {'key': '出行', 'score': 0.5528}, {'key': '**', 'score': 0.5475}, {'key': '十月结晶', 'score': 0.5606}], 'uuid': '2024022522001174561439593142'}
             "status": "pending",  # 状态标识
         }
-        
+
         # 创建管道
         pipeline = BillParsingPipeline([
             ConvertToCSVStep(),
@@ -217,7 +217,7 @@ class AnalyzeService:
             FormatStep(),
             FileWritingStep()  # 仅在需要写入文件时执行
         ])
-        
+
         # 执行管道
         result_context = pipeline.process(context)
 

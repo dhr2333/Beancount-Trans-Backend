@@ -4,7 +4,7 @@ sequenceDiagram
     participant Django后端
     participant Docker引擎
     participant Fava容器
-    
+
     用户->>前端: 点击"平台账本"
     前端->>Django后端: GET /api/fava/
     Django后端->>Django后端: 检查用户运行实例

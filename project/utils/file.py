@@ -193,11 +193,11 @@ def convert_to_utf8(content_bytes: bytes) -> bytes:
         # 检测原始编码
         detected = chardet.detect(content_bytes)
         source_encoding = detected['encoding'] or 'utf-8'
-        
+
         # 处理中文编码特例
         if source_encoding.lower() in ['gb2312', 'gbk', 'gb18030']:
             source_encoding = 'gb18030'
-        
+
         # 转换为UTF-8
         try:
             decoded = content_bytes.decode(source_encoding, errors='ignore')
@@ -210,13 +210,13 @@ def convert_to_utf8(content_bytes: bytes) -> bytes:
                     return decoded.encode('utf-8')
                 except:
                     continue
-            
+
             # 最终回退
             return content_bytes.decode('utf-8', errors='ignore').encode('utf-8')
-            
+
     except Exception as e:
         return content_bytes
-        
+
 # def read_and_write(reader,writer):
 #     import csv
 
@@ -240,11 +240,11 @@ def generate_file_hash(file):
 #     # 创建新文件名
 #     base_name, _ = os.path.splitext(original_name)
 #     csv_name = f"{base_name}_converted.csv"
-    
+
 #     # 创建内存文件
 #     file = io.BytesIO(content)
 #     file.seek(0)
-    
+
 #     return InMemoryUploadedFile(
 #         file=file,
 #         field_name='csv_file',
@@ -258,7 +258,7 @@ def create_text_stream(original_name: str, content: bytes) -> io.StringIO:
     """创建UTF-8编码的文本流对象"""
     # 将字节内容解码为字符串
     content_str = content.decode('utf-8', errors='ignore')
-    
+
     # 创建内存文本流
     text_stream = io.StringIO(content_str)
     text_stream.name = f"{os.path.splitext(original_name)[0]}_converted.csv"

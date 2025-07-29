@@ -22,22 +22,22 @@ class ConvertToCSVStep(Step):
     def execute(self, context: Dict) -> Dict:
         uploaded_file = context['uploaded_file']
         password = context['args'].get("password")
-        
+
         try:
             # 转换为CSV字节内容
             csv_bytes = convert_to_csv_bytes(uploaded_file, password)
-            
+
             # 检测编码并转换为UTF-8
             utf8_csv_bytes = convert_to_utf8(csv_bytes)
 
             # 创建内存文件对象
             # csv_file_object = create_in_memory_file(uploaded_file.name, utf8_csv_bytes)
             csv_file_object = create_text_stream(uploaded_file.name, utf8_csv_bytes)
-  
+
             # 存储到上下文
             context['csv_file_object'] = csv_file_object
             return context
-        
+
         except (DecryptionError, UnsupportedFileTypeError) as e:
             return self._error(context, f"文件转换失败: {str(e)}")
         except Exception as e:
@@ -49,7 +49,7 @@ class InitializeBillStep(Step):
     def execute(self, context: Dict) -> Dict:
         # 获取文本流对象
         csv_file = context['csv_file_object']
-        
+
         # 重置文件指针以确保从头开始读取
         csv_file.seek(0)
 
@@ -61,7 +61,7 @@ class InitializeBillStep(Step):
         try:
             # 工厂方法创建策略
             strategy = InitFactory.create_strategy(first_line)
-            
+
             # 策略执行初始化
             initialized_bill = strategy.init(csv_file, card_number=card_number, year=year)
 
@@ -69,7 +69,7 @@ class InitializeBillStep(Step):
             context['initialized_bill'] = initialized_bill
             context['bill_type'] = initialized_bill[0]['bill_identifier']
             return context
-        
+
         except ValueError as e:  # 无匹配策略
             return self._error(context, f"不支持的账单类型: {str(e)}")
         except Exception as e:  # 初始化异常
@@ -101,7 +101,7 @@ class ParseStep(Step):
         owner_id = context['owner_id']
         config = context['config']
         bill_data = context['prefilter_bill']
-        
+
         try:
             for row in bill_data:
                 # 解析单条交易记录
@@ -116,7 +116,7 @@ class ParseStep(Step):
                     row_str = str(row)
                     cache_key = hashlib.md5(row_str.encode()).hexdigest()
                 parsed_entry['cache_key'] = cache_key
-                
+
                 # 添加解析结果到上下文
                 if 'parsed_data' not in context:
                     context['parsed_data'] = []

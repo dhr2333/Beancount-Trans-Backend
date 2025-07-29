@@ -7,17 +7,17 @@ logger = logging.getLogger(__name__)
 
 class TransactionFilter:
     """交易记录过滤器"""
-    
+
     def __init__(self, args: Dict, bill_type: str):
         self.args = args
         self.bill_type = bill_type
-    
+
     def apply_pre_filters(self, bill_data: List[Dict]) -> List[Dict]:
         """应用账单级预过滤"""
         # 1. 通用过滤（如余额过滤）
         if self.args["balance"] is True:
             bill_data = self._apply_balance_filter(bill_data)
-        
+
         # 2. 获取预过滤规则
         pre_filters = registry.get_pre_filter(self.bill_type)
         if not pre_filters:
@@ -31,7 +31,7 @@ class TransactionFilter:
                 for filter_func in pre_filters
             )
         ]
-    
+
     def apply_post_filters(self, entries: List[Dict]) -> List[Dict]:
         """应用记录级后过滤"""
         universal_filters = registry.get_post_universal_filters()
@@ -47,7 +47,7 @@ class TransactionFilter:
         post_filters = registry.get_post_filter(self.bill_type)
         if not post_filters:
             return entries
-            
+
         return [
             entry for entry in entries
             if not any(
@@ -55,7 +55,7 @@ class TransactionFilter:
                 for filter_func in post_filters
             )
         ]
-    
+
     def _apply_balance_filter(self, bill_data: List[Dict]) -> List[Dict]:
         """余额过滤通用实现"""
         from datetime import datetime

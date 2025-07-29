@@ -26,14 +26,14 @@ class FavaRedirectView(APIView):
 
     def get(self, request):
         user = request.user
-        
+
         logger.info(f"User {user.username} is requesting Fava instance.")
         # 检查现有运行实例
         running_instance = FavaInstance.objects.filter(
             owner=user,
             status='running'
         ).first()
-        
+
         if running_instance:
             running_instance.save()
             return Response(
@@ -58,7 +58,7 @@ class FavaRedirectView(APIView):
             instance.container_name = container_name
             instance.status = 'running'
             instance.save()
-            
+
             return Response(
                 status=status.HTTP_302_FOUND,
                 headers={'Location': f'/{instance.uuid}/'}
