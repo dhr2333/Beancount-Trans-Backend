@@ -18,20 +18,43 @@ class TransactionFilter:
         if self.args["balance"] is True:
             bill_data = self._apply_balance_filter(bill_data)
         
-        # 2. 账单特定过滤
-        pre_filter = registry.get_pre_filter(self.bill_type)
-        if not pre_filter:
+        # 2. 获取预过滤规则
+        pre_filters = registry.get_pre_filter(self.bill_type)
+        if not pre_filters:
             return bill_data
-        
-        return [row for row in bill_data if not pre_filter(row, self.args)]
+
+        # 3. 应用预过滤规则
+        return [
+            row for row in bill_data
+            if not any(
+                filter_func(row, self.args)
+                for filter_func in pre_filters
+            )
+        ]
     
     def apply_post_filters(self, entries: List[Dict]) -> List[Dict]:
         """应用记录级后过滤"""
-        post_filter = registry.get_post_filter(self.bill_type)
-        if not post_filter:
+        universal_filters = registry.get_post_universal_filters()
+        if universal_filters:
+            entries = [
+                entry for entry in entries
+                if not any(
+                    filter_func(entry, self.args)
+                    for filter_func in universal_filters
+                )
+            ]
+
+        post_filters = registry.get_post_filter(self.bill_type)
+        if not post_filters:
             return entries
             
-        return [entry for entry in entries if not post_filter(entry, self.args)]
+        return [
+            entry for entry in entries
+            if not any(
+                filter_func(entry, self.args)
+                for filter_func in post_filters
+            )
+        ]
     
     def _apply_balance_filter(self, bill_data: List[Dict]) -> List[Dict]:
         """余额过滤通用实现"""

@@ -121,13 +121,13 @@ class FormatData:
         else:
             formatted_str += f"\n    {entry['expense']} {entry['expenditure_sign']}{entry['amount']} {entry['currency']} @@ {entry['amount']} {config.currency}"
             formatted_str += f"\n    {entry['account']} {entry['account_sign']}"
-        if ignore_data.notes(entry):
+        if entry["note"] == "零钱提现" or entry["note"] == "信用卡还款" or entry["note"] == "提现-实时提现" or entry["note"] == "余额宝-转出到银行卡":
             formatted_str += f"{entry['actual_amount']} {config.currency}"
         else:
             formatted_str += f"{entry['amount']} {config.currency}"
 
         if config.show_discount:
-            if ignore_data.notes(entry):
+            if entry["note"] == "零钱提现" or entry["note"] == "信用卡还款" or entry["note"] == "提现-实时提现" or entry["note"] == "余额宝-转出到银行卡":
                 if config.commission_template:
                     formatted_str += (f"\n    {config.commission_template}")
                 else:

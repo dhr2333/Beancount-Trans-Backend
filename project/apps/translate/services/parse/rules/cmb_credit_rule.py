@@ -14,11 +14,5 @@ def cmb_credit_pre_filter(row: Dict, args: Dict) -> bool:
     else:
         return False
 
-def cmb_credit_post_filter(entry: Dict, args: Dict) -> bool:
-    """CMB信用卡后过滤规则"""
-    # 后过滤逻辑实现
-    return False
-
 # 注册规则
 registry.register_pre_filter(BILL_CMB_CREDIT, cmb_credit_pre_filter)
-registry.register_post_filter(BILL_CMB_CREDIT, cmb_credit_post_filter)
