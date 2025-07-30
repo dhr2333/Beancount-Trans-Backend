@@ -10,6 +10,18 @@ class FavaContainerManager:
         self.network = settings.TRAEFIK_NETWORK
         self.fava_image = settings.FAVA_IMAGE
 
+    def _is_container_ready(self, container_name, container_host_port):
+        try:
+            import requests
+            response = requests.get(
+                f"http://{container_name}:{container_host_port}", 
+                timeout=0.3
+            )
+            return response.status_code == 200
+        except:
+            return False
+
+
     def start_container(self, user, bean_file_path, instance):
         # 生成唯一容器名称
         container_name = f"fava-{user.username}-{int(time.time())}"
@@ -36,7 +48,19 @@ class FavaContainerManager:
                 f"traefik.http.routers.fava-{user.username}.middlewares": f"fava-{user.username}-stripprefix@docker",
             }
         )
-        return container.id, container_name
+        max_retries = 20
+        for _ in range(max_retries):
+            time.sleep(0.5)
+            container.reload()
+
+            if container.status == 'running':
+                if self._is_container_ready(container_name, 5000):
+                    return container.id, container_name
+
+        # 超时处理
+        container.stop()
+        container.remove()
+        raise Exception("Fava container failed to start in time")
 
     def stop_container(self, container_id):
         try:
@@ -46,3 +70,4 @@ class FavaContainerManager:
             return True
         except docker.errors.NotFound:
             return False
+
