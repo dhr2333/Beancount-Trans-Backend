@@ -1,13 +1,13 @@
-from maps.serializers import AssetsSerializer, ExpenseSerializer, IncomeSerializer
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
 # from project.utils.tools import get_user_config
-from maps.models import Expense, Assets, Income
-from .filters import CurrentUserFilterBackend
-from .permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.maps.models import Expense, Assets, Income
+from project.apps.maps.filters import CurrentUserFilterBackend
+from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.maps.serializers import AssetsSerializer, ExpenseSerializer, IncomeSerializer
 
 
 class ExpenseViewSet(ModelViewSet):

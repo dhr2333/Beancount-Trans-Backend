@@ -2,7 +2,7 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from maps.models import Expense, Assets, Income
+from project.apps.maps.models import Expense, Assets, Income
 
 class BaseModelTestMixin:
     """测试模型公共基类的共享逻辑"""

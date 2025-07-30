@@ -8,11 +8,15 @@ import pandas as pd
 import hashlib
 
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
-from translate.utils import get_card_number
-from translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv, boc_debit_sourcefile_identifier
-from translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv, icbc_debit_sourcefile_identifier
-from translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv, cmb_credit_sourcefile_identifier
-from translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string, ccb_debit_sourcefile_identifier
+from project.apps.translate.utils import get_card_number
+from project.apps.translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
+from project.apps.translate.views.BOC_Debit import boc_debit_pdf_convert_to_string, boc_debit_string_convert_to_csv
+from project.apps.translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
+from project.apps.translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_csv
+from project.apps.translate.services.init.strategies.cmb_credit_init_strategy import CMBCreditInitStrategy
+from project.apps.translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv
+from project.apps.translate.services.init.strategies.ccb_debit_init_strategy import CCBDebitInitStrategy
+from project.apps.translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string
 from django.conf import settings
 
 
@@ -158,7 +162,7 @@ def convert_to_csv_bytes(file, password=None):
 def handle_excel(file):
     string_content = ccb_debit_xls_convert_to_string(file)
     for row in string_content:
-        if any(pd.notnull(item) and ccb_debit_sourcefile_identifier in str(item) for item in row):
+        if any(pd.notnull(item) and CCBDebitInitStrategy.SOURCE_FILE_IDENTIFIER in str(item) for item in row):
             convert_content = ccb_debit_string_convert_to_csv(string_content)
             return convert_content.encode()
 
@@ -171,14 +175,14 @@ def handle_pdf(file, password):
     content = extract_text_from_pdf(pdf)
 
     # 根据内容处理PDF
-    if cmb_credit_sourcefile_identifier in content:
+    if CMBCreditInitStrategy.SOURCE_FILE_IDENTIFIER in content:
         return cmb_credit_pdf_convert_to_csv(content).encode()
-    elif boc_debit_sourcefile_identifier in content:
-        card_number = get_card_number(content, boc_debit_sourcefile_identifier)
+    elif BOCDebitInitStrategy.SOURCE_FILE_IDENTIFIER in content:
+        card_number = get_card_number(content, BOCDebitInitStrategy.SOURCE_FILE_IDENTIFIER)
         string_content = boc_debit_pdf_convert_to_string(file, password)
         return boc_debit_string_convert_to_csv(string_content, card_number).encode()
-    elif icbc_debit_sourcefile_identifier in content:
-        card_number = get_card_number(content, icbc_debit_sourcefile_identifier)
+    elif ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER in content:
+        card_number = get_card_number(content, ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER)
         return icbc_debit_pdf_convert_to_csv(file, card_number, password).encode()
 
 def extract_text_from_pdf(pdf):

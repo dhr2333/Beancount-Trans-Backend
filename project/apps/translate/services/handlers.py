@@ -2,15 +2,16 @@
 import datetime
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime
-from maps.models import Expense, Income
-from translate.utils import *
-from translate.views.AliPay import *
-from translate.views.WeChat import *
-from translate.views.BOC_Debit import *
-from translate.views.CMB_Credit import *
-from translate.views.ICBC_Debit import *
-from translate.views.CCB_Debit import *
-from translate.services.similarity import BertSimilarity, SpacySimilarity, DeepSeekSimilarity
+from project.apps.maps.models import Expense, Income
+from project.apps.translate.utils import *
+from project.apps.translate.views.AliPay import *
+from project.apps.translate.views.WeChat import *
+from project.apps.translate.views.BOC_Debit import *
+from project.apps.translate.views.CMB_Credit import *
+from project.apps.translate.views.ICBC_Debit import *
+from project.apps.translate.views.CCB_Debit import *
+from project.apps.translate.services.similarity import BertSimilarity, SpacySimilarity, DeepSeekSimilarity
+import logging
 
 
 logger = logging.getLogger(__name__)

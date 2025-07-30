@@ -1,7 +1,7 @@
 # project/apps/translate/services/init/strategies/wechat_init_strategy.py
-from translate.services.init.strategies.base_bill_init_strategy import InitStrategy
+from project.apps.translate.services.init.strategies.base_bill_init_strategy import InitStrategy
 from typing import List, Dict, Any
-from translate.utils import BILL_WECHAT
+from project.apps.translate.utils import BILL_WECHAT
 import logging
 import csv
 import itertools

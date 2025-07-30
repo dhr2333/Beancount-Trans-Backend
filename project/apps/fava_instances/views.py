@@ -2,8 +2,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from fava_instances.models import FavaInstance
-from fava_instances.services.fava_manager import FavaContainerManager
+from project.apps.fava_instances.models import FavaInstance
+from project.apps.fava_instances.services.fava_manager import FavaContainerManager
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import os

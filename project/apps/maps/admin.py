@@ -1,6 +1,5 @@
 from django.contrib import admin
-
-from .models import Expense, Assets, Income
+from project.apps.maps.models import Expense, Assets, Income
 
 
 @admin.register(Expense)

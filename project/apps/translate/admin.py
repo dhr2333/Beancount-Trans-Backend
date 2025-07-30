@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import  FormatConfig
+from project.apps.translate.models import  FormatConfig
 
 
 @admin.register(FormatConfig)

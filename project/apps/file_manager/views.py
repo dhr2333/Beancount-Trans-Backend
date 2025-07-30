@@ -5,12 +5,12 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
 from minio.error import S3Error
-from .models import Directory, File
-from .serializers import DirectorySerializer, FileSerializer
+from project.apps.file_manager.models import Directory, File
+from project.apps.file_manager.serializers import DirectorySerializer, FileSerializer
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.conf import settings
-from maps.filters import CurrentUserFilterBackend
-from maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.maps.filters import CurrentUserFilterBackend
+from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
 from project.utils.minio import get_minio_client
 

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Directory, File
+from project.apps.file_manager.models import Directory, File
 
 class DirectorySerializer(serializers.ModelSerializer):
     path = serializers.SerializerMethodField()

@@ -16,14 +16,14 @@ Including another URLconf
 # from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
-from maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
-from translate.views.views import UserConfigAPI
-from file_manager.views import DirectoryViewSet, FileViewSet
+from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
+from project.apps.translate.views.views import UserConfigAPI
+from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
+from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
 from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
-from .views import authenticateByToken
 # from rest_framework import permissions
 # from drf_yasg.views import get_schema_view
 # from drf_yasg import openapi
@@ -69,7 +69,7 @@ urlpatterns = [
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
     # 业务相关的urls
-    path('api/translate/', include('translate.urls')),  # 解析地址
-    path('api/fava/', include('fava_instances.urls')),  # fava容器服务
+    path('api/translate/', include('project.apps.translate.urls')),  # 解析地址
+    path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
     # path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
 ]

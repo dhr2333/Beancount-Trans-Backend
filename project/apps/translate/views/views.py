@@ -6,17 +6,17 @@ from django.contrib.auth import get_user_model
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.utils.token import get_token_user_id
 from project.utils.tools import get_user_config
-from translate.models import FormatConfig
-from translate.serializers import AnalyzeSerializer, FormatConfigSerializer, ReparseSerializer
-from translate.services.analyze_service import AnalyzeService
-from maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.permissions import AllowAny
-from translate.utils import FormatData
-from translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.models import FormatConfig
+from project.apps.translate.serializers import AnalyzeSerializer, FormatConfigSerializer, ReparseSerializer
+from project.apps.translate.services.analyze_service import AnalyzeService
+from project.apps.translate.utils import FormatData
+from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
 
 
 User = get_user_model()

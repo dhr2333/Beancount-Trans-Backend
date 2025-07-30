@@ -2,48 +2,49 @@
 import csv
 import io
 import re
-import logging
-from typing import Dict
+# import logging
+# from typing import Dict
 
-from datetime import datetime
-from maps.models import Assets
-from translate.utils import InitStrategy, IgnoreData, ASSETS_OTHER, BILL_CMB_CREDIT
+# from datetime import datetime
+from project.apps.maps.models import Assets
+from project.apps.translate.utils import ASSETS_OTHER
+from project.apps.translate.services.init.strategies.cmb_credit_init_strategy import CMBCreditInitStrategy
 
-cmb_credit_sourcefile_identifier = "CMB Credit Card Statement"
-cmb_credit_csvfile_identifier = "招商银行信用卡账单明细"
-
-
-class CmbCreditInitStrategy(InitStrategy):
-    def init(self, bill, **kwargs):
-        import itertools
-        year = kwargs.get('year', None)
-        bill = itertools.islice(bill, 2, None)
-        records = []
-        try:
-            for row in bill:
-                record = {
-                    'transaction_time': datetime.strptime(f'{year}/{row[0]}', '%Y/%m/%d').strftime(f'{year}-%m-%d 00:00:00'),  # 交易时间
-                    'transaction_category': "商户消费",
-                    'counterparty': row[2],  # 交易对方
-                    'commodity': "/",  # 商品
-                    'transaction_type': "收入" if "-" in row[3] else "支出",  # 收支类型（收入/支出/不计收支）
-                    'amount': row[3].replace("-", "") if "-" in row[3] else row[3],  # 金额
-                    'payment_method': "招商银行信用卡(" + row[4] + ")",  # 支付方式
-                    'transaction_status': BILL_CMB_CREDIT + " - 交易成功",  # 交易状态
-                    'bill_identifier': BILL_CMB_CREDIT,  # 账单类型
-                }
-                records.append(record)
-        except UnicodeDecodeError as e:
-            logging.error("Unicode decode error at row=%s: %s", row, e)
-        except Exception as e:
-            logging.error("Unexpected error: %s", e)
-
-        return records
+# cmb_credit_sourcefile_identifier = "CMB Credit Card Statement"
+# cmb_credit_csvfile_identifier = "招商银行信用卡账单明细"
 
 
-def cmb_credit_ignore(data: Dict) -> bool:
-    if data['bill_identifier'] == BILL_CMB_CREDIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
-        return True
+# class CmbCreditInitStrategy(InitStrategy):
+#     def init(self, bill, **kwargs):
+#         import itertools
+#         year = kwargs.get('year', None)
+#         bill = itertools.islice(bill, 2, None)
+#         records = []
+#         try:
+#             for row in bill:
+#                 record = {
+#                     'transaction_time': datetime.strptime(f'{year}/{row[0]}', '%Y/%m/%d').strftime(f'{year}-%m-%d 00:00:00'),  # 交易时间
+#                     'transaction_category': "商户消费",
+#                     'counterparty': row[2],  # 交易对方
+#                     'commodity': "/",  # 商品
+#                     'transaction_type': "收入" if "-" in row[3] else "支出",  # 收支类型（收入/支出/不计收支）
+#                     'amount': row[3].replace("-", "") if "-" in row[3] else row[3],  # 金额
+#                     'payment_method': "招商银行信用卡(" + row[4] + ")",  # 支付方式
+#                     'transaction_status': BILL_CMB_CREDIT + " - 交易成功",  # 交易状态
+#                     'bill_identifier': BILL_CMB_CREDIT,  # 账单类型
+#                 }
+#                 records.append(record)
+#         except UnicodeDecodeError as e:
+#             logging.error("Unicode decode error at row=%s: %s", row, e)
+#         except Exception as e:
+#             logging.error("Unexpected error: %s", e)
+
+#         return records
+
+
+# def cmb_credit_ignore(data: Dict) -> bool:
+#     if data['bill_identifier'] == BILL_CMB_CREDIT and ("支付宝" in data['counterparty'] or "财付通" in data['counterparty']):
+#         return True
 
 
 def cmb_credit_pdf_convert_to_csv(content):
@@ -66,9 +67,9 @@ def cmb_credit_pdf_convert_to_csv(content):
     csv_writer = csv.writer(output)
     written_data = []  # 用于保存已写入的数据
     if date_string:
-        csv_writer.writerow([f'{date_string} {cmb_credit_csvfile_identifier}'])
+        csv_writer.writerow([f'{date_string} {CMBCreditInitStrategy.HEADER_MARKER}'])
     else:
-        csv_writer.writerow([cmb_credit_csvfile_identifier])
+        csv_writer.writerow([CMBCreditInitStrategy.HEADER_MARKER])
     csv_writer.writerow(['交易日', '记账日', '交易摘要', '人民币金额', '卡号末四位', '交易地金额'])
     pattern = r'(\s*\d{2}/\d{2})\s+(\d{2}/\d{2})\s+(.*?)\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s+(\d{4})\s+(-?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
     for line in lines:
@@ -122,4 +123,4 @@ def cmb_credit_get_account(self, ownerid):
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
 
-IgnoreData.cmb_credit_ignore = cmb_credit_ignore
+# IgnoreData.cmb_credit_ignore = cmb_credit_ignore

@@ -1,6 +1,6 @@
 import logging
 
-from translate.utils import InitStrategy, IgnoreData
+from project.apps.translate.utils import InitStrategy, IgnoreData
 
 bank_type_sourcefile_identifier = "xxxxxxxxxx"  # 能唯一标识所属银行及账单类型的原始上传文件
 bank_type_csvfile_identifier = "xx银行xx卡账单明细"  # 能唯一标识所属银行及账单类型

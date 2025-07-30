@@ -1,6 +1,6 @@
 # project/apps/translate/serializers.py
 from rest_framework import serializers
-from translate.models import FormatConfig
+from project.apps.translate.models import FormatConfig
 
 
 class AnalyzeSerializer(serializers.Serializer):

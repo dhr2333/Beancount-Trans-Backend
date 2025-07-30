@@ -1,7 +1,7 @@
 # project/apps/translate/services/parse/rules/alipay_rule.py
 from project.apps.translate.services.parse.ignore_registry import registry
 from project.apps.translate.utils import BILL_ALI
-from translate.utils import pattern
+from project.apps.translate.utils import pattern
 from typing import Dict
 import re
 

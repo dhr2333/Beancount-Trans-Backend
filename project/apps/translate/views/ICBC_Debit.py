@@ -1,43 +1,44 @@
 import re
 import pdfplumber
-import logging
+# import logging
 
-from maps.models import Assets
-from translate.utils import InitStrategy, BILL_ICBC_DEBIT
+from project.apps.maps.models import Assets
+from project.apps.translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
+# from project.apps.translate.utils import InitStrategy, BILL_ICBC_DEBIT
 
-icbc_debit_sourcefile_identifier = "中国工商银行借记账户历史明细"
-icbc_debit_csvfile_identifier = "中国工商银行储蓄卡账单明细"
+# icbc_debit_sourcefile_identifier = "中国工商银行借记账户历史明细"
+# icbc_debit_csvfile_identifier = "中国工商银行储蓄卡账单明细"
 
 
-class IcbcDebitInitStrategy(InitStrategy):
-    def init(self, bill, **kwargs):
-        import itertools
-        card = kwargs.get('card_number', None)
-        bill = itertools.islice(bill, 1, None)
-        records = []
-        try:
-            for row in bill:
-                record = {
-                    'transaction_time': row[0],  # 交易时间
-                    'transaction_category': row[6],  # 交易类型
-                    'counterparty': row[10],  # 交易对方
-                    'commodity': row[4],  # 商品
-                    'transaction_type': "支出" if "-" in row[8] else "收入",  # 收支类型（收入/支出/不计收支）
-                    'amount': row[8].replace("+", "").replace("-", ""),  # 金额
-                    'payment_method': "中国工商银行储蓄卡(" + card + ")",  # 支付方式
-                    'transaction_status': BILL_ICBC_DEBIT + " - 交易成功",  # 交易状态
-                    'notes': row[6],  # 备注
-                    'bill_identifier': BILL_ICBC_DEBIT,  # 账单类型
-                    'balance': row[9],
-                    'card_number': row[11],
-                }
-                records.append(record)
-        except UnicodeDecodeError as e:
-            logging.error("Unicode decode error at row=%s: %s", row, e)
-        except Exception as e:
-            logging.error("Unexpected error: %s", e)
+# class IcbcDebitInitStrategy(InitStrategy):
+#     def init(self, bill, **kwargs):
+#         import itertools
+#         card = kwargs.get('card_number', None)
+#         bill = itertools.islice(bill, 1, None)
+#         records = []
+#         try:
+#             for row in bill:
+#                 record = {
+#                     'transaction_time': row[0],  # 交易时间
+#                     'transaction_category': row[6],  # 交易类型
+#                     'counterparty': row[10],  # 交易对方
+#                     'commodity': row[4],  # 商品
+#                     'transaction_type': "支出" if "-" in row[8] else "收入",  # 收支类型（收入/支出/不计收支）
+#                     'amount': row[8].replace("+", "").replace("-", ""),  # 金额
+#                     'payment_method': "中国工商银行储蓄卡(" + card + ")",  # 支付方式
+#                     'transaction_status': BILL_ICBC_DEBIT + " - 交易成功",  # 交易状态
+#                     'notes': row[6],  # 备注
+#                     'bill_identifier': BILL_ICBC_DEBIT,  # 账单类型
+#                     'balance': row[9],
+#                     'card_number': row[11],
+#                 }
+#                 records.append(record)
+#         except UnicodeDecodeError as e:
+#             logging.error("Unicode decode error at row=%s: %s", row, e)
+#         except Exception as e:
+#             logging.error("Unexpected error: %s", e)
 
-        return records
+#         return records
 
 
 def text_with_specific_font(page, fontname, max_fontsize, min_fontsize):
@@ -63,7 +64,8 @@ def icbc_debit_pdf_convert_to_csv(file, card_number, password):
     with pdfplumber.open(file, password=password) as pdf:
         num_pages = len(pdf.pages)
         header = ["交易日期,账号,储种,序号,币种,钞汇,摘要,地区,收入/支出金额,余额,对方户名,对方账号,渠道"]
-        output_lines = [icbc_debit_csvfile_identifier + " 卡号: " + card_number]
+        # output_lines = [icbc_debit_csvfile_identifier + " 卡号: " + card_number]
+        output_lines = [ICBCDebitInitStrategy.HEADER_MARKER + " 卡号: " + card_number]
         output_lines.append(",".join(header))
         for page_num in range(num_pages):
             page = pdf.pages[page_num]

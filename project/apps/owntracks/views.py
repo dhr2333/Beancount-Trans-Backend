@@ -17,8 +17,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import OwnTrackLog
-from .serializers import LogDatesSerializer
+from project.apps.owntracks.models import OwnTrackLog
+from project.apps.owntracks.serializers import LogDatesSerializer
 
 logger = logging.getLogger(__name__)
 

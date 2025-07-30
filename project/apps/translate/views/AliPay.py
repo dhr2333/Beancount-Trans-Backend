@@ -1,59 +1,59 @@
 # project/apps/translate/views/AliPay.py
 import re
-import logging
+# import logging
 
-from maps.models import Assets
-from translate.utils import ASSETS_OTHER, OPENBALANCE, BILL_ALI, pattern, IgnoreData, InitStrategy
+from project.apps.maps.models import Assets
+from project.apps.translate.utils import ASSETS_OTHER, OPENBALANCE, pattern
 
-alipay_csvfile_identifier = "------------------------------------------------------------------------------------"
+# alipay_csvfile_identifier = "------------------------------------------------------------------------------------"
 
-class AliPayInitStrategy(InitStrategy):
-    def init(self, bill, **kwargs):
-        import itertools
-        bill = itertools.islice(bill, 24, None)  # 跳过前24行
-        records = []
+# class AliPayInitStrategy(InitStrategy):
+#     def init(self, bill, **kwargs):
+#         import itertools
+#         bill = itertools.islice(bill, 24, None)  # 跳过前24行
+#         records = []
 
-        try:
-            for row in bill:
-                transaction_type = "/" if row[5] == "不计收支" else row[5]
-                payment_method = "余额" if row[7].strip() == '' else row[7].strip()
-                notes = "/" if row[11].strip() == '' else row[11].strip()
+#         try:
+#             for row in bill:
+#                 transaction_type = "/" if row[5] == "不计收支" else row[5]
+#                 payment_method = "余额" if row[7].strip() == '' else row[7].strip()
+#                 notes = "/" if row[11].strip() == '' else row[11].strip()
 
-                record = {
-                    'transaction_time': row[0].strip(),  # 交易时间
-                    'transaction_category': row[1].strip(),  # 交易类型
-                    'counterparty': row[2].strip(),  # 交易对方
-                    'commodity': row[4].strip(),  # 商品
-                    'transaction_type': transaction_type.strip(),  # 收支类型（收入/支出/不计收支）
-                    'amount': row[6].strip(),  # 金额
-                    'payment_method': payment_method.split('&')[0],  # 支付方式
-                    'transaction_status': row[8].strip(),  # 交易状态
-                    'notes': notes,  # 备注
-                    'bill_identifier': BILL_ALI,  # 账单类型
-                    'uuid': row[9].strip(),  # 交易单号
-                    'discount': True if "&" in payment_method else False  # 支付方式
-                }
-                records.append(record)
+#                 record = {
+#                     'transaction_time': row[0].strip(),  # 交易时间
+#                     'transaction_category': row[1].strip(),  # 交易类型
+#                     'counterparty': row[2].strip(),  # 交易对方
+#                     'commodity': row[4].strip(),  # 商品
+#                     'transaction_type': transaction_type.strip(),  # 收支类型（收入/支出/不计收支）
+#                     'amount': row[6].strip(),  # 金额
+#                     'payment_method': payment_method.split('&')[0],  # 支付方式
+#                     'transaction_status': row[8].strip(),  # 交易状态
+#                     'notes': notes,  # 备注
+#                     'bill_identifier': BILL_ALI,  # 账单类型
+#                     'uuid': row[9].strip(),  # 交易单号
+#                     'discount': True if "&" in payment_method else False  # 支付方式
+#                 }
+#                 records.append(record)
 
-        except UnicodeDecodeError as e:
-            logging.error(f"Unicode decode error at row={row}: {str(e)}")
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}")
+#         except UnicodeDecodeError as e:
+#             logging.error(f"Unicode decode error at row={row}: {str(e)}")
+#         except Exception as e:
+#             logging.error(f"Unexpected error: {str(e)}")
 
-        return records
+#         return records
 
 
-def alipay_ignore(self, data):
-    if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款", "芝麻免押下单成功"]:
-        return True
-    elif data['bill_identifier'] == BILL_ALI and  re.match(pattern["余额宝"], data['commodity']):
-        return True
-    else:
-        return False
+# def alipay_ignore(self, data):
+#     if data['bill_identifier'] == BILL_ALI and data['transaction_status'] in ["退款成功", "交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款", "芝麻免押下单成功"]:
+#         return True
+#     elif data['bill_identifier'] == BILL_ALI and  re.match(pattern["余额宝"], data['commodity']):
+#         return True
+#     else:
+#         return False
 
-def alipay_fund_ignore(self, data):
-    if data['bill_identifier'] == BILL_ALI:
-        return data['transaction_category'] in ["转账收款到余额宝", "余额宝-自动转入", "余额宝-单次转入"]
+# def alipay_fund_ignore(self, data):
+#     if data['bill_identifier'] == BILL_ALI:
+#         return data['transaction_category'] in ["转账收款到余额宝", "余额宝-自动转入", "余额宝-单次转入"]
 
 
 def alipay_get_expense_account(self, assets, ownerid):
@@ -237,5 +237,5 @@ def alipay_get_discount(data):
     return data['discount']
 
 
-IgnoreData.alipay_ignore = alipay_ignore
-IgnoreData.alipay_fund_ignore = alipay_fund_ignore
+# IgnoreData.alipay_ignore = alipay_ignore
+# IgnoreData.alipay_fund_ignore = alipay_fund_ignore

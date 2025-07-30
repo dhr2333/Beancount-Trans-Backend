@@ -1,41 +1,41 @@
 # project/apps/translate/views/WeChat.py
-import logging
+# import logging
 import re
 
-from maps.models import Assets
-from translate.utils import InitStrategy, IgnoreData, ASSETS_OTHER, BILL_WECHAT
+from project.apps.maps.models import Assets
+from project.apps.translate.utils import ASSETS_OTHER, BILL_WECHAT
 
-wechat_csvfile_identifier = "微信支付账单明细"
+# wechat_csvfile_identifier = "微信支付账单明细"
 
 
-class WeChatInitStrategy(InitStrategy):
-    def init(self, bill, **kwargs):
-        import itertools
-        bill = itertools.islice(bill, 16, None)
-        records = []
-        try:
-            for row in bill:
-                record = {
-                    'transaction_time': row[0],  # 交易时间
-                    'transaction_category': row[1],  # 交易类型
-                    'counterparty': row[2],  # 交易对方
-                    'commodity': row[3],  # 商品
-                    'transaction_type': row[4],  # 收支类型（收入/支出/不计收支）
-                    'amount': row[5],  # 金额
-                    'payment_method': row[6],  # 支付方式
-                    'transaction_status': row[7],  # 交易状态
-                    'notes': row[10],  # 备注
-                    'bill_identifier': BILL_WECHAT,  # 账单类型
-                    'uuid': row[8],  # 交易单号
-                    'discount': False
-                }
-                records.append(record)
-        except UnicodeDecodeError as e:
-            logging.error("Unicode decode error at row=%s: %s", row, e)
-        except Exception as e:
-            logging.error("Unexpected error: %s", e)
+# class WeChatInitStrategy(InitStrategy):
+#     def init(self, bill, **kwargs):
+#         import itertools
+#         bill = itertools.islice(bill, 16, None)
+#         records = []
+#         try:
+#             for row in bill:
+#                 record = {
+#                     'transaction_time': row[0],  # 交易时间
+#                     'transaction_category': row[1],  # 交易类型
+#                     'counterparty': row[2],  # 交易对方
+#                     'commodity': row[3],  # 商品
+#                     'transaction_type': row[4],  # 收支类型（收入/支出/不计收支）
+#                     'amount': row[5],  # 金额
+#                     'payment_method': row[6],  # 支付方式
+#                     'transaction_status': row[7],  # 交易状态
+#                     'notes': row[10],  # 备注
+#                     'bill_identifier': BILL_WECHAT,  # 账单类型
+#                     'uuid': row[8],  # 交易单号
+#                     'discount': False
+#                 }
+#                 records.append(record)
+#         except UnicodeDecodeError as e:
+#             logging.error("Unicode decode error at row=%s: %s", row, e)
+#         except Exception as e:
+#             logging.error("Unexpected error: %s", e)
 
-        return records
+#         return records
 
 
 def wechatpay_ignore(self, data):
@@ -197,4 +197,4 @@ def wechatpay_get_discount(data):
     return data['discount']
 
 
-IgnoreData.wechatpay_ignore = wechatpay_ignore
+# IgnoreData.wechatpay_ignore = wechatpay_ignore

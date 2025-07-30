@@ -1,6 +1,5 @@
 from django.contrib import admin
-
-from .models import OwnTrackLog
+from project.apps.owntracks.models import OwnTrackLog
 # Register your models here.
 
 @admin.register(OwnTrackLog)

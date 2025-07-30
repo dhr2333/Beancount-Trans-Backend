@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Directory, File
+from project.apps.file_manager.models import Directory, File
 
 class DirectoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner', 'parent', 'created_at')

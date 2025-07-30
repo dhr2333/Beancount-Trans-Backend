@@ -1,6 +1,6 @@
-from translate.services.init.strategies.base_bill_init_strategy import InitStrategy
+from project.apps.translate.services.init.strategies.base_bill_init_strategy import InitStrategy
 from typing import List, Dict, Any
-from translate.utils import BILL_BOC_DEBIT
+from project.apps.translate.utils import BILL_BOC_DEBIT
 import logging
 import csv
 import itertools
@@ -9,6 +9,7 @@ import itertools
 class BOCDebitInitStrategy(InitStrategy):
     """中国银行借记卡账单初始化策略"""
 
+    SOURCE_FILE_IDENTIFIER = "中国银行交易流水明细清单"
     HEADER_MARKER = "中国银行储蓄卡账单明细"
     SKIP_ROWS = 1
 

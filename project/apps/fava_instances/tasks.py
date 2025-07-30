@@ -1,8 +1,8 @@
 # Beancount-Trans-Backend/project/apps/fava_instances/tasks.py
 from celery import shared_task
 from django.utils import timezone
-from fava_instances.models import FavaInstance
-from fava_instances.services.fava_manager import FavaContainerManager
+from project.apps.fava_instances.models import FavaInstance
+from project.apps.fava_instances.services.fava_manager import FavaContainerManager
 from django.conf import settings
 
 @shared_task(name="fava_instances.tasks.cleanup_fava_containers")

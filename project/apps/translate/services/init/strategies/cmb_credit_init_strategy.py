@@ -1,6 +1,6 @@
-from translate.services.init.strategies.base_bill_init_strategy import InitStrategy
+from project.apps.translate.services.init.strategies.base_bill_init_strategy import InitStrategy
 from typing import List, Dict, Any
-from translate.utils import BILL_CMB_CREDIT
+from project.apps.translate.utils import BILL_CMB_CREDIT
 from datetime import datetime
 import logging
 import csv
@@ -10,6 +10,7 @@ import itertools
 class CMBCreditInitStrategy(InitStrategy):
     """招商银行信用卡账单初始化策略"""
 
+    SOURCE_FILE_IDENTIFIER = "CMB Credit Card Statement"
     HEADER_MARKER = "招商银行信用卡账单明细"
     SKIP_ROWS = 2
 

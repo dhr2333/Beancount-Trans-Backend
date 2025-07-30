@@ -1,6 +1,6 @@
 # Beancount-Trans-Backend/project/apps/fava_instances/urls.py
 from django.urls import path
-from fava_instances.views import FavaRedirectView
+from project.apps.fava_instances.views import FavaRedirectView
 
 
 urlpatterns = [

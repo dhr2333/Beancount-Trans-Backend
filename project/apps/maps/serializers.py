@@ -1,7 +1,7 @@
 from rest_framework import serializers
 # from django.contrib.auth import get_user_model
 
-from maps.models import Expense, Assets, Income
+from project.apps.maps.models import Expense, Assets, Income
 
 
 class ExpenseSerializer(serializers.HyperlinkedModelSerializer):

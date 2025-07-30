@@ -1,8 +1,8 @@
 # project/apps/translate/services/parse/transaction_parser.py
 from datetime import timedelta, datetime
 from typing import Dict
-from translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
-from translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
+from project.apps.translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
+from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
 
 
 def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_key: str) -> Dict:

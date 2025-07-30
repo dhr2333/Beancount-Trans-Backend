@@ -3,7 +3,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path
 
-from translate.views import views
+from project.apps.translate.views import views
 
 urlpatterns = [
     # path('trans', views.BillAnalyzeView.as_view(), name='trans'),

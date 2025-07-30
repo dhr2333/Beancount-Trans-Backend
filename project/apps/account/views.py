@@ -4,8 +4,8 @@ from django.conf import settings
 from rest_framework.exceptions import ValidationError
 from rest_framework.viewsets import ModelViewSet
 
-from .models import Account
-from .serializers import AccountSerializer
+from project.apps.account.models import Account
+from project.apps.account.serializers import AccountSerializer
 
 
 class AccountViewSet(ModelViewSet):

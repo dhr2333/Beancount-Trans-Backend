@@ -22,7 +22,7 @@ def env_to_bool(env, default):
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, os.path.join(BASE_DIR, 'project/apps'))  # 系统的导包路径
+sys.path.insert(0, str(BASE_DIR))
 
 
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
@@ -72,12 +72,12 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django_celery_beat',
 
     # 本地应用
-    'project.apps.account.apps.AccountConfig',
-    'project.apps.file_manager.apps.FileManagerConfig',
-    'project.apps.maps.apps.MapsConfig',
-    'project.apps.owntracks.apps.OwntracksConfig',
-    'project.apps.translate.apps.TranslateConfig',
-    'project.apps.fava_instances.apps.FavaInstancesConfig',
+    'project.apps.account',
+    'project.apps.fava_instances',
+    'project.apps.file_manager',
+    'project.apps.maps',
+    'project.apps.owntracks',
+    'project.apps.translate',
 ]
 
 MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理

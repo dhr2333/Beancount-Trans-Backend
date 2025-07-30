@@ -3,8 +3,8 @@ import csv
 from io import StringIO
 from django.test import TestCase
 from django.contrib.auth.models import User
-from maps.models import Assets
-from translate.views.AliPay import (  # 替换为实际导入路径
+from project.apps.maps.models import Assets
+from project.apps.translate.views.AliPay import (  # 替换为实际导入路径
     AliPayInitStrategy,
     alipay_ignore,
     BILL_ALI,

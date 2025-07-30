@@ -1,8 +1,9 @@
 # project/apps/translate/utils.py
 import re
 from datetime import time
-from maps.models import Assets
+from project.apps.maps.models import Assets
 from abc import ABC, abstractmethod
+
 
 BILL_ALI = "alipay"
 BILL_WECHAT = "wechat"
@@ -99,7 +100,6 @@ class FormatConfig:
 class FormatData:
 
     def format_instance(entry, config=FormatConfig()):
-        ignore_data = IgnoreData(None)
         formatted_str = ""
 
         formatted_str += f"{entry['date']}"
@@ -178,45 +178,47 @@ class FormatData:
         return formatted_str + "\n\n"
 
 
-class IgnoreData:
-    def __init__(self, data):
-        self.data = data
+# class IgnoreData:
+#     def __init__(self, data):
+#         self.data = data
 
-    def empty(self, data):
-        return data == {}
+#     def empty(self, data):
+#         return data == {}
 
-    def notes(self, data):
-        return data["note"] == "零钱提现" or data["note"] == "信用卡还款" or data["note"] == "提现-实时提现" or data["note"] == "余额宝-转出到银行卡"
+#     def notes(self, data):
+#         return data["note"] == "零钱提现" or data["note"] == "信用卡还款" or data["note"] == "提现-实时提现" or data["note"] == "余额宝-转出到银行卡"
 
-    def balance(self, data):
-        from datetime import datetime
+#     def balance(self, data):
+#         from datetime import datetime
 
-        # 将字符串日期转换为 datetime 对象
-        for record in data:
-            record["transaction_time"] = datetime.strptime(record["transaction_time"], "%Y-%m-%d %H:%M:%S")
-        # 以天为单位找到每组中时间最晚的记录
-        unique_days = {}
-        for record in data:
-            date_key = record["transaction_time"].date()
-            if date_key not in unique_days or record["transaction_time"] > unique_days[date_key]["transaction_time"]:
-                unique_days[date_key] = record
-        # 提取结果并保证输入和输出的格式不变
-        result = list(unique_days.values())
-        # 将 transaction_time 转换回字符串
-        for record in result:
-            record["transaction_time"] = record["transaction_time"].strftime("%Y-%m-%d %H:%M:%S")
-        return result
+#         # 将字符串日期转换为 datetime 对象
+#         for record in data:
+#             record["transaction_time"] = datetime.strptime(record["transaction_time"], "%Y-%m-%d %H:%M:%S")
+#         # 以天为单位找到每组中时间最晚的记录
+#         unique_days = {}
+#         for record in data:
+#             date_key = record["transaction_time"].date()
+#             if date_key not in unique_days or record["transaction_time"] > unique_days[date_key]["transaction_time"]:
+#                 unique_days[date_key] = record
+#         # 提取结果并保证输入和输出的格式不变
+#         result = list(unique_days.values())
+#         # 将 transaction_time 转换回字符串
+#         for record in result:
+#             record["transaction_time"] = record["transaction_time"].strftime("%Y-%m-%d %H:%M:%S")
+#         return result
 
 
 def get_card_number(content, sourcefile_identifier):
-    from translate.views.BOC_Debit import boc_debit_sourcefile_identifier, boc_debit_get_card_number
-    from translate.views.ICBC_Debit import icbc_debit_sourcefile_identifier, icbc_debit_get_card_number
+    from project.apps.translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
+    from project.apps.translate.views.BOC_Debit import boc_debit_get_card_number
+    from project.apps.translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
+    from project.apps.translate.views.ICBC_Debit import icbc_debit_get_card_number
     """
     从账单文件中获取该账单对应的银行卡号
     """
-    if sourcefile_identifier == boc_debit_sourcefile_identifier:
+    if sourcefile_identifier == BOCDebitInitStrategy.SOURCE_FILE_IDENTIFIER:
         card_number = boc_debit_get_card_number(content)
-    elif sourcefile_identifier == icbc_debit_sourcefile_identifier:
+    elif sourcefile_identifier == ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER:
         card_number = icbc_debit_get_card_number(content)
     return card_number
 

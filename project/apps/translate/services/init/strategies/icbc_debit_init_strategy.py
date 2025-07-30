@@ -1,6 +1,6 @@
-from translate.services.init.strategies.base_bill_init_strategy import InitStrategy
+from project.apps.translate.services.init.strategies.base_bill_init_strategy import InitStrategy
 from typing import List, Dict, Any
-from translate.utils import BILL_ICBC_DEBIT
+from project.apps.translate.utils import BILL_ICBC_DEBIT
 import logging
 import csv
 import itertools
@@ -9,6 +9,7 @@ import itertools
 class ICBCDebitInitStrategy(InitStrategy):
     """中国工商银行借记卡账单初始化策略"""
 
+    SOURCE_FILE_IDENTIFIER = "中国工商银行借记账户历史明细"
     HEADER_MARKER = "中国工商银行储蓄卡账单明细"
     SKIP_ROWS = 1
 
