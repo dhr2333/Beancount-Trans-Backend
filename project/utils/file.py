@@ -16,7 +16,7 @@ from project.apps.translate.views.ICBC_Debit import icbc_debit_pdf_convert_to_cs
 from project.apps.translate.services.init.strategies.cmb_credit_init_strategy import CMBCreditInitStrategy
 from project.apps.translate.views.CMB_Credit import cmb_credit_pdf_convert_to_csv
 from project.apps.translate.services.init.strategies.ccb_debit_init_strategy import CCBDebitInitStrategy
-from project.apps.translate.views.CCB_Debit import ccb_debit_string_convert_to_csv, ccb_debit_xls_convert_to_string
+from project.apps.translate.views.CCB_Debit import ccb_debit_string_convert_to_csv
 from django.conf import settings
 
 
@@ -132,7 +132,7 @@ def write_entry_to_file(content):
         print(f"Failed to write to file: {e}")
 
 
-def convert_to_csv_bytes(file, password=None):
+def convert_to_csv_bytes(file, password=None) -> bytes:
     """
     转换为CSV格式以供程序读取解析。
 
@@ -159,12 +159,51 @@ def convert_to_csv_bytes(file, password=None):
     elif file_extension == '.pdf':
         return handle_pdf(file, password)
 
+# def xls_convert_to_string(file):
+#     """
+#     从Excel文件读取数据并转换为列表格式。
+
+#     Args:
+#         file(str): Excel文件的路径
+
+#     Returns:
+#         list: 包含Excel文件中所有数据的列表
+#     """
+#     # 读取Excel文件
+#     data = pd.read_excel(file, header=None)
+#     # 将DataFrame转换为嵌套列表
+#     data_list = data.values.tolist()
+#     return data_list
+
+def convert_df_to_csv_bytes(df):
+    """将DataFrame转换为CSV字节流"""
+    csv_content = df.to_csv(index=False, header=False, encoding='utf-8-sig')
+    return csv_content.encode('utf-8-sig')
+
+def is_ccb_bill(df):
+    """检查是否为建行账单"""
+    for _, row in df.iterrows():
+        for item in row:
+            if pd.notnull(item) and CCBDebitInitStrategy.SOURCE_FILE_IDENTIFIER in str(item):
+                return True
+    return False
+
 def handle_excel(file):
-    string_content = ccb_debit_xls_convert_to_string(file)
-    for row in string_content:
-        if any(pd.notnull(item) and CCBDebitInitStrategy.SOURCE_FILE_IDENTIFIER in str(item) for item in row):
-            convert_content = ccb_debit_string_convert_to_csv(string_content)
-            return convert_content.encode()
+    df = pd.read_excel(file, header=None, dtype=str)
+
+    df.fillna('', inplace=True)  # 替换NaN为''，避免后续处理中的错误
+    if is_ccb_bill(df):
+        return ccb_debit_string_convert_to_csv(df)
+    elif not df.empty and "微信支付账单明细" in df.iloc[0, 0]:
+        return convert_df_to_csv_bytes(df)
+    else:
+        return convert_df_to_csv_bytes(df)
+
+    # string_content = xls_convert_to_string(file)
+    # for row in string_content:
+    #     if any(pd.notnull(item) and CCBDebitInitStrategy.SOURCE_FILE_IDENTIFIER in str(item) for item in row):
+    #         convert_content = 
+    #         return convert_content
 
 def handle_pdf(file, password):
     pdf = PyPDF2.PdfReader(file)

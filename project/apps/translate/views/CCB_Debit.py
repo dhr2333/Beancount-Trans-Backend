@@ -40,26 +40,26 @@ from project.apps.maps.models import Assets
 #         return records
 
 
-def ccb_debit_xls_convert_to_string(file):
-    """
-    从Excel文件读取数据并转换为列表格式。
+# def ccb_debit_xls_convert_to_string(file):
+#     """
+#     从Excel文件读取数据并转换为列表格式。
 
-    Args:
-        file(str): Excel文件的路径
+#     Args:
+#         file(str): Excel文件的路径
 
-    Returns:
-        list: 包含Excel文件中所有数据的列表
-    """
-    import pandas as pd
+#     Returns:
+#         list: 包含Excel文件中所有数据的列表
+#     """
+#     import pandas as pd
 
-    # 读取Excel文件
-    data = pd.read_excel(file, header=None)
-    # 将DataFrame转换为嵌套列表
-    data_list = data.values.tolist()
-    return data_list
+#     # 读取Excel文件
+#     data = pd.read_excel(file, header=None)
+#     # 将DataFrame转换为嵌套列表
+#     data_list = data.values.tolist()
+#     return data_list
 
 
-def ccb_debit_string_convert_to_csv(data):
+def ccb_debit_string_convert_to_csv(df):
     """接收字符串，返回CSV格式文件
 
     Args:
@@ -70,20 +70,23 @@ def ccb_debit_string_convert_to_csv(data):
         csv: _description_
     """
     import pandas as pd
+    
+    
+    data_list = df.fillna('').values.tolist()
 
     # 提取标题和账号信息
-    title = data[0][4].replace('个人活期账户全部交易明细', '储蓄卡账单明细')
-    card_number = data[1][1].split(':')[1]
+    title = data_list[0][4].replace('个人活期账户全部交易明细', '储蓄卡账单明细')
+    card_number = data_list[1][1].split(':')[1]
 
     # 构造输出字符串
     output = f"{title} 卡号: {card_number}\n"
 
     # 添加列名
-    columns = data[2]
+    columns = data_list[2]
     output += f"{columns[1]},{columns[2]},{columns[3]},{columns[4]},{columns[5]},{columns[6]},{columns[7].split('/')[0]},对方账号,户名\n"
 
     # 添加数据行
-    for row in data[3:]:
+    for row in data_list[3:]:
         cleaned_row = [str(item).replace(',', '') if not pd.isna(item) else '（空）' for item in row]
         # 处理交易金额，为正数添加'+'
         transaction_amount = cleaned_row[5]
@@ -99,7 +102,7 @@ def ccb_debit_string_convert_to_csv(data):
         output += f"{cleaned_row[1]},{cleaned_row[2]},{cleaned_row[3]},{cleaned_row[4]},{transaction_amount},{cleaned_row[6]},{cleaned_row[7]},{account},{name}\n"
 
     # 输出结果
-    return output
+    return output.encode('utf-8-sig')
 
 
 def ccb_debit_get_status(data):

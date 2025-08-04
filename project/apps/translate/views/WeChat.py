@@ -37,6 +37,17 @@ from project.apps.translate.utils import ASSETS_OTHER, BILL_WECHAT
 
 #         return records
 
+def wechatpay_string_convert_to_csv(data):
+    """接收字符串，返回CSV格式文件
+
+    Args:
+        data (string): _description_
+        card_number (string): 储蓄卡/信用卡 完整的卡号
+
+    Returns:
+        csv: _description_
+    """
+    pass
 
 def wechatpay_ignore(self, data):
     if data["bill_identifier"] == BILL_WECHAT:
