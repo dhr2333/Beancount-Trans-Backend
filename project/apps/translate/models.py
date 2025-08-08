@@ -2,6 +2,7 @@
 from django.core.validators import RegexValidator
 from django.db import models
 from django.contrib.auth.models import User
+from project.apps.file_manager.models import File
 
 
 class FormatConfig(models.Model):
@@ -79,3 +80,21 @@ class FormatConfig(models.Model):
                 'ai_model': 'bert'
             }
         )[0]  # 始终返回配置实例
+
+
+class ParseFile(models.Model):
+    file = models.OneToOneField(
+        File,
+        on_delete=models.CASCADE,
+        primary_key=True,
+    )
+    status = models.CharField(
+        max_length=20, default='unprocessed', choices=[
+            ('unprocessed', '未解析'),
+            ('pending', '待解析'),
+            ('processing', '解析中'),
+            ('success', '解析成功'),
+            ('failed', '解析失败')
+        ]
+    )
+    error_message = models.TextField(null=True, blank=True)

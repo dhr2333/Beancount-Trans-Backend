@@ -1,18 +1,21 @@
+# project/apps/file_manager/views.py
 import os
+from django.conf import settings
 from django.shortcuts import get_object_or_404
-from rest_framework import viewsets, status
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from minio.error import S3Error
 from project.apps.file_manager.models import Directory, File
+from project.apps.translate.models import ParseFile
 from project.apps.file_manager.serializers import DirectorySerializer, FileSerializer
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from django.conf import settings
 from project.apps.maps.filters import CurrentUserFilterBackend
 from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
 from project.utils.minio import get_minio_client
+from project.utils.file import SUPPORTED_EXTENSIONS, BeanFileManager
 
 
 class DirectoryViewSet(ModelViewSet):
@@ -68,15 +71,18 @@ class DirectoryViewSet(ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         directory = self.get_object()
 
+        # 递归删除所有.bean文件并更新main.bean
+        self._delete_bean_files_for_directory(request.user.username, directory)
+
         # 递归删除所有MinIO文件
-        self.delete_directory_files(directory)
+        self._delete_directory_files(directory)
 
         # 级联删除数据库记录（自动处理子目录和文件）
         directory.delete()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    def delete_directory_files(self, directory):
+    def _delete_directory_files(self, directory):
         """递归删除目录下所有文件"""
         minio_client = get_minio_client()
         for file in directory.files.all():
@@ -102,6 +108,27 @@ class DirectoryViewSet(ModelViewSet):
         # 递归处理子目录
         for child in directory.children.all():
             self.delete_directory_files(child)
+
+    def _delete_bean_files_for_directory(self, username, directory):
+        """递归删除目录下所有文件对应的.bean文件并更新main.bean"""
+        # 处理当前目录下的文件
+        for file in directory.files.all():
+            base_name = os.path.splitext(file.name)[0]
+            bean_filename = f"{base_name}.bean"
+
+            # 从main.bean中移除include语句
+            BeanFileManager.update_main_bean_include(
+                username,
+                bean_filename,
+                action='remove'
+            )
+
+            # 删除.bean文件
+            BeanFileManager.delete_bean_file(username, bean_filename)
+
+        # 递归处理子目录
+        for child in directory.children.all():
+            self._delete_bean_files_for_directory(username, child)
 
 
 class FileViewSet(ModelViewSet):
@@ -138,6 +165,20 @@ class FileViewSet(ModelViewSet):
                 size=uploaded_file.size,
                 owner=request.user,
                 content_type=uploaded_file.content_type
+            )
+
+            ParseFile.objects.create(
+               file=file_obj,
+            )
+            
+            bean_filename = BeanFileManager.create_bean_file(
+                request.user.username,
+                uploaded_file.name
+            )
+            BeanFileManager.update_main_bean_include(
+                request.user.username,
+                bean_filename,
+                action='add'
             )
 
             return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
@@ -207,6 +248,24 @@ class FileViewSet(ModelViewSet):
         minio_client = get_minio_client()
         file_obj = self.get_object()
         storage_name = file_obj.storage_name
+
+        # ParseFile.objects.filter(file=file_obj).delete()
+
+        base_name = os.path.splitext(file_obj.name)[0]
+        bean_filename = f"{base_name}.bean"
+
+        # 从main.bean中移除include语句
+        BeanFileManager.update_main_bean_include(
+            request.user.username,
+            bean_filename,
+            action='remove'
+        )
+        
+        # 删除.bean文件
+        BeanFileManager.delete_bean_file(
+            request.user.username,
+            bean_filename
+        )
 
         # 检查是否有其他文件引用相同的MinIO文件
         other_references = File.objects.filter(

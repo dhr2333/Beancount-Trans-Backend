@@ -1,3 +1,4 @@
+# project/apps/file_manager/models.py
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -16,6 +17,7 @@ class Directory(models.Model):
             return self.name
         return f"{self.parent.get_path()}/{self.name}"
 
+
 class File(models.Model):
     name = models.CharField(max_length=255)
     directory = models.ForeignKey(Directory, on_delete=models.CASCADE, related_name='files')
@@ -25,6 +27,7 @@ class File(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
     content_type = models.CharField(max_length=100)
 
+
     class Meta:
         unique_together = ('name', 'directory')
 
@@ -32,3 +35,4 @@ class File(models.Model):
     def minio_path(self):
         """返回MinIO中的存储路径"""
         return self.storage_name
+

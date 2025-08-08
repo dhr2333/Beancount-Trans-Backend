@@ -1,3 +1,4 @@
+# project/apps/file_manager/apps.py
 from django.apps import AppConfig
 
 

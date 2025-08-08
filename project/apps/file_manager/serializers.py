@@ -1,3 +1,4 @@
+# project/apps/file_manager/serializers.py
 from rest_framework import serializers
 from project.apps.file_manager.models import Directory, File
 

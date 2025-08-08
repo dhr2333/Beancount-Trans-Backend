@@ -1,3 +1,4 @@
+# project/apps/file_manager/signals.py
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from project.apps.file_manager.models import Directory

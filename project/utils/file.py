@@ -1,6 +1,7 @@
 # project/utils/file.py
 import io
 import os
+import re
 import tempfile
 import PyPDF2
 import chardet
@@ -306,3 +307,109 @@ def create_text_stream(original_name: str, content: bytes) -> io.StringIO:
     text_stream = io.StringIO(content_str)
     text_stream.name = f"{os.path.splitext(original_name)[0]}_converted.csv"
     return text_stream
+
+
+class BeanFileManager:
+    @staticmethod
+    def get_user_assets_path(username):
+        """获取用户资产目录路径"""
+        return os.path.join(settings.ASSETS_BASE_PATH, username)
+
+    @staticmethod
+    def get_main_bean_path(username):
+        """获取用户main.bean文件路径"""
+        return os.path.join(BeanFileManager.get_user_assets_path(username), 'main.bean')
+
+    @staticmethod
+    def create_bean_file(username, filename):
+        """
+        创建对应的.bean文件
+        :param username: 用户名
+        :param filename: 原始文件名（不带路径）
+        :return: bean文件名（带.bean后缀）
+        """
+        user_assets_path = BeanFileManager.get_user_assets_path(username)
+        os.makedirs(user_assets_path, exist_ok=True)
+
+        # 获取基础文件名（不带扩展名）
+        base_name = os.path.splitext(filename)[0]
+        bean_filename = f"{base_name}.bean"
+        bean_path = os.path.join(BeanFileManager.get_user_assets_path(username), bean_filename)
+
+        # 如果文件不存在，则创建空文件
+        if not os.path.exists(bean_path):
+            open(bean_path, 'w').close()
+
+        return bean_filename
+
+    @staticmethod
+    def update_main_bean_include(username, bean_filename, action='add'):
+        """
+        更新main.bean文件的include语句
+        :param username: 用户名
+        :param bean_filename: .bean文件名（如 "alipay.bean"）
+        :param action: 'add' 或 'remove'
+        """
+        main_bean_path = BeanFileManager.get_main_bean_path(username)
+
+        # 确保main.bean文件存在
+        if not os.path.exists(main_bean_path):
+            # 创建目录和文件
+            os.makedirs(os.path.dirname(main_bean_path), exist_ok=True)
+            with open(main_bean_path, 'w') as f:
+                # 使用模板内容，将用户名插入到标题中
+                template = f"""; 账本信息
+option "title" "{username}的账本"
+option "operating_currency" "CNY"
+
+2022-01-01 custom "fava-option" "language" "zh_CN"
+2022-01-01 custom "fava-option" "auto-reload" "true"  ; 设置为 true 可使 Fava 在检测到文件更改时自动重新加载页面
+2022-01-01 custom "fava-option" "default-page" "balance_sheet/"  ; 访问 Fava 时要重定向到的页面
+2022-01-01 custom "fava-option" "indent" "2"  ; 缩进的数字空格
+2022-01-01 custom "fava-option" "sidebar-show-queries" "7"  ; 侧边栏中链接的最大查询数
+
+plugin "beancount.plugins.auto_accounts"  ; 根据条目自动添加账户插件
+
+; 交易记录
+"""
+                f.write(template)
+
+
+        # 读取现有内容
+        with open(main_bean_path, 'r') as f:
+            lines = f.readlines()
+
+        # 构建include语句
+        include_line = f'include "{bean_filename}"\n'
+        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(bean_filename)}"\s*$')
+
+        new_lines = []
+        found = False
+
+        # 处理每一行
+        for line in lines:
+            # 检查是否匹配目标include语句
+            if include_pattern.match(line):
+                found = True
+                if action == 'remove':
+                    continue  # 删除该行
+            new_lines.append(line)
+
+        # 如果是添加操作且未找到现有行
+        if action == 'add' and not found:
+            # 在文件末尾添加include语句
+            # 确保最后一行有换行符
+            if new_lines and not new_lines[-1].endswith('\n'):
+                new_lines[-1] += '\n'
+            new_lines.append(include_line)
+
+        # 写入更新后的内容
+        with open(main_bean_path, 'w') as f:
+            f.writelines(new_lines)
+
+    @staticmethod
+    def delete_bean_file(username, bean_filename):
+        """删除对应的.bean文件"""
+        bean_path = os.path.join(BeanFileManager.get_user_assets_path(username), bean_filename)
+        if os.path.exists(bean_path):
+            os.remove(bean_path)
