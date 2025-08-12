@@ -1,6 +1,6 @@
 # project/apps/translate/services/steps.py
 from typing import Dict
-from project.utils.file import  convert_to_csv_bytes,convert_to_utf8, create_text_stream
+from project.utils.file import BeanFileManager, convert_to_csv_bytes,convert_to_utf8, create_text_stream
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.apps.translate.services.pipeline import Step
 from project.apps.translate.services.init.bill_init_factory import InitFactory
@@ -14,6 +14,7 @@ from project.apps.translate.views.CMB_Credit import *
 from project.apps.translate.views.ICBC_Debit import *
 from project.apps.translate.views.CCB_Debit import *
 import logging
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -190,4 +191,17 @@ class FormatStep(Step):
 class FileWritingStep(Step):
     """文件写入步骤：将处理后的数据写入文件（可选）"""
     def execute(self,  context: Dict) -> Dict:
+        if context['args']['write']:
+            username = context['username']
+            formatted_data = "\n\n".join([entry['formatted'].rstrip('\n') for entry in context['formatted_data']])
+
+            original_filename = context['uploaded_file'].name
+            bean_file_path = BeanFileManager.get_bean_file_path(username, original_filename)
+
+            if os.path.exists(bean_file_path):
+                BeanFileManager.ensure_user_assets_dir(username)
+
+                with open(bean_file_path, 'w', encoding='utf-8') as f:
+                    f.write(formatted_data)
+
         return context

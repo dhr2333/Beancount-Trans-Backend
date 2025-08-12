@@ -311,9 +311,25 @@ def create_text_stream(original_name: str, content: bytes) -> io.StringIO:
 
 class BeanFileManager:
     @staticmethod
+    def ensure_user_assets_dir(username):
+        """确保用户资产目录存在（幂等操作）"""
+        user_dir = os.path.join(settings.ASSETS_BASE_PATH, username)
+        os.makedirs(user_dir, exist_ok=True)
+        return user_dir
+
+    @staticmethod
     def get_user_assets_path(username):
         """获取用户资产目录路径"""
         return os.path.join(settings.ASSETS_BASE_PATH, username)
+
+    @staticmethod
+    def get_bean_file_path(username, original_filename):
+        """获取完整bean文件路径"""
+        base_name = os.path.splitext(original_filename)[0]
+        return os.path.join(
+            BeanFileManager.get_user_assets_path(username),
+            f"{base_name}.bean"
+        )
 
     @staticmethod
     def get_main_bean_path(username):
@@ -328,19 +344,28 @@ class BeanFileManager:
         :param filename: 原始文件名（不带路径）
         :return: bean文件名（带.bean后缀）
         """
-        user_assets_path = BeanFileManager.get_user_assets_path(username)
-        os.makedirs(user_assets_path, exist_ok=True)
-
-        # 获取基础文件名（不带扩展名）
-        base_name = os.path.splitext(filename)[0]
-        bean_filename = f"{base_name}.bean"
-        bean_path = os.path.join(BeanFileManager.get_user_assets_path(username), bean_filename)
-
-        # 如果文件不存在，则创建空文件
+        bean_path = BeanFileManager.get_bean_file_path(username, filename)
+        BeanFileManager.ensure_user_assets_dir(username)
+        
         if not os.path.exists(bean_path):
-            open(bean_path, 'w').close()
+            with open(bean_path, 'w', encoding='utf-8') as f:
+                pass  # 创建空文件
+            # logger.info(f"创建空bean文件: {bean_path}")
+        
+        return os.path.basename(bean_path)
+        # user_assets_path = BeanFileManager.get_user_assets_path(username)
+        # os.makedirs(user_assets_path, exist_ok=True)
 
-        return bean_filename
+        # # 获取基础文件名（不带扩展名）
+        # base_name = os.path.splitext(filename)[0]
+        # bean_filename = f"{base_name}.bean"
+        # bean_path = os.path.join(BeanFileManager.get_user_assets_path(username), bean_filename)
+
+        # # 如果文件不存在，则创建空文件
+        # if not os.path.exists(bean_path):
+        #     open(bean_path, 'w').close()
+
+        # return bean_filename
 
     @staticmethod
     def update_main_bean_include(username, bean_filename, action='add'):
