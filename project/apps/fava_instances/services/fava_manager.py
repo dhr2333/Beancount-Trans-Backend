@@ -14,7 +14,7 @@ class FavaContainerManager:
         try:
             import requests
             response = requests.get(
-                f"http://{container_name}:{container_host_port}", 
+                f"http://{container_name}:{container_host_port}",
                 timeout=0.3
             )
             return response.status_code == 200

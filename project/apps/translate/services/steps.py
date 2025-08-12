@@ -153,6 +153,7 @@ class CacheStep(Step):
 
 
         parsed_data = context['parsed_data']
+        args = context['args']
         for entry in parsed_data:
             cache_key = entry['cache_key']
             original_row = entry.pop('_original_row')
@@ -160,7 +161,9 @@ class CacheStep(Step):
                 "parsed_entry": entry,
                 "original_row": original_row,
             }
-            cache.set(cache_key, cache_data, timeout=3600)
+            # 如果写入标志为False,则写入缓存
+            if not args.get('write', True):
+                cache.set(cache_key, cache_data, timeout=3600)
         return context
 
 

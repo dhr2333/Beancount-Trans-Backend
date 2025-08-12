@@ -1,0 +1,47 @@
+sequenceDiagram
+    participant F as 前端
+    participant B as 后端API
+    participant DB as PostgreSQL
+    participant C as Celery
+    participant W as Worker
+    participant M as MinIO
+    participant FS as 文件系统
+    participant R as Redis
+
+    F->>B: POST /translate/multi (文件ID列表)
+    B->>DB: 查询ParseFile状态
+    DB-->>B: 返回文件状态
+    
+    alt 有文件已在处理中
+        B-->>F: 返回错误(400) + 处理中文件列表
+    else 所有文件可处理
+        B->>DB: 更新ParseFile状态为pending
+        B->>C: 创建任务组(group)
+        C-->>B: 返回任务组ID
+        B->>R: 存储任务组信息(key: task_group:<id>)
+        B-->>F: 返回任务组ID + 202 Accepted
+    end
+
+    loop 每个文件解析任务
+        C->>W: 执行parse_single_file_task(file_id)
+        W->>DB: 更新ParseFile状态为processing
+        W->>DB: 查询文件元数据(File)
+        DB-->>W: 返回MinIO存储路径
+        W->>M: 获取文件内容
+        M-->>W: 返回文件数据
+        
+        W->>W: 解析账单内容
+        W->>FS: 写入.bean文件
+        W->>DB: 更新ParseFile状态为success/failed
+        
+        W->>R: 更新任务状态(key: task_status:<task_id>)
+        W->>R: 更新任务组进度(key: task_group:<id>)
+        W-->>C: 返回任务结果
+    end
+
+    F->>B: GET /task/status?task_group_id=xxx (轮询)
+    B->>R: 获取任务组信息(key: task_group:<id>)
+    R-->>B: 返回任务组状态
+    B->>R: 批量获取任务状态(keys: task_status:<task_id>)
+    R-->>B: 返回各任务状态
+    B-->>F: 返回任务组进度 + 各文件状态

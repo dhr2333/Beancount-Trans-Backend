@@ -70,8 +70,8 @@ def ccb_debit_string_convert_to_csv(df):
         csv: _description_
     """
     import pandas as pd
-    
-    
+
+
     data_list = df.fillna('').values.tolist()
 
     # 提取标题和账号信息

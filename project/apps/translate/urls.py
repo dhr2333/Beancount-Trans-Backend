@@ -9,5 +9,6 @@ urlpatterns = [
     # path('trans', views.BillAnalyzeView.as_view(), name='trans'),
     path('trans', views.SingleBillAnalyzeView.as_view(), name='trans'),
     path('multi', views.MultiBillAnalyzeView.as_view(), name='multi'),
+    path('task_group_status', views.TaskGroupStatusView.as_view(), name='task_group_status'),
     path('reparse', views.ReparseEntryView.as_view(), name='reparse'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
