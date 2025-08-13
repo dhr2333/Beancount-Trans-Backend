@@ -453,6 +453,9 @@ LOGGING = {
     }
 }
 
+# 存储类型配置 (minio, oss, s3)
+STORAGE_TYPE = 'minio'  # 默认使用MinIO
+
 # MinIO配置
 MINIO_CONFIG = {
     'ENDPOINT': '127.0.0.1:9000',  # MinIO服务器地址
@@ -462,10 +465,30 @@ MINIO_CONFIG = {
     'USE_HTTPS': False  # 是否使用SSL
 }
 
+# 阿里云OSS配置
+OSS_CONFIG = {
+    'ENDPOINT': 'https://oss-cn-hangzhou.aliyuncs.com',
+    'ACCESS_KEY_ID': 'your_access_key_id',
+    'ACCESS_KEY_SECRET': 'your_access_key_secret',
+    'BUCKET_NAME': 'beancount-trans',
+    'REGION': 'cn-hangzhou'
+}
+
+# S3配置 (通用S3兼容存储)
+S3_CONFIG = {
+    'ENDPOINT_URL': 'https://s3.amazonaws.com',
+    'ACCESS_KEY_ID': 'your_access_key_id',
+    'SECRET_ACCESS_KEY': 'your_secret_access_key',
+    'BUCKET_NAME': 'beancount-trans',
+    'REGION': 'us-east-1',
+    'USE_SSL': True,
+    'VERIFY_SSL': True
+}
+
 # Traefik 配置
 TRAEFIK_NETWORK = "shared-network"  # 与Traefik共享的Docker网络
 FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker专用镜像
-BEANCOUNT_ROOT = "/home/daihaorui/桌面/GitHub/Beancount-Trans/Beancount-Trans-Backend/Assets"  # Beancount文件存储根目录(宿主机路径)
+# BEANCOUNT_ROOT = "/home/daihaorui/桌面/GitHub/Beancount-Trans/Beancount-Trans-Backend/Assets"  # Beancount文件存储根目录(宿主机路径)
 
 # 容器生命周期 (1小时)
 FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)

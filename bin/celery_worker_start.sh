@@ -8,4 +8,4 @@ cd $DJANGODIR
 
 export PYTHONPATH=$DJANGODIR:$PYTHONPATH
 
-celery -A project worker --loglevel=info --concurrency=2
+celery -A project worker --loglevel=info --concurrency=1

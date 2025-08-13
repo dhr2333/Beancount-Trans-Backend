@@ -1,16 +1,16 @@
 # project/apps/translate/tasks.py
-from celery import shared_task,group
+from celery import shared_task
 from django.core.cache import cache
 from project.apps.translate.models import ParseFile
-from project.apps.file_manager.models import File
-from project.utils.minio import get_minio_client
-from django.conf import settings
-from project.utils.file import BeanFileManager
+# from project.apps.file_manager.models import File
+from project.utils.storage_factory import get_storage_client
+# from django.conf import settings
+# from project.utils.file import BeanFileManager
 from project.apps.translate.services.analyze_service import AnalyzeService
 # from project.apps.translate.utils import get_user_config
 from project.utils.tools import get_user_config
 import logging
-import json
+# import json
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +36,14 @@ def parse_single_file_task(self, file_id, user_id, args):
         # 获取文件对象
         
         file_obj = parse_file.file
-        minio_client = get_minio_client()
+        storage_client = get_storage_client()
         
-        # 从MinIO获取文件内容
-        response = minio_client.get_object(
-            settings.MINIO_CONFIG['BUCKET_NAME'],
-            file_obj.storage_name
-        )
-        file_content = response.read()
-        response.close()
-        response.release_conn()
+        # 从存储获取文件内容
+        file_data = storage_client.download_file(file_obj.storage_name)
+        if file_data is None:
+            raise Exception(f"文件不存在: {file_obj.storage_name}")
+        
+        file_content = file_data.read()
         
         # 创建模拟文件对象
         from io import BytesIO

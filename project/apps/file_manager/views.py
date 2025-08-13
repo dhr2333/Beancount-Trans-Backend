@@ -1,21 +1,21 @@
 # project/apps/file_manager/views.py
 import os
-from django.conf import settings
+# from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from minio.error import S3Error
+# from minio.error import S3Error
 from project.apps.file_manager.models import Directory, File
 from project.apps.translate.models import ParseFile
 from project.apps.file_manager.serializers import DirectorySerializer, FileSerializer
 from project.apps.maps.filters import CurrentUserFilterBackend
 from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
-from project.utils.minio import get_minio_client
-from project.utils.file import SUPPORTED_EXTENSIONS, BeanFileManager
+from project.utils.storage_factory import get_storage_client
+from project.utils.file import BeanFileManager
 
 
 class DirectoryViewSet(ModelViewSet):
@@ -84,30 +84,26 @@ class DirectoryViewSet(ModelViewSet):
 
     def _delete_directory_files(self, directory):
         """递归删除目录下所有文件"""
-        minio_client = get_minio_client()
+        storage_client = get_storage_client()
         for file in directory.files.all():
             storage_name = file.storage_name
-            # 检查是否有其他文件引用相同的MinIO文件
+            # 检查是否有其他文件引用相同的存储文件
             other_references = File.objects.filter(
                 storage_name=storage_name
             ).exclude(id=file.id).exists()
 
             if not other_references:
                 try:
-                    minio_client.remove_object(
-                        settings.MINIO_CONFIG['BUCKET_NAME'],
-                        storage_name
-                    )
-                except S3Error as e:
-                    if e.code != "NoSuchKey":  # 忽略文件不存在的错误
-                        # 记录错误但继续删除
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.error(f"MinIO删除错误: {str(e)}")
+                    storage_client.delete_file(storage_name)
+                except Exception as e:
+                    # 记录错误但继续删除
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"存储删除错误: {str(e)}")
 
         # 递归处理子目录
         for child in directory.children.all():
-            self.delete_directory_files(child)
+            self._delete_directory_files(child)
 
     def _delete_bean_files_for_directory(self, username, directory):
         """递归删除目录下所有文件对应的.bean文件并更新main.bean"""
@@ -139,7 +135,7 @@ class FileViewSet(ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def create(self, request):
-        minio_client = get_minio_client()
+        storage_client = get_storage_client()
         directory_id = request.data.get('directory')
         directory = get_object_or_404(Directory, id=directory_id)
         uploaded_file = request.FILES['file']
@@ -148,14 +144,15 @@ class FileViewSet(ModelViewSet):
         storage_name = f"{file_hash}{file_extension}"
 
         try:
-            # 上传到 MinIO
-            minio_client.put_object(
-                settings.MINIO_CONFIG['BUCKET_NAME'],
+            # 上传到存储
+            success = storage_client.upload_file(
                 storage_name,
                 uploaded_file,
-                length=uploaded_file.size,
                 content_type=uploaded_file.content_type
             )
+            
+            if not success:
+                return Response({"error": "文件上传失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # 保存到数据库
             file_obj = File.objects.create(
@@ -183,40 +180,37 @@ class FileViewSet(ModelViewSet):
 
             return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
 
-        except S3Error as e:
+        except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
-        minio_client = get_minio_client()
+        storage_client = get_storage_client()
         file_obj = self.get_object()
 
         try:
-            # 从 MinIO 获取文件
-            response = minio_client.get_object(
-                settings.MINIO_CONFIG['BUCKET_NAME'],
-                file_obj.storage_name
-            )
+            # 从存储获取文件
+            file_data = storage_client.download_file(file_obj.storage_name)
+            
+            if file_data is None:
+                return Response({"error": "文件不存在"}, status=status.HTTP_404_NOT_FOUND)
+            
             from urllib.parse import quote
-
             safe_name = quote(file_obj.name)
             content_disposition = f"attachment; filename*=UTF-8''{safe_name}"
 
             # 创建 Django 文件响应
             from django.http import HttpResponse
-            res = HttpResponse(response.data)
+            res = HttpResponse(file_data.getvalue())
             res['Content-Type'] = file_obj.content_type
             res['Content-Disposition'] = content_disposition
             res['Access-Control-Expose-Headers'] = 'Content-Disposition'
             return res
 
-        except S3Error as e:
+        except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
-        finally:
-            response.close()
-            response.release_conn()
 
     @action(detail=False, methods=['get'])
     def search(self, request):
@@ -245,7 +239,7 @@ class FileViewSet(ModelViewSet):
         })
 
     def destroy(self, request, *args, **kwargs):
-        minio_client = get_minio_client()
+        storage_client = get_storage_client()
         file_obj = self.get_object()
         storage_name = file_obj.storage_name
 
@@ -267,22 +261,20 @@ class FileViewSet(ModelViewSet):
             bean_filename
         )
 
-        # 检查是否有其他文件引用相同的MinIO文件
+        # 检查是否有其他文件引用相同的存储文件
         other_references = File.objects.filter(
             storage_name=storage_name
         ).exclude(id=file_obj.id).exists()
 
-        # 只有当没有其他引用时才删除MinIO文件
+        # 只有当没有其他引用时才删除存储文件
         if not other_references:
             try:
-                minio_client.remove_object(
-                    settings.MINIO_CONFIG['BUCKET_NAME'],
-                    storage_name
-                )
-            except S3Error as e:
-                # 文件不存在时忽略错误
-                if e.code != "NoSuchKey":
-                    return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                storage_client.delete_file(storage_name)
+            except Exception as e:
+                # 记录错误但不中断删除流程
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"存储文件删除失败: {str(e)}")
 
         # 删除数据库记录
         file_obj.delete()
