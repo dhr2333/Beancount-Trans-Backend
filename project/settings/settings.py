@@ -58,6 +58,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
+    'drf_spectacular',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -374,7 +375,7 @@ REST_FRAMEWORK = {
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',  # 分页
     # 'PAGE_SIZE': 200,
     'EXCEPTION_HANDLER': 'project.utils.exceptions.custom_exception_handler',  # 自定义异常处理器
-    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.AutoSchema',  # 自动生成 API 文档的模式类
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # 自动生成 API 文档的模式类
 }
 
 
@@ -396,6 +397,42 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
     'JTI_CLAIM': 'jti',
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+}
+
+# DRF Spectacular Settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Beancount-Trans API',
+    'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+    },
+    'REDOC_UI_SETTINGS': {
+        'hideDownloadButton': False,
+        'hideHostname': False,
+        'hideLoading': False,
+        'hideSingleRequestSampleTab': False,
+        'expandResponses': '200,201',
+        'jsonSampleExpandLevel': 2,
+    },
+    'SECURITY': [
+        {
+            'Bearer': []
+        }
+    ],
+    'TAGS': [
+        {'name': '认证', 'description': '用户认证相关接口'},
+        {'name': '文件管理', 'description': '文件上传和管理接口'},
+        {'name': '交易记录', 'description': '交易记录管理接口'},
+        {'name': '账户', 'description': '账户管理接口'},
+        {'name': 'FAVA', 'description': 'FAVA实例管理接口'},
+        {'name': '翻译', 'description': '交易记录翻译接口'},
+    ],
 }
 
 
@@ -488,7 +525,6 @@ S3_CONFIG = {
 # Traefik 配置
 TRAEFIK_NETWORK = "shared-network"  # 与Traefik共享的Docker网络
 FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker专用镜像
-# BEANCOUNT_ROOT = "/home/daihaorui/桌面/GitHub/Beancount-Trans/Beancount-Trans-Backend/Assets"  # Beancount文件存储根目录(宿主机路径)
 
 # 容器生命周期 (1小时)
 FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)

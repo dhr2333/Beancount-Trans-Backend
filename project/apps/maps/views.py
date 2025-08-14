@@ -12,6 +12,11 @@ from project.apps.maps.serializers import AssetsSerializer, ExpenseSerializer, I
 
 class ExpenseViewSet(ModelViewSet):
     """
+    支出映射管理视图集
+    
+    提供支出映射的增删改查功能，支持批量操作。
+    所有操作都需要用户认证，且只能操作自己的数据。
+    
     list:
     返回支出映射列表数据
     create:
@@ -71,6 +76,12 @@ class ExpenseViewSet(ModelViewSet):
 
 
 class AssetsViewSet(ModelViewSet):
+    """
+    资产映射管理视图集
+    
+    提供资产映射的增删改查功能，支持批量操作。
+    所有操作都需要用户认证，且只能操作自己的数据。
+    """
     queryset = Assets.objects.all()
     serializer_class = AssetsSerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]

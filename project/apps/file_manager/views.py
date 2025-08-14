@@ -19,6 +19,12 @@ from project.utils.file import BeanFileManager
 
 
 class DirectoryViewSet(ModelViewSet):
+    """
+    目录管理视图集
+    
+    提供目录的增删改查功能，包括获取目录内容等操作。
+    所有操作都需要用户认证，且只能操作自己的数据。
+    """
     queryset = Directory.objects.all()
     serializer_class = DirectorySerializer
     permission_classes = [IsOwnerOrAdminReadWriteOnly]

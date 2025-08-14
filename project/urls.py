@@ -22,8 +22,8 @@ from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
 from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
-from rest_framework.documentation import include_docs_urls
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 # from rest_framework import permissions
 # from drf_yasg.views import get_schema_view
 # from drf_yasg import openapi
@@ -52,9 +52,11 @@ router.register(r'files', FileViewSet, basename='files')
 urlpatterns = [
     path('api/', include(router.urls)),
     path('admin/', admin.site.urls),  # 管理地址
-    path('docs/', include_docs_urls(title='Beancount-Trans')),  # API文档
-    # path('swagger/', schema_view.with_ui('swagger', cache_timeout=0)),
-    # path('redoc/', schema_view.with_ui('redoc', cache_timeout=0)),
+    
+    # API文档 - drf-spectacular
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI schema
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
 
     # 用户权限相关的urls
     path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
