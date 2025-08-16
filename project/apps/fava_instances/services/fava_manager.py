@@ -9,6 +9,8 @@ class FavaContainerManager:
         self.client = docker.from_env()
         self.network = settings.TRAEFIK_NETWORK
         self.fava_image = settings.FAVA_IMAGE
+        self.base_url = settings.BASE_URL
+        self.certresolver = settings.CERTRESOLVER
 
     def _is_container_ready(self, container_name, container_host_port):
         try:
@@ -32,7 +34,7 @@ class FavaContainerManager:
             name=container_name,
             volumes={bean_file_path: {'bind': '/Assets', 'mode': 'rw'}},
             network=self.network,
-            ports={'5000/tcp': None},
+            # ports={'5000/tcp': None},
             detach=True,
             environment={
                 "PYTHONUNBUFFERED": "1",
@@ -41,8 +43,10 @@ class FavaContainerManager:
             },
             labels={
                 "traefik.enable": "true",
-                f"traefik.http.routers.fava-{user.username}.rule": f"Host(`trans.localhost`) && PathPrefix(`/{instance.uuid}`)",
-                f"traefik.http.routers.fava-{user.username}.entrypoints": "web",
+                f"traefik.http.routers.fava-{user.username}.rule": f"Host(`{self.base_url}`) && PathPrefix(`/{instance.uuid}`)",
+                f"traefik.http.routers.fava-{user.username}.entrypoints": "websecure",
+                f"traefik.http.routers.fava-{user.username}.tls":"true",
+                f"traefik.http.routers.fava-{user.username}.tls.certresolver":f"{self.certresolver}",
                 f"traefik.http.services.fava-{user.username}.loadbalancer.server.port": "5000",
                 f"traefik.http.middlewares.fava-{user.username}-stripprefix.stripprefix.prefixes": "/",
                 f"traefik.http.routers.fava-{user.username}.middlewares": f"fava-{user.username}-stripprefix@docker",

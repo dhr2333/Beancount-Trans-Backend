@@ -73,7 +73,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django_celery_beat',
 
     # 本地应用
-    'project.apps.account',
+    # 'project.apps.account',
     'project.apps.fava_instances',
     'project.apps.file_manager',
     'project.apps.maps',
@@ -267,7 +267,7 @@ if DEBUG:
     ]
 else:
     CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
-        "https://trans.dhr2333.cn",
+        "https://trans.localhost",
     ]
 
 
@@ -525,6 +525,8 @@ S3_CONFIG = {
 # Traefik 配置
 TRAEFIK_NETWORK = "shared-network"  # 与Traefik共享的Docker网络
 FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker专用镜像
+BASE_URL = "trans.localhost"  # Fava实例的基本URL
+CERTRESOLVER = "alicloud-dns"  # Traefik证书解析器名称
 
 # 容器生命周期 (1小时)
 FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)
@@ -540,3 +542,7 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Bean文件相关配置
+ASSETS_BASE_PATH = BASE_DIR / 'Assets'  # Assets目录在项目中的路径
+ASSETS_HOST_PATH = "/Assets"  # Assets目录在宿主机中的路径
