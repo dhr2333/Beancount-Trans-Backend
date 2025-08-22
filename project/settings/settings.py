@@ -77,7 +77,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.fava_instances',
     'project.apps.file_manager',
     'project.apps.maps',
-    'project.apps.owntracks',
+    # 'project.apps.owntracks',
     'project.apps.translate',
 ]
 
