@@ -47,37 +47,47 @@ class TemplateItemSerializer(serializers.ModelSerializer):
         read_only_fields = ('created', 'modified')
 
 
-class TemplateSerializer(serializers.ModelSerializer):
+class TemplateListSerializer(serializers.ModelSerializer):
+    owner_name = serializers.CharField(source='owner.username', read_only=True)
+
+    class Meta:
+        model = Template
+        fields = ['id', 'name', 'description', 'type', 'is_public', 'is_official', 
+                 'version', 'update_notes', 'owner', 'owner_name', 'created', 'modified']
+        read_only_fields = ('created', 'modified', 'owner')
+
+
+class TemplateDetailSerializer(serializers.ModelSerializer):
     items = TemplateItemSerializer(many=True, required=False)
     owner_name = serializers.CharField(source='owner.username', read_only=True)
-    
+
     class Meta:
         model = Template
         fields = '__all__'
         read_only_fields = ('created', 'modified', 'owner')
-    
+
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
         template = Template.objects.create(**validated_data)
-        
+
         for item_data in items_data:
             TemplateItem.objects.create(template=template, **item_data)
-            
+
         return template
-    
+
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', [])
-        
+
         # 更新模板基本信息
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-        
+
         # 处理模板项 - 先删除所有现有项，然后重新创建
         instance.items.all().delete()
         for item_data in items_data:
             TemplateItem.objects.create(template=instance, **item_data)
-            
+
         return instance
 
 
