@@ -1,5 +1,5 @@
 from django.contrib import admin
-from project.apps.maps.models import Expense, Assets, Income
+from project.apps.maps.models import Expense, Assets, Income,Template,TemplateItem
 
 
 @admin.register(Expense)
@@ -30,3 +30,19 @@ class IncomeMapAdmin(admin.ModelAdmin):
     list_per_page = 500
     list_filter = ['owner']
     search_fields = ['key']
+
+
+@admin.register(Template)
+class TemplateAdmin(admin.ModelAdmin):
+    list_display = ('name', 'type', 'is_public', 'is_official', 'owner', 'version')
+    list_per_page = 100
+    list_filter = ['type', 'is_public', 'is_official', 'owner']
+    search_fields = ['name', 'description', 'update_notes']
+
+
+@admin.register(TemplateItem)
+class TemplateItemAdmin(admin.ModelAdmin):
+    list_display = ('template', 'key', 'account', 'payee', 'payer', 'full', 'currency')
+    list_per_page = 500
+    list_filter = ['template']
+    search_fields = ['key', 'account', 'payee', 'payer', 'full', 'currency']
