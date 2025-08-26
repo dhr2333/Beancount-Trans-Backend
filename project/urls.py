@@ -16,7 +16,7 @@ Including another URLconf
 # from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
-from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
+from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet, TemplateViewSet,TemplateItemViewSet
 from project.apps.translate.views.views import UserConfigAPI
 from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
 from project.views import authenticateByToken
@@ -47,6 +47,12 @@ router.register(r'income', IncomeViewSet, basename="income")
 # router.register(r'account', AccountViewSet, basename="account")
 router.register(r'directories', DirectoryViewSet, basename='directory')
 router.register(r'files', FileViewSet, basename='files')
+router.register(r'templates', TemplateViewSet, basename='template')
+router.register(
+    r'templates/(?P<template_pk>\d+)/items', 
+    TemplateItemViewSet, 
+    basename='templateitem'
+)
 
 
 urlpatterns = [
