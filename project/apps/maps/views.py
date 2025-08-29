@@ -6,7 +6,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 # from project.utils.tools import get_user_config
 from project.apps.maps.models import Expense, Assets, Income,Template, TemplateItem
 from project.apps.maps.filters import CurrentUserFilterBackend
-from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly, TemplatePermission
 from project.apps.maps.serializers import AssetsSerializer, ExpenseSerializer, IncomeSerializer, TemplateItemSerializer, TemplateListSerializer, TemplateDetailSerializer
 from django.shortcuts import get_object_or_404
 
@@ -163,6 +163,7 @@ class IncomeViewSet(ModelViewSet):
 
 
 class TemplateViewSet(ModelViewSet):
+    permission_classes = [TemplatePermission]
     # 移除固定的serializer_class，改为动态选择
 
     def get_serializer_class(self):
@@ -301,6 +302,7 @@ class TemplateViewSet(ModelViewSet):
 
 class TemplateItemViewSet(ModelViewSet):
     serializer_class = TemplateItemSerializer
+    permission_classes = [IsOwnerOrAdminReadWriteOnly]
 
     def get_queryset(self):
         return TemplateItem.objects.filter(template__owner=self.request.user)
