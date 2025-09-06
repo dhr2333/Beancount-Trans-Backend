@@ -26,7 +26,7 @@ class FormatConfig(models.Model):
             )
         ]
     )
-    ai_model = models.CharField(max_length=16, default='bert', null=False, help_text="AI模型")
+    ai_model = models.CharField(max_length=16, default='BERT', null=False, help_text="AI模型")
     deepseek_apikey = models.CharField(max_length=128, null=True, blank=True, help_text="DeepSeek API密钥")
 
     class Meta:
@@ -77,7 +77,7 @@ class FormatConfig(models.Model):
                 'income_template': 'Income:Discount',
                 'commission_template': 'Expenses:Finance:Commission',
                 'currency': 'CNY',
-                'ai_model': 'bert'
+                'ai_model': 'BERT'
             }
         )[0]  # 始终返回配置实例
 
