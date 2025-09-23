@@ -73,7 +73,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django_celery_beat',
 
     # 本地应用
-    # 'project.apps.account',
+    'project.apps.account',
     'project.apps.fava_instances',
     'project.apps.file_manager',
     'project.apps.maps',
