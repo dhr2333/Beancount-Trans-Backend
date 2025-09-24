@@ -10,7 +10,7 @@ class Expense(BaseModel):
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     expend = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="支出账户")
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
-    currencies = models.ManyToManyField(Currency, blank=True, help_text="货币")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
     class Meta:
@@ -25,16 +25,15 @@ class Expense(BaseModel):
         """保存时同步货币到关联账户"""
         super().save(*args, **kwargs)
         # 将映射的货币添加到关联的账户中
-        if self.expend and self.currencies.exists():
-            for currency in self.currencies.all():
-                self.expend.currencies.add(currency)
+        if self.expend and self.currency:
+            self.expend.currencies.add(self.currency)
 
 
 class Assets(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     full = models.CharField(max_length=16, null=False, help_text="账户名称")
     assets = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="资产账户")
-    currencies = models.ManyToManyField(Currency, blank=True, help_text="货币")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
     owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
@@ -51,16 +50,15 @@ class Assets(BaseModel):
         """保存时同步货币到关联账户"""
         super().save(*args, **kwargs)
         # 将映射的货币添加到关联的账户中
-        if self.assets and self.currencies.exists():
-            for currency in self.currencies.all():
-                self.assets.currencies.add(currency)
+        if self.assets and self.currency:
+            self.assets.currencies.add(self.currency)
 
 
 class Income(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     payer = models.CharField(max_length=8, null=True, blank=True, help_text="付款方")
     income = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="收入账户")
-    currencies = models.ManyToManyField(Currency, blank=True, help_text="货币")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
     owner = models.ForeignKey(User, related_name='income', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
@@ -76,9 +74,8 @@ class Income(BaseModel):
         """保存时同步货币到关联账户"""
         super().save(*args, **kwargs)
         # 将映射的货币添加到关联的账户中
-        if self.income and self.currencies.exists():
-            for currency in self.currencies.all():
-                self.income.currencies.add(currency)
+        if self.income and self.currency:
+            self.income.currencies.add(self.currency)
 
 
 class Template(BaseModel):
@@ -112,7 +109,7 @@ class TemplateItem(BaseModel):
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")
-    currencies = models.ManyToManyField(Currency, blank=True, help_text="货币")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
 
     class Meta:
         db_table = 'maps_template_item'
