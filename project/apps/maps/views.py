@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
+from project.apps.account.models import Currency
 from project.apps.common.permissions import TemplatePermission, IsOwnerOrAdminReadWriteOnly
 from project.apps.common.views import BaseMappingViewSet
 from project.apps.maps.serializers import (
