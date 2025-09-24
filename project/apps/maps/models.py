@@ -95,6 +95,7 @@ class TemplateItem(BaseModel):
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
 
     class Meta:
         db_table = 'maps_template_item'

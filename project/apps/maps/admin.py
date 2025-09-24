@@ -42,7 +42,7 @@ class TemplateAdmin(admin.ModelAdmin):
 
 @admin.register(TemplateItem)
 class TemplateItemAdmin(admin.ModelAdmin):
-    list_display = ('template', 'key', 'account', 'payee', 'payer', 'full')
+    list_display = ('template', 'key', 'account', 'payee', 'payer', 'full', 'currency')
     list_per_page = 500
-    list_filter = ['template']
+    list_filter = ['template', 'currency']
     search_fields = ['key', 'account', 'payee', 'payer', 'full']

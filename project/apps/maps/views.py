@@ -82,15 +82,9 @@ class TemplateViewSet(ModelViewSet):
         # 对于详情视图，预取items以提高性能
         context['queryset'] = Template.objects.prefetch_related('items')
         
-        # 只对支出模板设置货币查询集
-        template_id = self.kwargs.get('pk')
-        if template_id and self.request.user.is_authenticated:
-            try:
-                template = Template.objects.get(pk=template_id)
-                if template.type == 'expense':
-                    context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-            except Template.DoesNotExist:
-                pass
+        # 设置货币查询集为当前用户的货币
+        if self.request.user.is_authenticated:
+            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
         
         return context
 
@@ -203,6 +197,13 @@ class TemplateItemViewSet(ModelViewSet):
 
     def get_queryset(self):
         return TemplateItem.objects.filter(template__owner=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # 设置货币查询集为当前用户的货币
+        if self.request.user.is_authenticated:
+            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+        return context
 
     def perform_create(self, serializer):
         template_id = self.kwargs.get('template_pk')

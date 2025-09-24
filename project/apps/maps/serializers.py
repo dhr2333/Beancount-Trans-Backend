@@ -95,6 +95,7 @@ class IncomeSerializer(serializers.ModelSerializer):
 class TemplateItemSerializer(serializers.ModelSerializer):
     # 读取时显示详细信息
     account = AccountSummarySerializer(read_only=True)
+    currency = CurrencySummarySerializer(read_only=True)
     
     # 写入时使用ID
     account_id = serializers.PrimaryKeyRelatedField(
@@ -102,6 +103,18 @@ class TemplateItemSerializer(serializers.ModelSerializer):
         source='account',
         write_only=True
     )
+    currency_id = serializers.PrimaryKeyRelatedField(
+        queryset=Currency.objects.none(),  # 将在视图中动态设置
+        required=False,
+        source='currency',
+        write_only=True
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 从上下文中获取货币查询集
+        if 'currency_queryset' in self.context:
+            self.fields['currency_id'].queryset = self.context['currency_queryset']
     
     class Meta:
         model = TemplateItem
