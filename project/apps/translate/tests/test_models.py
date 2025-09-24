@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from project.apps.maps.models import Expense, Assets, Income
+from project.apps.account.models import Account, Currency
 
 class BaseModelTestMixin:
     """测试模型公共基类的共享逻辑"""
@@ -13,6 +14,39 @@ class BaseModelTestMixin:
             username='testuser',
             password='testpass123'
         )
+        
+        # 创建测试账户
+        cls.expense_account = Account.objects.create(
+            account="Expenses:Groceries",
+            owner=cls.user
+        )
+        cls.other_expense_account = Account.objects.create(
+            account="Expenses:Other",
+            owner=cls.user
+        )
+        cls.asset_account = Account.objects.create(
+            account="Assets:Digital:Alipay",
+            owner=cls.user
+        )
+        cls.other_asset_account = Account.objects.create(
+            account="Assets:Other:Test",
+            owner=cls.user
+        )
+        cls.income_account = Account.objects.create(
+            account="Income:Salary",
+            owner=cls.user
+        )
+        cls.other_income_account = Account.objects.create(
+            account="Income:Other",
+            owner=cls.user
+        )
+        
+        # 创建测试货币
+        cls.currency = Currency.objects.create(
+            code="CNY",
+            name="人民币",
+            owner=cls.user
+        )
 
 class ExpenseModelTest(BaseModelTestMixin, TestCase):
     def test_expense_creation(self):
@@ -20,27 +54,30 @@ class ExpenseModelTest(BaseModelTestMixin, TestCase):
         expense = Expense.objects.create(
             key="food",
             payee="超市",
-            expend="Expenses:Groceries",
+            expend=self.expense_account,
+            currency=self.currency,
             owner=self.user
         )
 
         # 基础字段验证
         self.assertEqual(expense.key, "food")
         self.assertEqual(expense.payee, "超市")
-        self.assertEqual(expense.expend, "Expenses:Groceries")
+        self.assertEqual(expense.expend.account, "Expenses:Groceries")
+        self.assertEqual(expense.currency.code, "CNY")
         self.assertEqual(expense.owner.username, "testuser")
 
         # 测试默认值
         expense_with_default = Expense.objects.create(
             key="default_test",
+            expend=self.other_expense_account,
             owner=self.user
         )
-        self.assertEqual(expense_with_default.expend, "Expenses:Other")
+        self.assertEqual(expense_with_default.expend.account, "Expenses:Other")
 
     def test_required_fields(self):
         """测试必填字段验证"""
         with self.assertRaises(ValidationError):
-            obj = Expense(key=None, owner=self.user)
+            obj = Expense(key=None, expend=self.expense_account, owner=self.user)
             obj.full_clean()  # 触发完整验证
 
     def test_meta_options(self):
@@ -51,12 +88,12 @@ class ExpenseModelTest(BaseModelTestMixin, TestCase):
 
     def test_string_representation(self):
         """测试字符串表示"""
-        obj = Expense.objects.create(key="test_str", owner=self.user)
+        obj = Expense.objects.create(key="test_str", expend=self.expense_account, owner=self.user)
         self.assertEqual(str(obj), "test_str")
 
     def test_owner_relationship(self):
         """验证用户关联关系"""
-        expense = Expense.objects.create(key="relation_test", owner=self.user)
+        expense = Expense.objects.create(key="relation_test", expend=self.expense_account, owner=self.user)
         self.assertIn(expense, self.user.expense.all())
 
 class AssetsModelTest(BaseModelTestMixin, TestCase):
@@ -65,21 +102,22 @@ class AssetsModelTest(BaseModelTestMixin, TestCase):
         asset = Assets.objects.create(
             key="alipay",
             full="支付宝",
-            assets="Assets:Digital:Alipay",
+            assets=self.asset_account,
             owner=self.user
         )
 
         self.assertEqual(asset.key, "alipay")
         self.assertEqual(asset.full, "支付宝")
-        self.assertEqual(asset.assets, "Assets:Digital:Alipay")
+        self.assertEqual(asset.assets.account, "Assets:Digital:Alipay")
 
         # 测试默认值
         asset_default = Assets.objects.create(
             key="default_asset",
             full="默认资产",
+            assets=self.other_asset_account,
             owner=self.user
         )
-        self.assertEqual(asset_default.assets, "Assets:Other:Test")
+        self.assertEqual(asset_default.assets.account, "Assets:Other:Test")
 
     def test_max_length_constraints(self):
         """测试字段最大长度"""
@@ -87,6 +125,7 @@ class AssetsModelTest(BaseModelTestMixin, TestCase):
             obj = Assets(
                 key="a"*17,  # 超过 max_length=16
                 full="test",
+                assets=self.asset_account,
                 owner=self.user
             )
             obj.full_clean()
@@ -97,19 +136,19 @@ class IncomeModelTest(BaseModelTestMixin, TestCase):
         income = Income.objects.create(
             key="salary",
             payer="公司",
-            income="Income:Salary",
+            income=self.income_account,
             owner=self.user
         )
 
         self.assertEqual(income.key, "salary")
         self.assertEqual(income.payer, "公司")
-        self.assertEqual(income.income, "Income:Salary")
+        self.assertEqual(income.income.account, "Income:Salary")
 
     def test_nullable_field(self):
         """测试可为空字段"""
         income = Income.objects.create(
             key="null_test",
-            income="Income:Other",
+            income=self.other_income_account,
             owner=self.user
         )
         self.assertIsNone(income.payer)
