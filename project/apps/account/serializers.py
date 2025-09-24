@@ -120,9 +120,11 @@ class AccountSerializer(serializers.ModelSerializer):
     def validate_currency_ids(self, value):
         """验证货币ID列表"""
         if value:
-            valid_currencies = Currency.objects.filter(id__in=value)
+            # 只允许使用当前用户的货币
+            user = self.context['request'].user
+            valid_currencies = Currency.objects.filter(id__in=value, owner=user)
             if len(valid_currencies) != len(value):
-                raise serializers.ValidationError("包含无效的货币ID")
+                raise serializers.ValidationError("包含无效的货币ID或无权访问的货币")
         return value
     
     def create(self, validated_data):

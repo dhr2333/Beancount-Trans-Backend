@@ -8,7 +8,6 @@ from project.models import BaseModel
 class Currency(BaseModel):
     code = models.CharField(
         max_length=24,
-        unique=True,
         validators=[
             RegexValidator(
                 regex=r'^[A-Z][A-Z0-9\'._-]{0,22}([A-Z0-9])?$',
@@ -19,10 +18,12 @@ class Currency(BaseModel):
         help_text="货币代码"
         )
     name = models.CharField(max_length=32, verbose_name="货币名称")
+    owner = models.ForeignKey(User, related_name='currencies', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
 
     class Meta:
         verbose_name = '货币'
         verbose_name_plural = verbose_name
+        unique_together = ['code', 'owner']
 
     def __str__(self):
         return self.code

@@ -23,20 +23,12 @@ class CurrencyViewSet(ModelViewSet):
     """货币管理视图集"""
     queryset = Currency.objects.all()
     serializer_class = CurrencySerializer
+    permission_classes = [IsOwnerOrAdminReadWriteOnly]
+    filter_backends = [CurrentUserFilterBackend]
     authentication_classes = [JWTAuthentication]
     search_fields = ['code', 'name']
     ordering_fields = ['code', 'name']
     ordering = ['code']
-    
-    def get_permissions(self):
-        """根据操作类型设置权限"""
-        if self.action in ['list', 'retrieve']:
-            # 查看操作允许所有认证用户
-            permission_classes = []
-        else:
-            # 增删改操作需要管理员权限
-            permission_classes = [IsOwnerOrAdminReadWriteOnly]
-        return [permission() for permission in permission_classes]
 
 
 class AccountViewSet(ModelViewSet):
