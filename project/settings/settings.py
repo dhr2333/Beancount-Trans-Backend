@@ -424,15 +424,7 @@ SPECTACULAR_SETTINGS = {
         {
             'Bearer': []
         }
-    ],
-    'TAGS': [
-        {'name': '认证', 'description': '用户认证相关接口'},
-        {'name': '文件管理', 'description': '文件上传和管理接口'},
-        {'name': '交易记录', 'description': '交易记录管理接口'},
-        {'name': '账户', 'description': '账户管理接口'},
-        {'name': 'FAVA', 'description': 'FAVA实例管理接口'},
-        {'name': '翻译', 'description': '交易记录翻译接口'},
-    ],
+    ]
 }
 
 
