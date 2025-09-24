@@ -35,13 +35,6 @@ class AssetsViewSet(BaseMappingViewSet):
     serializer_class = AssetsSerializer
     search_fields = ['full']
     ordering_fields = ['id', 'full']
-    
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        return context
 
 
 class IncomeViewSet(BaseMappingViewSet):
@@ -50,13 +43,6 @@ class IncomeViewSet(BaseMappingViewSet):
     serializer_class = IncomeSerializer
     search_fields = ['key']
     ordering_fields = ['id', 'key']
-    
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        return context
 
 
 class TemplateViewSet(ModelViewSet):
@@ -96,9 +82,15 @@ class TemplateViewSet(ModelViewSet):
         # 对于详情视图，预取items以提高性能
         context['queryset'] = Template.objects.prefetch_related('items')
         
-        # 设置货币查询集为当前用户的货币
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+        # 只对支出模板设置货币查询集
+        template_id = self.kwargs.get('pk')
+        if template_id and self.request.user.is_authenticated:
+            try:
+                template = Template.objects.get(pk=template_id)
+                if template.type == 'expense':
+                    context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+            except Template.DoesNotExist:
+                pass
         
         return context
 
@@ -181,12 +173,8 @@ class TemplateViewSet(ModelViewSet):
                 owner=self.request.user,
                 key=item.key,
                 payer=item.payer,
-                income=item.account,
-                currency=item.currency
+                income=item.account
             )
-            # 手动同步货币到账户
-            if item.currency:
-                income.income.currencies.add(item.currency)
 
     def _apply_assets_template(self, template, action_type, conflict_resolution):
         """应用资产模板"""
@@ -206,12 +194,8 @@ class TemplateViewSet(ModelViewSet):
                 owner=self.request.user,
                 key=item.key,
                 full=item.full,
-                assets=item.account,
-                currency=item.currency
+                assets=item.account
             )
-            # 手动同步货币到账户
-            if item.currency:
-                assets.assets.currencies.add(item.currency)
 
 class TemplateItemViewSet(ModelViewSet):
     serializer_class = TemplateItemSerializer
@@ -219,13 +203,6 @@ class TemplateItemViewSet(ModelViewSet):
 
     def get_queryset(self):
         return TemplateItem.objects.filter(template__owner=self.request.user)
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        return context
 
     def perform_create(self, serializer):
         template_id = self.kwargs.get('template_pk')
