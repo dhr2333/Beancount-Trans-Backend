@@ -20,7 +20,7 @@ class AccountTreeManager:
         Returns:
             树形结构的账户列表
         """
-        queryset = Account.objects.filter(owner=user, enable=True)
+        queryset = Account.objects.filter(owner=user)
         
         if account_type:
             queryset = queryset.filter(account__startswith=account_type)
@@ -128,7 +128,7 @@ class AccountTreeManager:
         descendants = []
         
         def collect_descendants(acc):
-            children = Account.objects.filter(parent=acc, enable=True)
+            children = Account.objects.filter(parent=acc)
             for child in children:
                 descendants.append(child)
                 collect_descendants(child)

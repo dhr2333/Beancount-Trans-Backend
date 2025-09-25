@@ -32,7 +32,7 @@ class AccountTreeSerializer(serializers.ModelSerializer):
     
     def get_children(self, obj):
         """递归获取子账户"""
-        children = obj.children.filter(enable=True).order_by('account')
+        children = obj.children.all().order_by('account')
         if children.exists():
             return AccountTreeSerializer(children, many=True, context=self.context).data
         return []
