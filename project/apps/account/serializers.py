@@ -51,10 +51,10 @@ class AccountTreeSerializer(serializers.ModelSerializer):
             if not request or not request.user.is_authenticated:
                 return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
             
-            # 只统计当前用户的映射记录
-            expense_count = Expense.objects.filter(expend=obj, owner=request.user, enable=True).count()
-            assets_count = Assets.objects.filter(assets=obj, owner=request.user, enable=True).count()
-            income_count = Income.objects.filter(income=obj, owner=request.user, enable=True).count()
+            # 统计当前用户的所有映射记录（包括已关闭的）
+            expense_count = Expense.objects.filter(expend=obj, owner=request.user).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=request.user).count()
+            income_count = Income.objects.filter(income=obj, owner=request.user).count()
             
             return {
                 'expense': expense_count,
@@ -103,10 +103,10 @@ class AccountSerializer(serializers.ModelSerializer):
             if not request or not request.user.is_authenticated:
                 return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
             
-            # 只统计当前用户的映射记录
-            expense_count = Expense.objects.filter(expend=obj, owner=request.user, enable=True).count()
-            assets_count = Assets.objects.filter(assets=obj, owner=request.user, enable=True).count()
-            income_count = Income.objects.filter(income=obj, owner=request.user, enable=True).count()
+            # 统计当前用户的所有映射记录（包括已关闭的）
+            expense_count = Expense.objects.filter(expend=obj, owner=request.user).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=request.user).count()
+            income_count = Income.objects.filter(income=obj, owner=request.user).count()
             
             return {
                 'expense': expense_count,

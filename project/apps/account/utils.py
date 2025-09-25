@@ -68,9 +68,9 @@ class AccountTreeManager:
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             
-            expense_count = Expense.objects.filter(expend=account, enable=True).count()
-            assets_count = Assets.objects.filter(assets=account, enable=True).count()
-            income_count = Income.objects.filter(income=account, enable=True).count()
+            expense_count = Expense.objects.filter(expend=account).count()
+            assets_count = Assets.objects.filter(assets=account).count()
+            income_count = Income.objects.filter(income=account).count()
             
             return {
                 'expense': expense_count,

@@ -111,17 +111,17 @@ class AccountViewSet(ModelViewSet):
             expense_mappings = Expense.objects.filter(
                 expend=account, 
                 owner=request.user, 
-                enable=True
+                # enable=True
             )
             assets_mappings = Assets.objects.filter(
                 assets=account, 
                 owner=request.user, 
-                enable=True
+                # enable=True
             )
             income_mappings = Income.objects.filter(
                 income=account, 
                 owner=request.user, 
-                enable=True
+                # enable=True
             )
 
             result = {
@@ -132,7 +132,8 @@ class AccountViewSet(ModelViewSet):
                         'id': m.id, 
                         'key': m.key, 
                         'payee': m.payee,
-                        'currency': m.currency.code if m.currency else None
+                        'currency': m.currency.code if m.currency else None,
+                        'enable': m.enable
                     }
                     for m in expense_mappings
                 ],
@@ -140,7 +141,8 @@ class AccountViewSet(ModelViewSet):
                     {
                         'id': m.id, 
                         'key': m.key, 
-                        'full': m.full
+                        'full': m.full,
+                        'enable': m.enable
                     }
                     for m in assets_mappings
                 ],
@@ -148,7 +150,8 @@ class AccountViewSet(ModelViewSet):
                     {
                         'id': m.id, 
                         'key': m.key, 
-                        'payer': m.payer
+                        'payer': m.payer,
+                        'enable': m.enable
                     }
                     for m in income_mappings
                 ],
