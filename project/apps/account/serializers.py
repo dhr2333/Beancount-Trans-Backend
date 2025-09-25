@@ -46,9 +46,15 @@ class AccountTreeSerializer(serializers.ModelSerializer):
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             
-            expense_count = Expense.objects.filter(expend=obj, enable=True).count()
-            assets_count = Assets.objects.filter(assets=obj, enable=True).count()
-            income_count = Income.objects.filter(income=obj, enable=True).count()
+            # 获取当前用户
+            request = self.context.get('request')
+            if not request or not request.user.is_authenticated:
+                return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 只统计当前用户的映射记录
+            expense_count = Expense.objects.filter(expend=obj, owner=request.user, enable=True).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=request.user, enable=True).count()
+            income_count = Income.objects.filter(income=obj, owner=request.user, enable=True).count()
             
             return {
                 'expense': expense_count,
@@ -92,9 +98,15 @@ class AccountSerializer(serializers.ModelSerializer):
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             
-            expense_count = Expense.objects.filter(expend=obj, enable=True).count()
-            assets_count = Assets.objects.filter(assets=obj, enable=True).count()
-            income_count = Income.objects.filter(income=obj, enable=True).count()
+            # 获取当前用户
+            request = self.context.get('request')
+            if not request or not request.user.is_authenticated:
+                return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 只统计当前用户的映射记录
+            expense_count = Expense.objects.filter(expend=obj, owner=request.user, enable=True).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=request.user, enable=True).count()
+            income_count = Income.objects.filter(income=obj, owner=request.user, enable=True).count()
             
             return {
                 'expense': expense_count,

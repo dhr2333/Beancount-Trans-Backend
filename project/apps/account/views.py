@@ -92,7 +92,6 @@ class AccountViewSet(ModelViewSet):
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """获取账户树形结构"""
-        # 获取根账户（没有父账户的账户）
         root_accounts = self.get_queryset().filter(parent__isnull=True, enable=True)
         
         serializer = self.get_serializer(root_accounts, many=True)
