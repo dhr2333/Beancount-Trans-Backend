@@ -1,17 +1,17 @@
 from rest_framework import status
 from rest_framework.decorators import action
-# from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
-# from django.db import transaction
+from django.db import transaction
 # from django.shortcuts import get_object_or_404
 from django.apps import apps
 
 from project.apps.account.models import Account, Currency
 from project.apps.account.serializers import (
     AccountSerializer, AccountTreeSerializer, CurrencySerializer,
-    AccountBatchUpdateSerializer, AccountMigrationSerializer
+    AccountBatchUpdateSerializer, AccountMigrationSerializer, AccountDeleteSerializer
 )
 from project.apps.account.filters import AccountTypeFilter
 from django_filters.rest_framework import DjangoFilterBackend
@@ -162,128 +162,64 @@ class AccountViewSet(ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    # @action(detail=True, methods=['post'])
-    # def close(self, request, pk=None):
-    #     """关闭账户"""
-    #     account = self.get_object()
-    #     migrate_to_id = request.data.get('migrate_to')
+    def destroy(self, request, pk=None):
+        """删除账户（需要提供迁移目标账户）"""
+        account = self.get_object()
         
-    #     migrate_to = None
-    #     if migrate_to_id:
-    #         try:
-    #             migrate_to = Account.objects.get(id=migrate_to_id, owner=request.user)
-    #         except Account.DoesNotExist:
-    #             return Response(
-    #                 {'error': '目标账户不存在'},
-    #                 status=status.HTTP_400_BAD_REQUEST
-    #             )
+        # 验证请求数据
+        serializer = AccountDeleteSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-    #     try:
-    #         result = account.close(migrate_to=migrate_to)
-    #         return Response(result)
-    #     except Exception as e:
-    #         return Response(
-    #             {'error': f'关闭账户失败: {str(e)}'},
-    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    #         )
+        migrate_to_id = serializer.validated_data['migrate_to']
+        
+        try:
+            migrate_to = Account.objects.get(id=migrate_to_id, owner=request.user)
+        except Account.DoesNotExist:
+            return Response(
+                {'error': '目标账户不存在或无权访问'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            with transaction.atomic():
+                result = account.delete_with_migration(migrate_to=migrate_to)
+                return Response({
+                    'message': '账户删除成功',
+                    'result': result
+                })
+        except ValidationError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'删除账户失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-    # @action(detail=False, methods=['post'])
-    # def migrate(self, request):
-    #     """账户迁移"""
-    #     serializer = self.get_serializer(data=request.data)
-    #     if not serializer.is_valid():
-    #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=True, methods=['get'])
+    def migration_candidates(self, request, pk=None):
+        """获取可用的迁移目标账户列表"""
+        account = self.get_object()
         
-    #     data = serializer.validated_data
-    #     source_account_id = data['source_account_id']
-    #     target_account_id = data['target_account_id']
-    #     migrate_mappings = data['migrate_mappings']
-    #     close_source = data['close_source']
+        # 获取启用的账户（所有类型账户）作为迁移候选
+        account_type = account.account.split(':')[0]
+        candidates = Account.objects.filter(
+            owner=request.user,
+            enable=True
+        ).exclude(
+            id=account.id,
+            account__startswith=account_type
+        ).order_by('account')
         
-    #     try:
-    #         with transaction.atomic():
-    #             source_account = Account.objects.get(id=source_account_id, owner=request.user)
-    #             target_account = Account.objects.get(id=target_account_id, owner=request.user)
-                
-    #             if migrate_mappings:
-    #                 # 迁移映射
-    #                 try:
-    #                     Expense = apps.get_model('maps', 'Expense')
-    #                     Assets = apps.get_model('maps', 'Assets')
-    #                     Income = apps.get_model('maps', 'Income')
-                        
-    #                     expense_count = Expense.objects.filter(expend=source_account).update(expend=target_account)
-    #                     assets_count = Assets.objects.filter(assets=source_account).update(assets=target_account)
-    #                     income_count = Income.objects.filter(income=source_account).update(income=target_account)
-                        
-    #                     mappings_migrated = expense_count + assets_count + income_count
-    #                 except Exception as e:
-    #                     return Response(
-    #                         {'error': f'迁移映射失败: {str(e)}'},
-    #                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    #                     )
-    #             else:
-    #                 mappings_migrated = 0
-                
-    #             if close_source:
-    #                 source_account.close(migrate_to=target_account)
-                
-    #             return Response({
-    #                 'message': '账户迁移成功',
-    #                 'mappings_migrated': mappings_migrated,
-    #                 'source_closed': close_source
-    #             })
-        
-    #     except Account.DoesNotExist:
-    #         return Response(
-    #             {'error': '账户不存在'},
-    #             status=status.HTTP_404_NOT_FOUND
-    #         )
-    #     except Exception as e:
-    #         return Response(
-    #             {'error': f'迁移失败: {str(e)}'},
-    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-    #         )
-    
-    # @action(detail=False, methods=['get'])
-    # def statistics(self, request):
-    #     """获取账户统计信息"""
-    #     queryset = self.get_queryset()
-        
-    #     # 按账户类型统计
-    #     type_stats = {}
-    #     for account_type in ['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']:
-    #         count = queryset.filter(account__startswith=account_type).count()
-    #         enabled_count = queryset.filter(account__startswith=account_type, enable=True).count()
-    #         type_stats[account_type] = {
-    #             'total': count,
-    #             'enabled': enabled_count,
-    #             'disabled': count - enabled_count
-    #         }
-        
-    #     # 总体统计
-    #     total_accounts = queryset.count()
-    #     enabled_accounts = queryset.filter(enable=True).count()
-    #     disabled_accounts = total_accounts - enabled_accounts
-        
-    #     # 有映射的账户数量
-    #     try:
-    #         Expense = apps.get_model('maps', 'Expense')
-    #         Assets = apps.get_model('maps', 'Assets')
-    #         Income = apps.get_model('maps', 'Income')
-            
-    #         expense_accounts = set(Expense.objects.filter(owner=request.user, enable=True).values_list('expend_id', flat=True))
-    #         assets_accounts = set(Assets.objects.filter(owner=request.user, enable=True).values_list('assets_id', flat=True))
-    #         income_accounts = set(Income.objects.filter(owner=request.user, enable=True).values_list('income_id', flat=True))
-            
-    #         mapped_accounts = len(expense_accounts | assets_accounts | income_accounts)
-    #     except:
-    #         mapped_accounts = 0
-        
-    #     return Response({
-    #         'total_accounts': total_accounts,
-    #         'enabled_accounts': enabled_accounts,
-    #         'disabled_accounts': disabled_accounts,
-    #         'mapped_accounts': mapped_accounts,
-    #         'type_statistics': type_stats
-    #     })
+        serializer = AccountSerializer(candidates, many=True, context={'request': request})
+        return Response({
+            'candidates': serializer.data,
+            'current_account': {
+                'id': account.id,
+                'account': account.account,
+                'account_type': account.get_account_type()
+            }
+        })

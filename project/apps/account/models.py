@@ -1,7 +1,7 @@
 from django.core.validators import RegexValidator
 from django.db import models
 from django.contrib.auth.models import User
-from rest_framework.exceptions import ValidationError
+from django.core.exceptions import ValidationError
 from project.models import BaseModel
 
 
@@ -51,7 +51,16 @@ class Account(BaseModel):
         
 
     def save(self, *args, **kwargs):
-        """保存账户时自动创建父账户"""
+        """保存账户时自动创建父账户，并同步映射状态"""
+        # 检查enable字段是否发生变化
+        enable_changed = False
+        if self.pk:
+            try:
+                old_instance = Account.objects.get(pk=self.pk)
+                enable_changed = old_instance.enable != self.enable
+            except Account.DoesNotExist:
+                pass
+        
         if not self.parent and ':' in self.account:
             parent_account_path = ':'.join(self.account.split(':')[:-1])
             try:
@@ -62,6 +71,10 @@ class Account(BaseModel):
                 self.parent = self._create_parent_account(parent_account_path)
         
         super().save(*args, **kwargs)
+        
+        # 如果enable状态发生变化，同步更新相关映射
+        if enable_changed:
+            self._sync_mappings_enable_status()
     
     def _create_parent_account(self, parent_account_path):
         """递归创建父账户"""
@@ -92,6 +105,28 @@ class Account(BaseModel):
                 )
             
             return parent
+
+    def _sync_mappings_enable_status(self):
+        """同步映射的启用状态与账户状态"""
+        # 避免循环导入，使用字符串引用模型
+        from django.apps import apps
+        
+        try:
+            # 获取映射模型
+            Expense = apps.get_model('maps', 'Expense')
+            Assets = apps.get_model('maps', 'Assets')
+            Income = apps.get_model('maps', 'Income')
+            
+            # 同步所有相关映射的启用状态
+            Expense.objects.filter(expend=self).update(enable=self.enable)
+            Assets.objects.filter(assets=self).update(enable=self.enable)
+            Income.objects.filter(income=self).update(enable=self.enable)
+            
+        except Exception as e:
+            # 记录错误但不阻止账户保存
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"同步映射状态失败: {str(e)}")
 
     def has_children(self):
         """检查是否存在子账户"""
@@ -131,11 +166,34 @@ class Account(BaseModel):
             'has_children': self.has_children(),
             'mappings_migrated': False,
             'mappings_disabled': False,
-            'migrated_to': None
+            'migrated_to': None,
+            'mapping_counts': {
+                'expense': 0,
+                'assets': 0,
+                'income': 0,
+                'total': 0
+            }
+        }
+        
+        # 统计当前映射数量
+        expense_count = Expense.objects.filter(expend=self).count()
+        assets_count = Assets.objects.filter(assets=self).count()
+        income_count = Income.objects.filter(income=self).count()
+        total_mappings = expense_count + assets_count + income_count
+        
+        result['mapping_counts'] = {
+            'expense': expense_count,
+            'assets': assets_count,
+            'income': income_count,
+            'total': total_mappings
         }
         
         # 处理映射迁移
         if migrate_to:
+            # 验证目标账户
+            if not migrate_to.enable:
+                raise ValidationError("目标账户已禁用，无法进行迁移")
+            
             # 迁移所有类型的映射到目标账户
             Expense.objects.filter(expend=self).update(expend=migrate_to)
             Assets.objects.filter(assets=self).update(assets=migrate_to)
@@ -154,5 +212,78 @@ class Account(BaseModel):
         # 关闭当前账户（不关闭子账户）
         self.enable = False
         self.save()
+        
+        return result
+
+    def delete_with_migration(self, migrate_to=None):
+        """
+        删除账户，并处理所有相关的映射
+        
+        Args:
+            migrate_to: 迁移目标账户，必须提供，用于迁移相关映射
+        Returns:
+            dict: 包含操作结果的字典
+        """
+        if not migrate_to:
+            raise ValidationError("删除账户时必须提供迁移目标账户")
+        
+        # 验证目标账户
+        if not migrate_to.enable:
+            raise ValidationError("目标账户已禁用，无法进行迁移")
+        
+        if migrate_to == self:
+            raise ValidationError("不能将账户迁移到自身")
+        
+        # 检查是否有子账户
+        if self.has_children():
+            raise ValidationError("存在子账户，无法删除。请先处理子账户")
+        
+        # 避免循环导入，使用字符串引用模型
+        from django.apps import apps
+        
+        # 获取映射模型
+        Expense = apps.get_model('maps', 'Expense')
+        Assets = apps.get_model('maps', 'Assets')
+        Income = apps.get_model('maps', 'Income')
+        
+        result = {
+            'account_deleted': True,
+            'mappings_migrated': True,
+            'migrated_to': migrate_to.id,
+            'mapping_counts': {
+                'expense': 0,
+                'assets': 0,
+                'income': 0,
+                'total': 0
+            }
+        }
+        
+        # 统计并迁移映射
+        expense_count = Expense.objects.filter(expend=self).count()
+        assets_count = Assets.objects.filter(assets=self).count()
+        income_count = Income.objects.filter(income=self).count()
+        total_mappings = expense_count + assets_count + income_count
+        
+        result['mapping_counts'] = {
+            'expense': expense_count,
+            'assets': assets_count,
+            'income': income_count,
+            'total': total_mappings
+        }
+        
+        # 迁移所有类型的映射到目标账户
+        Expense.objects.filter(expend=self).update(expend=migrate_to)
+        Assets.objects.filter(assets=self).update(assets=migrate_to)
+        Income.objects.filter(income=self).update(income=migrate_to)
+        
+        # 删除账户
+        account_id = self.id
+        account_name = self.account
+        self.delete()
+        
+        result['deleted_account'] = {
+            'id': account_id,
+            'name': account_name
+        }
         
         return result

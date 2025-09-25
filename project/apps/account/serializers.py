@@ -239,3 +239,20 @@ class AccountMigrationSerializer(serializers.Serializer):
             raise serializers.ValidationError("源账户和目标账户不能相同")
         
         return data
+
+
+class AccountDeleteSerializer(serializers.Serializer):
+    """账户删除序列化器"""
+    migrate_to = serializers.IntegerField(
+        help_text="迁移目标账户ID"
+    )
+    
+    def validate_migrate_to(self, value):
+        """验证迁移目标账户"""
+        try:
+            account = Account.objects.get(id=value)
+            if not account.enable:
+                raise serializers.ValidationError("目标账户已禁用")
+            return value
+        except Account.DoesNotExist:
+            raise serializers.ValidationError("目标账户不存在")
