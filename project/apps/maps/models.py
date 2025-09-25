@@ -36,7 +36,6 @@ class Assets(BaseModel):
     owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
-
     class Meta:
         db_table = 'maps_assets'
         verbose_name = '资产映射'
@@ -44,7 +43,6 @@ class Assets(BaseModel):
 
     def __str__(self):
         return self.full
-    
 
 
 class Income(BaseModel):
@@ -61,7 +59,6 @@ class Income(BaseModel):
 
     def __str__(self):
         return self.key
-    
 
 
 class Template(BaseModel):

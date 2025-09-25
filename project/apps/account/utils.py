@@ -2,7 +2,7 @@ from django.db import transaction
 from django.contrib.auth.models import User
 from django.apps import apps
 from typing import List, Dict, Optional, Tuple
-from .models import Account, Currency
+from project.apps.account.models import Account
 
 
 class AccountTreeManager:

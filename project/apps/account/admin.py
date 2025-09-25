@@ -1,31 +1,66 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from django.urls import reverse
-from django.utils.safestring import mark_safe
+# from django.urls import reverse
+# from django.utils.safestring import mark_safe
 from django.db import models
-from django.forms import TextInput, Textarea
+from django.forms import TextInput
 
-from .models import Account, Currency
+from project.apps.account.models import Account, Currency
 
 
 @admin.register(Currency)
 class CurrencyAdmin(admin.ModelAdmin):
     """货币管理"""
-    list_display = ['code', 'name', 'created', 'modified']
-    list_filter = ['created', 'modified']
-    search_fields = ['code', 'name']
+    list_display = ['code', 'name', 'owner', 'created', 'modified']
+    list_filter = ['owner', 'created', 'modified']
+    search_fields = ['code', 'name', 'owner__username']
     ordering = ['code']
     readonly_fields = ['created', 'modified']
     
     fieldsets = (
         ('基本信息', {
-            'fields': ('code', 'name')
+            'fields': ('code', 'name', 'owner')
         }),
         ('时间信息', {
             'fields': ('created', 'modified'),
             'classes': ('collapse',)
         }),
     )
+    
+    def get_queryset(self, request):
+        """根据用户权限过滤数据"""
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(owner=request.user)
+    
+    def save_model(self, request, obj, form, change):
+        """保存模型时设置属主"""
+        if not change:  # 新建时
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
+    
+    def get_readonly_fields(self, request, obj=None):
+        """根据用户权限设置只读字段"""
+        readonly_fields = list(self.readonly_fields)
+        
+        # 非管理员不能修改owner字段
+        if not request.user.is_superuser:
+            readonly_fields.append('owner')
+        
+        return readonly_fields
+    
+    def has_change_permission(self, request, obj=None):
+        """检查修改权限"""
+        if obj and not request.user.is_superuser:
+            return obj.owner == request.user
+        return super().has_change_permission(request, obj)
+    
+    def has_delete_permission(self, request, obj=None):
+        """检查删除权限"""
+        if obj and not request.user.is_superuser:
+            return obj.owner == request.user
+        return super().has_delete_permission(request, obj)
 
 
 class AccountInline(admin.TabularInline):

@@ -1,8 +1,8 @@
 import django_filters
 from django.db import models
-from django.contrib.auth.models import User
+# from django.contrib.auth.models import User
 from rest_framework.filters import BaseFilterBackend
-from .models import Account, Currency
+from project.apps.account.models import Account, Currency
 
 
 class CurrentUserFilterBackend(BaseFilterBackend):

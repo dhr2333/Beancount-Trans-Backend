@@ -1,15 +1,16 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
-from .models import Account, Currency
+# from django.contrib.auth.models import User
+from project.apps.account.models import Account, Currency
 
 
 class CurrencySerializer(serializers.ModelSerializer):
     """货币序列化器"""
+    owner = serializers.ReadOnlyField(source='owner.username')
     
     class Meta:
         model = Currency
-        fields = ['id', 'code', 'name']
-        read_only_fields = ['id']
+        fields = ['id', 'code', 'name', 'owner', 'created', 'modified']
+        read_only_fields = ['id', 'owner', 'created', 'modified']
 
 
 class AccountTreeSerializer(serializers.ModelSerializer):
