@@ -13,12 +13,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-# from account.views import AccountViewSet
 from django.contrib import admin
 from django.urls import path, include
 from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet, TemplateViewSet,TemplateItemViewSet
 from project.apps.translate.views.views import UserConfigAPI
 from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
+from project.apps.account.views import AccountViewSet, CurrencyViewSet
 from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
@@ -41,10 +41,11 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 # )
 
 router = routers.DefaultRouter()
+router.register(r'account', AccountViewSet, basename='account')
+router.register(r'currencies', CurrencyViewSet, basename='currency')
 router.register(r'expense', ExpenseViewSet, basename="expense")
-router.register(r'aassets', AssetsViewSet, basename="assets")
+router.register(r'assets', AssetsViewSet, basename="assets")
 router.register(r'income', IncomeViewSet, basename="income")
-# router.register(r'account', AccountViewSet, basename="account")
 router.register(r'directories', DirectoryViewSet, basename='directory')
 router.register(r'files', FileViewSet, basename='files')
 router.register(r'templates', TemplateViewSet, basename='template')

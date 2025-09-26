@@ -4,9 +4,9 @@ from project.apps.maps.models import Expense, Assets, Income,Template,TemplateIt
 
 @admin.register(Expense)
 class ExpenseMapAdmin(admin.ModelAdmin):
-    list_display = ('key', 'payee', 'expend', 'owner','currency')
+    list_display = ('key', 'payee', 'expend', 'owner', 'currency')
     list_per_page = 500
-    list_filter = ['owner', 'payee']
+    list_filter = ['owner', 'payee', 'currency']
     search_fields = ['key']
 
     def get_form(self, request, obj=None, **kwargs):  # 重写get_form方法，设置payee字段非必填
@@ -44,5 +44,5 @@ class TemplateAdmin(admin.ModelAdmin):
 class TemplateItemAdmin(admin.ModelAdmin):
     list_display = ('template', 'key', 'account', 'payee', 'payer', 'full', 'currency')
     list_per_page = 500
-    list_filter = ['template']
-    search_fields = ['key', 'account', 'payee', 'payer', 'full', 'currency']
+    list_filter = ['template', 'currency']
+    search_fields = ['key', 'account', 'payee', 'payer', 'full']

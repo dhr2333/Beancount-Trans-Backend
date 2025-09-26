@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.utils.token import get_token_user_id
 from project.utils.tools import get_user_config
-from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView

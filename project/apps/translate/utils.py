@@ -34,7 +34,7 @@ transaction_status = {
     "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
                   "充值完成", "充值成功", "已收钱"],
     "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "还款失败", "已关闭", "解冻成功",
-               "信用服务使用成功", "等待付款", "放款成功", "芝麻免押下单成功"]
+               "信用服务使用成功", "等待付款", "放款成功", "芝麻免押下单成功", "缴费中", "等待确认收货"]
 }
 
 
@@ -57,8 +57,8 @@ def get_default_assets(ownerid):
 
     for asset_name, var_name in default_assets.items():
         asset = Assets.objects.filter(full=asset_name, enable=True, owner_id=ownerid).first()
-        globals()[var_name] = asset.assets if asset else ASSETS_OTHER
-        actual_assets[var_name] = asset.assets if asset else ASSETS_OTHER
+        globals()[var_name] = asset.assets.account if asset else ASSETS_OTHER
+        actual_assets[var_name] = asset.assets.account if asset else ASSETS_OTHER
     return actual_assets
 
 

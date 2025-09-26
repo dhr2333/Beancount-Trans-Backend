@@ -32,17 +32,6 @@ python manage.py generate_api_docs --output docs/api_schema.json
 python manage.py generate_api_docs --output docs/api_schema.yaml --format yaml
 ```
 
-## API 分类
-
-文档按功能模块分为以下几个标签：
-
-- **认证**: 用户认证相关接口
-- **文件管理**: 文件上传和管理接口
-- **交易记录**: 交易记录管理接口
-- **账户**: 账户管理接口
-- **FAVA**: FAVA实例管理接口
-- **翻译**: 交易记录翻译接口
-
 ## 认证方式
 
 API 使用 JWT (JSON Web Token) 进行认证：

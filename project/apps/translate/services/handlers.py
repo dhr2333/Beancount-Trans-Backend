@@ -179,7 +179,7 @@ class ExpenseHandler:
         for matching_key in matching_keys:
             expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
             if expense_instance:
-                expend_priority = expense_instance.expend.count(":") * 100
+                expend_priority = expense_instance.expend.account.count(":") * 100
                 payee_priority = 50 if expense_instance.payee else 0
                 current_order = expend_priority + payee_priority
                 conflict_candidates.append((current_order, expense_instance))
@@ -208,16 +208,16 @@ class ExpenseHandler:
         if self.selected_expense_instance:
             if self.selected_key:
                 self.selected_expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=self.selected_key).first()
-                expend = self.selected_expense_instance.expend
+                expend = self.selected_expense_instance.expend.account
                 if expend == "Expenses:Food":
                     expend += self._determine_food_category(self.time)
-                self.currency = self.selected_expense_instance.currency or "CNY"
+                self.currency = self.selected_expense_instance.currency.code if self.selected_expense_instance.currency else "CNY"
                 return expend, self.selected_key, self.expense_candidates_with_score
             elif self.selected_key is None:
-                expend = self.selected_expense_instance.expend
+                expend = self.selected_expense_instance.expend.account
                 if expend == "Expenses:Food":
                     expend += self._determine_food_category(self.time)
-                self.currency = self.selected_expense_instance.currency or "CNY"
+                self.currency = self.selected_expense_instance.currency.code if self.selected_expense_instance.currency else "CNY"
                 return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
@@ -230,12 +230,12 @@ class ExpenseHandler:
         for matching_key in matching_keys:
             income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
             if income_instance:
-                income_priority = income_instance.income.count(":") * 100
+                income_priority = income_instance.income.account.count(":") * 100
                 if max_order is None or income_priority > max_order:
                     max_order = income_priority
                     self.selected_income_instance = income_instance
 
-        return self.selected_income_instance.income if self.selected_income_instance else self.income
+        return self.selected_income_instance.income.account if self.selected_income_instance else self.income
 
     def get_expense(self, data: Dict, ownerid: int) -> str:
         """主处理方法"""
@@ -294,7 +294,7 @@ class PayeeHandler:
         for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
             expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
             if expense_instance:  # 通过Expenses及Payee计算优先级
-                expend_instance_priority = expense_instance.expend.count(":") * 100
+                expend_instance_priority = expense_instance.expend.account.count(":") * 100
                 payee_instance_priority = 50 if expense_instance.payee else 0
                 matching_max_order = expend_instance_priority + payee_instance_priority
 

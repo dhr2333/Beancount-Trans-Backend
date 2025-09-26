@@ -1,31 +1,17 @@
-from django.core.validators import RegexValidator
 from django.db import models
 from django.contrib.auth.models import User
 
-
+from project.apps.account.models import Account, Currency
 from project.models import BaseModel
-
-
-# Create your models here.
 
 
 class Expense(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    payee = models.CharField(max_length=32, null=True, help_text="收款方")
-    expend = models.CharField(max_length=64, default="Expenses:Other", null=False, help_text="支出账户")
+    payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
+    expend = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="支出账户")
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
-    currency = models.CharField(
-        max_length=24,
-        null=True,
-        validators=[
-            RegexValidator(
-                regex=r'^[A-Z][A-Z0-9\'._-]{0,22}([A-Z0-9])?$',
-                message='货币必须以大写字母开头，以大写字母/数字结尾，并且只能包含 [A-Z0-9\'._-]'
-            )
-        ],
-      help_text="货币"
-    )
-    enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
+    enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
     class Meta:
         db_table = 'maps_expense'
@@ -35,23 +21,20 @@ class Expense(BaseModel):
     def __str__(self):
         return self.key
 
-    def clean(self):
-        """自动转换格式：确保首字母大写，其他字母转为大写，符号和数字不变"""
-        if self.currency:
-            # 首字母大写
-            first_char = self.currency[0].upper() if self.currency else ''
-            remaining = ''.join([c.upper() if c.isalpha() else c for c in self.currency[1:]])
-            self.currency = first_char + remaining
-        super().clean()
+    def save(self, *args, **kwargs):
+        """保存时同步货币到关联账户"""
+        super().save(*args, **kwargs)
+        # 将映射的货币添加到关联的账户中
+        if self.expend and self.currency:
+            self.expend.currencies.add(self.currency)
 
 
 class Assets(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     full = models.CharField(max_length=16, null=False, help_text="账户名称")
-    assets = models.CharField(max_length=64, default="Assets:Other:Test", null=False, help_text="资产账户")
+    assets = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="资产账户")
     owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
-    enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
-
+    enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
     class Meta:
         db_table = 'maps_assets'
@@ -64,10 +47,10 @@ class Assets(BaseModel):
 
 class Income(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    payer = models.CharField(max_length=8, null=True, help_text="付款方")
-    income = models.CharField(max_length=64, default="Income:Other", null=False, help_text="收入账户")
+    payer = models.CharField(max_length=8, null=True, blank=True, help_text="付款方")
+    income = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="收入账户")
     owner = models.ForeignKey(User, related_name='income', on_delete=models.CASCADE)
-    enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
+    enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
     class Meta:
         db_table = 'maps_income'
@@ -105,22 +88,11 @@ class Template(BaseModel):
 class TemplateItem(BaseModel):
     template = models.ForeignKey(Template, related_name='items', on_delete=models.CASCADE)
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    account = models.CharField(max_length=64, null=False, help_text="映射账户")
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=False, help_text="映射账户")
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")
-    currency = models.CharField(
-        max_length=24,
-        null=True,
-        blank=True,
-        validators=[
-            RegexValidator(
-                regex=r'^[A-Z][A-Z0-9\'._-]{0,22}([A-Z0-9])?$',
-                message='货币必须以大写字母开头，以大写字母/数字结尾，并且只能包含 [A-Z0-9\'._-]'
-            )
-        ],
-        help_text="货币"
-    )
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
 
     class Meta:
         db_table = 'maps_template_item'

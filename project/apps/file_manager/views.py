@@ -11,8 +11,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from project.apps.file_manager.models import Directory, File
 from project.apps.translate.models import ParseFile
 from project.apps.file_manager.serializers import DirectorySerializer, FileSerializer
-from project.apps.maps.filters import CurrentUserFilterBackend
-from project.apps.maps.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.common.filters import CurrentUserFilterBackend
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
 from project.utils.storage_factory import get_storage_client
 from project.utils.file import BeanFileManager
