@@ -220,20 +220,10 @@ class Account(BaseModel):
         删除账户，并处理所有相关的映射
         
         Args:
-            migrate_to: 迁移目标账户，必须提供，用于迁移相关映射
+            migrate_to: 迁移目标账户，可选，用于迁移相关映射
         Returns:
             dict: 包含操作结果的字典
         """
-        if not migrate_to:
-            raise ValidationError("删除账户时必须提供迁移目标账户")
-        
-        # 验证目标账户
-        if not migrate_to.enable:
-            raise ValidationError("目标账户已禁用，无法进行迁移")
-        
-        if migrate_to == self:
-            raise ValidationError("不能将账户迁移到自身")
-        
         # 检查是否有子账户
         if self.has_children():
             raise ValidationError("存在子账户，无法删除。请先处理子账户")
@@ -246,35 +236,43 @@ class Account(BaseModel):
         Assets = apps.get_model('maps', 'Assets')
         Income = apps.get_model('maps', 'Income')
         
-        result = {
-            'account_deleted': True,
-            'mappings_migrated': True,
-            'migrated_to': migrate_to.id,
-            'mapping_counts': {
-                'expense': 0,
-                'assets': 0,
-                'income': 0,
-                'total': 0
-            }
-        }
-        
-        # 统计并迁移映射
+        # 统计映射数量
         expense_count = Expense.objects.filter(expend=self).count()
         assets_count = Assets.objects.filter(assets=self).count()
         income_count = Income.objects.filter(income=self).count()
         total_mappings = expense_count + assets_count + income_count
         
-        result['mapping_counts'] = {
-            'expense': expense_count,
-            'assets': assets_count,
-            'income': income_count,
-            'total': total_mappings
+        result = {
+            'account_deleted': True,
+            'mappings_migrated': False,
+            'migrated_to': None,
+            'mapping_counts': {
+                'expense': expense_count,
+                'assets': assets_count,
+                'income': income_count,
+                'total': total_mappings
+            }
         }
         
-        # 迁移所有类型的映射到目标账户
-        Expense.objects.filter(expend=self).update(expend=migrate_to)
-        Assets.objects.filter(assets=self).update(assets=migrate_to)
-        Income.objects.filter(income=self).update(income=migrate_to)
+        # 如果有映射数据，必须提供迁移目标
+        if total_mappings > 0:
+            if not migrate_to:
+                raise ValidationError("账户存在映射数据，删除时必须提供迁移目标账户")
+            
+            # 验证目标账户
+            if not migrate_to.enable:
+                raise ValidationError("目标账户已禁用，无法进行迁移")
+            
+            if migrate_to == self:
+                raise ValidationError("不能将账户迁移到自身")
+            
+            # 迁移所有类型的映射到目标账户
+            Expense.objects.filter(expend=self).update(expend=migrate_to)
+            Assets.objects.filter(assets=self).update(assets=migrate_to)
+            Income.objects.filter(income=self).update(income=migrate_to)
+            
+            result['mappings_migrated'] = True
+            result['migrated_to'] = migrate_to.id
         
         # 删除账户
         account_id = self.id

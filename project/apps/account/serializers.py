@@ -244,11 +244,16 @@ class AccountMigrationSerializer(serializers.Serializer):
 class AccountDeleteSerializer(serializers.Serializer):
     """账户删除序列化器"""
     migrate_to = serializers.IntegerField(
-        help_text="迁移目标账户ID"
+        required=False,
+        allow_null=True,
+        help_text="迁移目标账户ID（可选，无映射时可为空）"
     )
     
     def validate_migrate_to(self, value):
         """验证迁移目标账户"""
+        if value is None:
+            return value
+            
         try:
             account = Account.objects.get(id=value)
             if not account.enable:

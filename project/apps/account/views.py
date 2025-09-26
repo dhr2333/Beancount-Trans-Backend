@@ -166,7 +166,7 @@ class AccountViewSet(ModelViewSet):
             )
 
     def destroy(self, request, pk=None):
-        """删除账户（需要提供迁移目标账户）"""
+        """删除账户（有映射时需要提供迁移目标账户）"""
         account = self.get_object()
         
         # 验证请求数据
@@ -174,15 +174,18 @@ class AccountViewSet(ModelViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        migrate_to_id = serializer.validated_data['migrate_to']
+        migrate_to_id = serializer.validated_data.get('migrate_to')
+        migrate_to = None
         
-        try:
-            migrate_to = Account.objects.get(id=migrate_to_id, owner=request.user)
-        except Account.DoesNotExist:
-            return Response(
-                {'error': '目标账户不存在或无权访问'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # 如果提供了迁移目标账户ID，获取账户对象
+        if migrate_to_id:
+            try:
+                migrate_to = Account.objects.get(id=migrate_to_id, owner=request.user)
+            except Account.DoesNotExist:
+                return Response(
+                    {'error': '目标账户不存在或无权访问'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         try:
             with transaction.atomic():
@@ -207,14 +210,23 @@ class AccountViewSet(ModelViewSet):
         """获取可用的迁移目标账户列表"""
         account = self.get_object()
         
-        # 获取启用的账户（所有类型账户）作为迁移候选
-        account_type = account.account.split(':')[0]
+        # 获取当前账户及其所有子账户的ID，用于排除
+        def get_descendant_ids(acc):
+            """递归获取账户的所有后代账户ID"""
+            descendant_ids = [acc.id]
+            for child in acc.children.all():
+                descendant_ids.extend(get_descendant_ids(child))
+            return descendant_ids
+        
+        # 排除当前账户及其所有子账户
+        excluded_ids = get_descendant_ids(account)
+        
+        # 获取启用的账户作为迁移候选，排除当前账户及其子账户
         candidates = Account.objects.filter(
             owner=request.user,
             enable=True
         ).exclude(
-            id=account.id,
-            account__startswith=account_type
+            id__in=excluded_ids
         ).order_by('account')
         
         serializer = AccountSerializer(candidates, many=True, context={'request': request})
