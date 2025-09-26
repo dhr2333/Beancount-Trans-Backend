@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
+from django.contrib.auth import get_user_model
 # from django.shortcuts import get_object_or_404
 from django.apps import apps
 
@@ -15,16 +16,16 @@ from project.apps.account.serializers import (
 )
 from project.apps.account.filters import AccountTypeFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
-from project.apps.common.filters import CurrentUserFilterBackend
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission
+from project.apps.common.filters import CurrentUserFilterBackend, AnonymousUserFilterBackend
 
 
 class CurrencyViewSet(ModelViewSet):
     """货币管理视图集"""
     queryset = Currency.objects.all()
     serializer_class = CurrencySerializer
-    permission_classes = [IsOwnerOrAdminReadWriteOnly]
-    filter_backends = [CurrentUserFilterBackend]
+    permission_classes = [AnonymousReadOnlyPermission]
+    filter_backends = [AnonymousUserFilterBackend]
     authentication_classes = [JWTAuthentication]
     search_fields = ['code', 'name']
     ordering_fields = ['code', 'name']
@@ -44,11 +45,13 @@ class AccountViewSet(ModelViewSet):
     - 树形结构展示
     - 账户迁移
     - 账户映射
+    
+    支持匿名用户访问id=1用户的数据（只读）
     """
     queryset = Account.objects.all()
     serializer_class = AccountSerializer
-    permission_classes = [IsOwnerOrAdminReadWriteOnly]
-    filter_backends = [CurrentUserFilterBackend, DjangoFilterBackend]
+    permission_classes = [AnonymousReadOnlyPermission]
+    filter_backends = [AnonymousUserFilterBackend, DjangoFilterBackend]
     filterset_class = AccountTypeFilter
     authentication_classes = [JWTAuthentication]
     search_fields = ['account']
@@ -69,9 +72,17 @@ class AccountViewSet(ModelViewSet):
         """获取查询集"""
         queryset = super().get_queryset()
         
-        # 根据用户过滤
+        # 根据用户过滤，匿名用户使用id=1用户的数据
+        User = get_user_model()
         if self.request.user.is_authenticated:
             queryset = queryset.filter(owner=self.request.user)
+        else:
+            # 匿名用户使用id=1用户的账户
+            try:
+                default_user = User.objects.get(id=1)
+                queryset = queryset.filter(owner=default_user)
+            except User.DoesNotExist:
+                queryset = queryset.none()
         
         # 根据账户类型过滤
         account_type = self.request.query_params.get('account_type')
@@ -107,20 +118,33 @@ class AccountViewSet(ModelViewSet):
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
 
-            # 只获取当前用户的映射
+            # 获取当前用户的映射，匿名用户使用id=1用户的映射
+            User = get_user_model()
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                # 匿名用户使用id=1用户的映射
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return Response(
+                        {'error': '默认用户（ID=1）不存在'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
             expense_mappings = Expense.objects.filter(
                 expend=account, 
-                owner=request.user, 
+                owner=user, 
                 # enable=True
             )
             assets_mappings = Assets.objects.filter(
                 assets=account, 
-                owner=request.user, 
+                owner=user, 
                 # enable=True
             )
             income_mappings = Income.objects.filter(
                 income=account, 
-                owner=request.user, 
+                owner=user, 
                 # enable=True
             )
 
@@ -222,8 +246,21 @@ class AccountViewSet(ModelViewSet):
         excluded_ids = get_descendant_ids(account)
         
         # 获取启用的账户作为迁移候选，排除当前账户及其子账户
+        User = get_user_model()
+        if request.user.is_authenticated:
+            user = request.user
+        else:
+            # 匿名用户使用id=1用户的账户
+            try:
+                user = User.objects.get(id=1)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': '默认用户（ID=1）不存在'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
         candidates = Account.objects.filter(
-            owner=request.user,
+            owner=user,
             enable=True
         ).exclude(
             id__in=excluded_ids

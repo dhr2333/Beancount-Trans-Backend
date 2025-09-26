@@ -46,15 +46,27 @@ class AccountTreeSerializer(serializers.ModelSerializer):
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             
-            # 获取当前用户
+            # 获取当前用户，匿名用户使用id=1用户的数据
             request = self.context.get('request')
-            if not request or not request.user.is_authenticated:
+            if not request:
                 return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
             
-            # 统计当前用户的所有映射记录（包括已关闭的）
-            expense_count = Expense.objects.filter(expend=obj, owner=request.user).count()
-            assets_count = Assets.objects.filter(assets=obj, owner=request.user).count()
-            income_count = Income.objects.filter(income=obj, owner=request.user).count()
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                # 匿名用户使用id=1用户的映射
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 统计用户的所有映射记录（包括已关闭的）
+            expense_count = Expense.objects.filter(expend=obj, owner=user).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=user).count()
+            income_count = Income.objects.filter(income=obj, owner=user).count()
             
             return {
                 'expense': expense_count,
@@ -98,15 +110,27 @@ class AccountSerializer(serializers.ModelSerializer):
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             
-            # 获取当前用户
+            # 获取当前用户，匿名用户使用id=1用户的数据
             request = self.context.get('request')
-            if not request or not request.user.is_authenticated:
+            if not request:
                 return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
             
-            # 统计当前用户的所有映射记录（包括已关闭的）
-            expense_count = Expense.objects.filter(expend=obj, owner=request.user).count()
-            assets_count = Assets.objects.filter(assets=obj, owner=request.user).count()
-            income_count = Income.objects.filter(income=obj, owner=request.user).count()
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                # 匿名用户使用id=1用户的映射
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 统计用户的所有映射记录（包括已关闭的）
+            expense_count = Expense.objects.filter(expend=obj, owner=user).count()
+            assets_count = Assets.objects.filter(assets=obj, owner=user).count()
+            income_count = Income.objects.filter(income=obj, owner=user).count()
             
             return {
                 'expense': expense_count,
