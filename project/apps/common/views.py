@@ -2,16 +2,17 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
-from project.apps.common.filters import CurrentUserFilterBackend
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission
+from project.apps.common.filters import CurrentUserFilterBackend, AnonymousUserFilterBackend
 
 
 class BaseMappingViewSet(ModelViewSet):
     """
     映射视图集基类，提供通用的映射管理功能
+    支持匿名用户访问id=1用户的数据（只读）
     """
-    permission_classes = [IsOwnerOrAdminReadWriteOnly]
-    filter_backends = [CurrentUserFilterBackend]
+    permission_classes = [AnonymousReadOnlyPermission]
+    filter_backends = [AnonymousUserFilterBackend]
     authentication_classes = [JWTAuthentication]
     
     def create(self, request, *args, **kwargs):

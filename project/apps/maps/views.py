@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
+from django.contrib.auth import get_user_model
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
 from project.apps.account.models import Currency
 from project.apps.common.permissions import TemplatePermission, IsOwnerOrAdminReadWriteOnly
@@ -23,9 +24,17 @@ class ExpenseViewSet(BaseMappingViewSet):
     
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币
+        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
+        User = get_user_model()
         if self.request.user.is_authenticated:
             context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+        else:
+            # 匿名用户使用id=1用户的货币
+            try:
+                default_user = User.objects.get(id=1)
+                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
+            except User.DoesNotExist:
+                context['currency_queryset'] = Currency.objects.none()
         return context
 
 
@@ -82,9 +91,17 @@ class TemplateViewSet(ModelViewSet):
         # 对于详情视图，预取items以提高性能
         context['queryset'] = Template.objects.prefetch_related('items')
         
-        # 设置货币查询集为当前用户的货币
+        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
+        User = get_user_model()
         if self.request.user.is_authenticated:
             context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+        else:
+            # 匿名用户使用id=1用户的货币
+            try:
+                default_user = User.objects.get(id=1)
+                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
+            except User.DoesNotExist:
+                context['currency_queryset'] = Currency.objects.none()
         
         return context
 
@@ -196,13 +213,30 @@ class TemplateItemViewSet(ModelViewSet):
     permission_classes = [IsOwnerOrAdminReadWriteOnly]
 
     def get_queryset(self):
-        return TemplateItem.objects.filter(template__owner=self.request.user)
+        User = get_user_model()
+        if self.request.user.is_authenticated:
+            return TemplateItem.objects.filter(template__owner=self.request.user)
+        else:
+            # 匿名用户使用id=1用户的模板项
+            try:
+                default_user = User.objects.get(id=1)
+                return TemplateItem.objects.filter(template__owner=default_user)
+            except User.DoesNotExist:
+                return TemplateItem.objects.none()
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币
+        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
+        User = get_user_model()
         if self.request.user.is_authenticated:
             context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
+        else:
+            # 匿名用户使用id=1用户的货币
+            try:
+                default_user = User.objects.get(id=1)
+                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
+            except User.DoesNotExist:
+                context['currency_queryset'] = Currency.objects.none()
         return context
 
     def perform_create(self, serializer):

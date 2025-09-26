@@ -131,3 +131,27 @@ class TemplatePermission(permissions.BasePermission):
         
         # 只有所有者或管理员可以修改/删除
         return obj.owner == request.user or request.user.is_superuser
+
+
+class AnonymousReadOnlyPermission(permissions.BasePermission):
+    """
+    匿名用户只读权限：允许匿名用户读取数据，但只有认证用户可以写入
+    """
+    
+    def has_permission(self, request, view):
+        """检查是否有权限访问视图"""
+        # 允许所有用户进行读取操作
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # 只有认证用户可以写入
+        return request.user.is_authenticated
+    
+    def has_object_permission(self, request, view, obj):
+        """检查是否有权限操作特定对象"""
+        # 允许所有用户读取
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # 只有认证用户可以写入
+        return request.user.is_authenticated
