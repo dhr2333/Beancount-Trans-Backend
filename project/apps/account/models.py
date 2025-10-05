@@ -49,7 +49,6 @@ class Account(BaseModel):
         if not all(part.isidentifier() for part in self.account.split(':')):
             raise ValidationError("账户路径必须由字母、数字和下划线组成，用冒号分隔")
         
-
     def save(self, *args, **kwargs):
         """保存账户时自动创建父账户，并同步映射状态"""
         # 检查enable字段是否发生变化
