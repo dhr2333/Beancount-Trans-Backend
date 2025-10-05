@@ -53,10 +53,16 @@ class Account(BaseModel):
         """保存账户时自动创建父账户，并同步映射状态"""
         # 检查enable字段是否发生变化
         enable_changed = False
+        account_name_changed = False
+        old_account_name = None
+        
         if self.pk:
             try:
                 old_instance = Account.objects.get(pk=self.pk)
                 enable_changed = old_instance.enable != self.enable
+                account_name_changed = old_instance.account != self.account
+                if account_name_changed:
+                    old_account_name = old_instance.account
             except Account.DoesNotExist:
                 pass
         
@@ -74,6 +80,10 @@ class Account(BaseModel):
         # 如果enable状态发生变化，同步更新相关映射
         if enable_changed:
             self._sync_mappings_enable_status()
+        
+        # 如果账户名称发生变化，同步更新所有子账户的名称
+        if account_name_changed and old_account_name:
+            self._update_children_account_names(old_account_name)
     
     def _create_parent_account(self, parent_account_path):
         """递归创建父账户"""
@@ -104,6 +114,35 @@ class Account(BaseModel):
                 )
             
             return parent
+
+    def _update_children_account_names(self, old_account_name):
+        """
+        当父账户名称发生变化时，同步更新所有子账户的名称
+        
+        Args:
+            old_account_name: 旧的账户名称
+        """
+        try:
+            # 获取所有子账户（包括子账户的子账户）
+            children = self.children.all()
+            
+            for child in children:
+                # 计算新的子账户名称
+                # 例如：Expenses:Culturer:Entertainment -> Expenses:Culture:Entertainment
+                old_child_name = child.account
+                # 将旧名称中的父账户部分替换为新名称
+                new_child_name = old_child_name.replace(old_account_name, self.account, 1)
+                
+                # 更新子账户名称
+                child.account = new_child_name
+                # 递归保存，这会触发子账户的子账户也进行更新
+                child.save()
+                
+        except Exception as e:
+            # 记录错误但不阻止父账户保存
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"更新子账户名称失败: {str(e)}")
 
     def _sync_mappings_enable_status(self):
         """同步映射的启用状态与账户状态"""
