@@ -2,6 +2,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
 from project.apps.account.models import Currency
@@ -10,7 +11,7 @@ from project.apps.common.views import BaseMappingViewSet
 from project.apps.maps.serializers import (
     AssetsSerializer, ExpenseSerializer, IncomeSerializer, 
     TemplateItemSerializer, TemplateListSerializer, TemplateDetailSerializer,
-    TemplateApplySerializer
+    TemplateApplySerializer, ExpenseBatchUpdateSerializer
 )
 from django.shortcuts import get_object_or_404
 
@@ -36,6 +37,65 @@ class ExpenseViewSet(BaseMappingViewSet):
             except User.DoesNotExist:
                 context['currency_queryset'] = Currency.objects.none()
         return context
+
+    @action(detail=False, methods=['post'])
+    def batch_update_account(self, request):
+        """批量更新支出映射的账户"""
+        if request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+        
+        serializer = ExpenseBatchUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        expense_ids = data['expense_ids']
+        expend_id = data.get('expend_id')
+        currency_id = data.get('currency_id')
+        
+        # 验证支出映射是否属于当前用户
+        expenses = Expense.objects.filter(id__in=expense_ids, owner=request.user)
+        if len(expenses) != len(expense_ids):
+            return Response(
+                {"error": "部分支出映射不存在或无权限访问"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 验证账户是否存在
+        if expend_id:
+            from project.apps.account.models import Account
+            try:
+                account = Account.objects.get(id=expend_id, owner=request.user)
+            except Account.DoesNotExist:
+                return Response(
+                    {"error": "指定的支出账户不存在或无权限访问"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # 验证货币是否存在
+        if currency_id:
+            try:
+                currency = Currency.objects.get(id=currency_id, owner=request.user)
+            except Currency.DoesNotExist:
+                return Response(
+                    {"error": "指定的货币不存在或无权限访问"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # 批量更新
+        updated_count = 0
+        for expense in expenses:
+            if expend_id is not None:
+                expense.expend_id = expend_id
+            if currency_id is not None:
+                expense.currency_id = currency_id
+            expense.save()
+            updated_count += 1
+        
+        return Response({
+            "message": f"成功更新 {updated_count} 个支出映射",
+            "updated_count": updated_count
+        })
 
 
 class AssetsViewSet(BaseMappingViewSet):

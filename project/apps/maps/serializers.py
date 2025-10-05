@@ -29,12 +29,15 @@ class ExpenseSerializer(serializers.ModelSerializer):
         queryset=Currency.objects.none(),  # 将在视图中动态设置
         required=False,
         source='currency',
-        write_only=True
+        write_only=True,
+        allow_null=True
     )
     expend_id = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
         source='expend',
-        write_only=True
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     
     owner = serializers.ReadOnlyField(source='owner.username')
@@ -62,7 +65,9 @@ class AssetsSerializer(serializers.ModelSerializer):
     assets_id = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
         source='assets',
-        write_only=True
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     
     owner = serializers.ReadOnlyField(source='owner.username')
@@ -81,7 +86,9 @@ class IncomeSerializer(serializers.ModelSerializer):
     income_id = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
         source='income',
-        write_only=True
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     
     owner = serializers.ReadOnlyField(source='owner.username')
@@ -101,13 +108,16 @@ class TemplateItemSerializer(serializers.ModelSerializer):
     account_id = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
         source='account',
-        write_only=True
+        write_only=True,
+        required=False,
+        allow_null=True
     )
     currency_id = serializers.PrimaryKeyRelatedField(
         queryset=Currency.objects.none(),  # 将在视图中动态设置
         required=False,
         source='currency',
-        write_only=True
+        write_only=True,
+        allow_null=True
     )
     
     def __init__(self, *args, **kwargs):
@@ -162,6 +172,40 @@ class TemplateDetailSerializer(serializers.ModelSerializer):
             TemplateItem.objects.create(template=instance, **item_data)
 
         return instance
+
+
+class ExpenseBatchUpdateSerializer(serializers.Serializer):
+    """支出映射批量更新序列化器"""
+    expense_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text="要更新的支出映射ID列表"
+    )
+    expend_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="新的支出账户ID"
+    )
+    currency_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="新的货币ID"
+    )
+    
+    def validate_expense_ids(self, value):
+        """验证支出映射ID列表"""
+        if not value:
+            raise serializers.ValidationError("支出映射ID列表不能为空")
+        return value
+    
+    def validate(self, data):
+        """验证整体数据"""
+        expend_id = data.get('expend_id')
+        currency_id = data.get('currency_id')
+        
+        if expend_id is None and currency_id is None:
+            raise serializers.ValidationError("至少需要指定一个要更新的字段")
+        
+        return data
 
 
 class TemplateApplySerializer(serializers.Serializer):
