@@ -1,10 +1,10 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 
 
 class Command(BaseCommand):
-    help = '初始化默认的Beancount账户结构和货币'
+    help = '初始化默认的Beancount账户结构'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -40,9 +40,6 @@ class Command(BaseCommand):
             )
             return
         
-        # 初始化货币
-        self.init_currencies()
-        
         # 为每个用户初始化账户
         for user in users:
             self.init_user_accounts(user, force)
@@ -50,27 +47,6 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS('账户初始化完成')
         )
-
-    def init_currencies(self):
-        """初始化默认货币"""
-        default_currencies = [
-            {'code': 'CNY', 'name': '人民币'},
-            {'code': 'USD', 'name': '美元'},
-            {'code': 'EUR', 'name': '欧元'},
-            {'code': 'JPY', 'name': '日元'},
-            {'code': 'GBP', 'name': '英镑'},
-            {'code': 'HKD', 'name': '港币'},
-        ]
-        
-        for currency_data in default_currencies:
-            currency, created = Currency.objects.get_or_create(
-                code=currency_data['code'],
-                defaults={'name': currency_data['name']}
-            )
-            if created:
-                self.stdout.write(f'创建货币: {currency.code} - {currency.name}')
-            else:
-                self.stdout.write(f'货币已存在: {currency.code} - {currency.name}')
 
     def init_user_accounts(self, user, force=False):
         """为用户初始化默认账户结构"""

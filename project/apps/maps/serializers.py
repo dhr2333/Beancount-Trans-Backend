@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
-from project.apps.account.models import Currency, Account
+from project.apps.account.models import Account
 
 
 class AccountSummarySerializer(serializers.ModelSerializer):
@@ -10,28 +10,13 @@ class AccountSummarySerializer(serializers.ModelSerializer):
         fields = ['id', 'account', 'enable']
 
 
-class CurrencySummarySerializer(serializers.ModelSerializer):
-    """货币摘要序列化器，用于在映射中显示货币信息"""
-    class Meta:
-        model = Currency
-        fields = ['id', 'code', 'name']
-
-
 class ExpenseSerializer(serializers.ModelSerializer):
     payee = serializers.CharField(allow_blank=True, allow_null=True)
     
     # 读取时显示详细信息
-    currency = CurrencySummarySerializer(read_only=True)
     expend = AccountSummarySerializer(read_only=True)
     
     # 写入时使用ID
-    currency_id = serializers.PrimaryKeyRelatedField(
-        queryset=Currency.objects.none(),  # 将在视图中动态设置
-        required=False,
-        source='currency',
-        write_only=True,
-        allow_null=True
-    )
     expend_id = serializers.PrimaryKeyRelatedField(
         queryset=Account.objects.all(),
         source='expend',
@@ -43,15 +28,9 @@ class ExpenseSerializer(serializers.ModelSerializer):
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # 从上下文中获取货币查询集
-        if 'currency_queryset' in self.context:
-            self.fields['currency_id'].queryset = self.context['currency_queryset']
-
     class Meta:
         model = Expense
-        fields = ['id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'currency', 'currency_id', 'enable']
+        fields = ['id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'currency', 'enable']
         extra_kwargs = {
             'key': {'required': False}  # 允许更新时不传 key
         }
@@ -102,7 +81,6 @@ class IncomeSerializer(serializers.ModelSerializer):
 class TemplateItemSerializer(serializers.ModelSerializer):
     # 读取时显示详细信息
     account = AccountSummarySerializer(read_only=True)
-    currency = CurrencySummarySerializer(read_only=True)
     
     # 写入时使用ID
     account_id = serializers.PrimaryKeyRelatedField(
@@ -112,19 +90,6 @@ class TemplateItemSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
-    currency_id = serializers.PrimaryKeyRelatedField(
-        queryset=Currency.objects.none(),  # 将在视图中动态设置
-        required=False,
-        source='currency',
-        write_only=True,
-        allow_null=True
-    )
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # 从上下文中获取货币查询集
-        if 'currency_queryset' in self.context:
-            self.fields['currency_id'].queryset = self.context['currency_queryset']
     
     class Meta:
         model = TemplateItem
@@ -185,10 +150,12 @@ class ExpenseBatchUpdateSerializer(serializers.Serializer):
         allow_null=True,
         help_text="新的支出账户ID"
     )
-    currency_id = serializers.IntegerField(
+    currency = serializers.CharField(
         required=False,
         allow_null=True,
-        help_text="新的货币ID"
+        allow_blank=True,
+        max_length=24,
+        help_text="新的货币代码"
     )
     
     def validate_expense_ids(self, value):
@@ -200,9 +167,9 @@ class ExpenseBatchUpdateSerializer(serializers.Serializer):
     def validate(self, data):
         """验证整体数据"""
         expend_id = data.get('expend_id')
-        currency_id = data.get('currency_id')
+        currency = data.get('currency')
         
-        if expend_id is None and currency_id is None:
+        if expend_id is None and currency is None:
             raise serializers.ValidationError("至少需要指定一个要更新的字段")
         
         return data

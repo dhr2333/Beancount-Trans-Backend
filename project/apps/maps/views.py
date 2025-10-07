@@ -5,7 +5,6 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
-from project.apps.account.models import Currency
 from project.apps.common.permissions import TemplatePermission, IsOwnerOrAdminReadWriteOnly
 from project.apps.common.views import BaseMappingViewSet
 from project.apps.maps.serializers import (
@@ -22,21 +21,6 @@ class ExpenseViewSet(BaseMappingViewSet):
     serializer_class = ExpenseSerializer
     search_fields = ['key', 'payee']
     ordering_fields = ['id', 'key']
-    
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
-        User = get_user_model()
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        else:
-            # 匿名用户使用id=1用户的货币
-            try:
-                default_user = User.objects.get(id=1)
-                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
-            except User.DoesNotExist:
-                context['currency_queryset'] = Currency.objects.none()
-        return context
 
     @action(detail=False, methods=['post'])
     def batch_update_account(self, request):
@@ -51,7 +35,7 @@ class ExpenseViewSet(BaseMappingViewSet):
         data = serializer.validated_data
         expense_ids = data['expense_ids']
         expend_id = data.get('expend_id')
-        currency_id = data.get('currency_id')
+        currency = data.get('currency')
         
         # 验证支出映射是否属于当前用户
         expenses = Expense.objects.filter(id__in=expense_ids, owner=request.user)
@@ -72,23 +56,13 @@ class ExpenseViewSet(BaseMappingViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
-        # 验证货币是否存在
-        if currency_id:
-            try:
-                currency = Currency.objects.get(id=currency_id, owner=request.user)
-            except Currency.DoesNotExist:
-                return Response(
-                    {"error": "指定的货币不存在或无权限访问"}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        
         # 批量更新
         updated_count = 0
         for expense in expenses:
             if expend_id is not None:
                 expense.expend_id = expend_id
-            if currency_id is not None:
-                expense.currency_id = currency_id
+            if currency is not None:
+                expense.currency = currency
             expense.save()
             updated_count += 1
         
@@ -150,18 +124,6 @@ class TemplateViewSet(ModelViewSet):
 
         # 对于详情视图，预取items以提高性能
         context['queryset'] = Template.objects.prefetch_related('items')
-        
-        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
-        User = get_user_model()
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        else:
-            # 匿名用户使用id=1用户的货币
-            try:
-                default_user = User.objects.get(id=1)
-                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
-            except User.DoesNotExist:
-                context['currency_queryset'] = Currency.objects.none()
         
         return context
 
@@ -283,21 +245,6 @@ class TemplateItemViewSet(ModelViewSet):
                 return TemplateItem.objects.filter(template__owner=default_user)
             except User.DoesNotExist:
                 return TemplateItem.objects.none()
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        # 设置货币查询集为当前用户的货币，匿名用户使用id=1用户的货币
-        User = get_user_model()
-        if self.request.user.is_authenticated:
-            context['currency_queryset'] = Currency.objects.filter(owner=self.request.user)
-        else:
-            # 匿名用户使用id=1用户的货币
-            try:
-                default_user = User.objects.get(id=1)
-                context['currency_queryset'] = Currency.objects.filter(owner=default_user)
-            except User.DoesNotExist:
-                context['currency_queryset'] = Currency.objects.none()
-        return context
 
     def perform_create(self, serializer):
         template_id = self.kwargs.get('template_pk')

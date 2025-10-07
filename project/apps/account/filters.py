@@ -2,7 +2,7 @@ import django_filters
 from django.db import models
 # from django.contrib.auth.models import User
 from rest_framework.filters import BaseFilterBackend
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 
 
 class CurrentUserFilterBackend(BaseFilterBackend):
@@ -44,12 +44,6 @@ class AccountTypeFilter(django_filters.FilterSet):
         help_text="是否有相关映射"
     )
     
-    currency = django_filters.ModelChoiceFilter(
-        queryset=Currency.objects.all(),
-        method='filter_by_currency',
-        help_text="按货币过滤"
-    )
-    
     search = django_filters.CharFilter(
         method='filter_search',
         help_text="搜索账户名称"
@@ -57,7 +51,7 @@ class AccountTypeFilter(django_filters.FilterSet):
     
     class Meta:
         model = Account
-        fields = ['account_type', 'enable', 'has_children', 'has_mappings', 'currency', 'search']
+        fields = ['account_type', 'enable', 'has_children', 'has_mappings', 'search']
     
     def filter_by_account_type(self, queryset, name, value):
         """按账户类型过滤"""
@@ -99,29 +93,6 @@ class AccountTypeFilter(django_filters.FilterSet):
             # 如果映射模型不存在，返回空查询集
             return queryset.none()
     
-    def filter_by_currency(self, queryset, name, value):
-        """按货币过滤"""
-        return queryset.filter(currencies=value)
-    
     def filter_search(self, queryset, name, value):
         """搜索账户名称"""
         return queryset.filter(account__icontains=value)
-
-
-class CurrencyFilter(django_filters.FilterSet):
-    """货币过滤器"""
-    
-    search = django_filters.CharFilter(
-        method='filter_search',
-        help_text="搜索货币代码或名称"
-    )
-    
-    class Meta:
-        model = Currency
-        fields = ['search']
-    
-    def filter_search(self, queryset, name, value):
-        """搜索货币代码或名称"""
-        return queryset.filter(
-            models.Q(code__icontains=value) | models.Q(name__icontains=value)
-        )

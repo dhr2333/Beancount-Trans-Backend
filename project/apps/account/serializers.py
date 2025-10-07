@@ -1,22 +1,11 @@
 from rest_framework import serializers
 # from django.contrib.auth.models import User
-from project.apps.account.models import Account, Currency
-
-
-class CurrencySerializer(serializers.ModelSerializer):
-    """货币序列化器"""
-    owner = serializers.ReadOnlyField(source='owner.username')
-    
-    class Meta:
-        model = Currency
-        fields = ['id', 'code', 'name', 'owner', 'created', 'modified']
-        read_only_fields = ['id', 'owner', 'created', 'modified']
+from project.apps.account.models import Account
 
 
 class AccountTreeSerializer(serializers.ModelSerializer):
     """账户树形结构序列化器"""
     children = serializers.SerializerMethodField()
-    currencies = CurrencySerializer(many=True, read_only=True)
     parent_account = serializers.CharField(source='parent.account', read_only=True)
     account_type = serializers.CharField(source='get_account_type', read_only=True)
     mapping_count = serializers.SerializerMethodField()
@@ -24,7 +13,7 @@ class AccountTreeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = [
-            'id', 'account', 'currencies', 'parent', 'parent_account',
+            'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'mapping_count',
             'children', 'created', 'modified'
         ]
@@ -80,13 +69,6 @@ class AccountTreeSerializer(serializers.ModelSerializer):
 
 class AccountSerializer(serializers.ModelSerializer):
     """账户基础序列化器"""
-    currencies = CurrencySerializer(many=True, read_only=True)
-    currency_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        write_only=True,
-        required=False,
-        help_text="货币ID列表"
-    )
     parent_account = serializers.CharField(source='parent.account', read_only=True)
     account_type = serializers.CharField(source='get_account_type', read_only=True)
     has_children = serializers.BooleanField(read_only=True)
@@ -95,7 +77,7 @@ class AccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = Account
         fields = [
-            'id', 'account', 'currencies', 'currency_ids', 'parent', 'parent_account',
+            'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'has_children', 'mapping_count',
             'created', 'modified'
         ]
@@ -153,40 +135,6 @@ class AccountSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"根账户必须是以下之一: {', '.join(valid_roots)}")
         
         return value
-    
-    def validate_currency_ids(self, value):
-        """验证货币ID列表"""
-        if value:
-            # 只允许使用当前用户的货币
-            user = self.context['request'].user
-            valid_currencies = Currency.objects.filter(id__in=value, owner=user)
-            if len(valid_currencies) != len(value):
-                raise serializers.ValidationError("包含无效的货币ID或无权访问的货币")
-        return value
-    
-    def create(self, validated_data):
-        """创建账户"""
-        currency_ids = validated_data.pop('currency_ids', [])
-        account = Account.objects.create(**validated_data)
-        
-        if currency_ids:
-            account.currencies.set(currency_ids)
-        
-        return account
-    
-    def update(self, instance, validated_data):
-        """更新账户"""
-        currency_ids = validated_data.pop('currency_ids', None)
-        
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        
-        instance.save()
-        
-        if currency_ids is not None:
-            instance.currencies.set(currency_ids)
-        
-        return instance
 
 
 class AccountBatchUpdateSerializer(serializers.Serializer):

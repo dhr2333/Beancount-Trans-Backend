@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 from project.models import BaseModel
 
 
@@ -10,7 +10,7 @@ class Expense(BaseModel):
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     expend = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="支出账户")
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
-    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
+    currency = models.CharField(max_length=24, null=True, blank=True, help_text="货币代码")
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
 
     class Meta:
@@ -20,13 +20,6 @@ class Expense(BaseModel):
 
     def __str__(self):
         return self.key
-
-    def save(self, *args, **kwargs):
-        """保存时同步货币到关联账户"""
-        super().save(*args, **kwargs)
-        # 将映射的货币添加到关联的账户中
-        if self.expend and self.currency:
-            self.expend.currencies.add(self.currency)
 
 
 class Assets(BaseModel):
@@ -92,7 +85,7 @@ class TemplateItem(BaseModel):
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")
-    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, null=True, blank=True, help_text="货币")
+    currency = models.CharField(max_length=24, null=True, blank=True, help_text="货币代码")
 
     class Meta:
         db_table = 'maps_template_item'

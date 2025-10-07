@@ -5,33 +5,8 @@ from django.core.exceptions import ValidationError
 from project.models import BaseModel
 
 
-class Currency(BaseModel):
-    code = models.CharField(
-        max_length=24,
-        validators=[
-            RegexValidator(
-                regex=r'^[A-Z][A-Z0-9\'._-]{0,22}([A-Z0-9])?$',
-                message='货币必须以大写字母开头，以大写字母/数字结尾，并且只能包含 [A-Z0-9\'._-]'
-            )
-        ],                            
-        verbose_name="货币代码",
-        help_text="货币代码"
-        )
-    name = models.CharField(max_length=32, verbose_name="货币名称")
-    owner = models.ForeignKey(User, related_name='currencies', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
-
-    class Meta:
-        verbose_name = '货币'
-        verbose_name_plural = verbose_name
-        unique_together = ['code', 'owner']
-
-    def __str__(self):
-        return self.code
-
-
 class Account(BaseModel):
     account = models.CharField(max_length=128, help_text="账户路径", verbose_name="账户")
-    currencies = models.ManyToManyField(Currency, blank=True, help_text="货币", verbose_name="货币")
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children', help_text="父账户", verbose_name="父账户")
     owner = models.ForeignKey(User, related_name='accounts', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
     enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")

@@ -9,31 +9,15 @@ from django.contrib.auth import get_user_model
 # from django.shortcuts import get_object_or_404
 from django.apps import apps
 
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 from project.apps.account.serializers import (
-    AccountSerializer, AccountTreeSerializer, CurrencySerializer,
+    AccountSerializer, AccountTreeSerializer,
     AccountBatchUpdateSerializer, AccountMigrationSerializer, AccountDeleteSerializer
 )
 from project.apps.account.filters import AccountTypeFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission
 from project.apps.common.filters import CurrentUserFilterBackend, AnonymousUserFilterBackend
-
-
-class CurrencyViewSet(ModelViewSet):
-    """货币管理视图集"""
-    queryset = Currency.objects.all()
-    serializer_class = CurrencySerializer
-    permission_classes = [AnonymousReadOnlyPermission]
-    filter_backends = [AnonymousUserFilterBackend]
-    authentication_classes = [JWTAuthentication]
-    search_fields = ['code', 'name']
-    ordering_fields = ['code', 'name']
-    ordering = ['code']
-    
-    def perform_create(self, serializer):
-        """创建货币时设置属主"""
-        serializer.save(owner=self.request.user)
 
 
 class AccountViewSet(ModelViewSet):

@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 from project.apps.maps.models import Expense, Assets, Income
 
 
@@ -16,12 +16,6 @@ class AccountEnableSyncTest(TestCase):
             password='testpass123'
         )
         
-        self.currency = Currency.objects.create(
-            code='CNY',
-            name='人民币',
-            owner=self.user
-        )
-        
         self.account = Account.objects.create(
             account='Assets:Bank:Test',
             owner=self.user
@@ -33,7 +27,7 @@ class AccountEnableSyncTest(TestCase):
             payee='测试收款方',
             expend=self.account,
             owner=self.user,
-            currency=self.currency,
+            currency='CNY',
             enable=True
         )
         
@@ -101,12 +95,6 @@ class AccountDeleteMigrationTest(TestCase):
             password='testpass123'
         )
         
-        self.currency = Currency.objects.create(
-            code='CNY',
-            name='人民币',
-            owner=self.user
-        )
-        
         self.source_account = Account.objects.create(
             account='Assets:Bank:Source',
             owner=self.user
@@ -123,7 +111,7 @@ class AccountDeleteMigrationTest(TestCase):
             payee='测试收款方',
             expend=self.source_account,
             owner=self.user,
-            currency=self.currency,
+            currency='CNY',
             enable=True
         )
         
@@ -204,12 +192,6 @@ class AccountCloseTest(TestCase):
             password='testpass123'
         )
         
-        self.currency = Currency.objects.create(
-            code='CNY',
-            name='人民币',
-            owner=self.user
-        )
-        
         self.account = Account.objects.create(
             account='Assets:Bank:Test',
             owner=self.user
@@ -226,7 +208,7 @@ class AccountCloseTest(TestCase):
             payee='测试收款方',
             expend=self.account,
             owner=self.user,
-            currency=self.currency,
+            currency='CNY',
             enable=True
         )
     
