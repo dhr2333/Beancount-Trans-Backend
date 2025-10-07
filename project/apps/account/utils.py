@@ -35,7 +35,6 @@ class AccountTreeManager:
                     'id': account.id,
                     'account': account.account,
                     'account_type': account.get_account_type(),
-                    'currencies': [{'id': c.id, 'code': c.code, 'name': c.name} for c in account.currencies.all()],
                     'has_children': account.has_children(),
                     'mapping_count': AccountTreeManager.get_mapping_count(account),
                     'children': []

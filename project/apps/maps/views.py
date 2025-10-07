@@ -184,9 +184,6 @@ class TemplateViewSet(ModelViewSet):
                 expend=item.account,
                 currency=item.currency
             )
-            # 手动同步货币到账户
-            if item.currency:
-                expense.expend.currencies.add(item.currency)
 
     def _apply_income_template(self, template, action_type, conflict_resolution):
         """应用收入模板"""

@@ -211,13 +211,13 @@ class ExpenseHandler:
                 expend = self.selected_expense_instance.expend.account
                 if expend == "Expenses:Food":
                     expend += self._determine_food_category(self.time)
-                self.currency = self.selected_expense_instance.currency.code if self.selected_expense_instance.currency else "CNY"
+                self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
                 return expend, self.selected_key, self.expense_candidates_with_score
             elif self.selected_key is None:
                 expend = self.selected_expense_instance.expend.account
                 if expend == "Expenses:Food":
                     expend += self._determine_food_category(self.time)
-                self.currency = self.selected_expense_instance.currency.code if self.selected_expense_instance.currency else "CNY"
+                self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
                 return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score

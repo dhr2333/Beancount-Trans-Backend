@@ -78,7 +78,7 @@ class AccountViewSet(ModelViewSet):
         if enable is not None:
             queryset = queryset.filter(enable=enable.lower() == 'true')
         
-        return queryset.select_related('parent', 'owner').prefetch_related('currencies')
+        return queryset.select_related('parent', 'owner')
     
     def perform_create(self, serializer):
         """创建账户时设置属主"""
@@ -140,7 +140,7 @@ class AccountViewSet(ModelViewSet):
                         'id': m.id, 
                         'key': m.key, 
                         'payee': m.payee,
-                        'currency': m.currency.code if m.currency else None,
+                        'currency': m.currency,
                         'enable': m.enable
                     }
                     for m in expense_mappings
