@@ -7,12 +7,13 @@ class TagTreeSerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     full_path = serializers.SerializerMethodField()
+    mapping_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Tag
         fields = [
             'id', 'name', 'parent', 'parent_name', 'full_path',
-            'description', 'owner', 'enable',
+            'description', 'owner', 'enable', 'mapping_count',
             'children', 'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified', 'owner']
@@ -27,6 +28,47 @@ class TagTreeSerializer(serializers.ModelSerializer):
     def get_full_path(self, obj):
         """获取标签的完整路径，如 Category/EDUCATION"""
         return obj.get_full_path()
+    
+    def get_mapping_count(self, obj):
+        """获取使用此标签的映射数量（参考 Account 的实现）"""
+        try:
+            from django.apps import apps
+            
+            # 获取映射模型
+            Expense = apps.get_model('maps', 'Expense')
+            Assets = apps.get_model('maps', 'Assets')
+            Income = apps.get_model('maps', 'Income')
+            
+            # 获取当前用户
+            request = self.context.get('request')
+            if not request:
+                return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                # 匿名用户使用id=1用户的数据
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 统计使用此标签的映射数量
+            expense_count = Expense.objects.filter(tags=obj, owner=user).count()
+            assets_count = Assets.objects.filter(tags=obj, owner=user).count()
+            income_count = Income.objects.filter(tags=obj, owner=user).count()
+            
+            return {
+                'expense': expense_count,
+                'assets': assets_count,
+                'income': income_count,
+                'total': expense_count + assets_count + income_count
+            }
+        except Exception as e:
+            return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
 
 
 class TagSerializer(serializers.ModelSerializer):
@@ -34,15 +76,16 @@ class TagSerializer(serializers.ModelSerializer):
     parent_name = serializers.CharField(source='parent.name', read_only=True)
     full_path = serializers.SerializerMethodField()
     has_children = serializers.SerializerMethodField()
+    mapping_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Tag
         fields = [
             'id', 'name', 'parent', 'parent_name', 'full_path',
-            'description', 'owner', 'enable', 'has_children',
+            'description', 'owner', 'enable', 'has_children', 'mapping_count',
             'created', 'modified'
         ]
-        read_only_fields = ['id', 'created', 'modified', 'owner']
+        read_only_fields = ['id', 'created', 'modified', 'owner', 'parent']
     
     def get_full_path(self, obj):
         """获取标签的完整路径"""
@@ -52,13 +95,57 @@ class TagSerializer(serializers.ModelSerializer):
         """检查是否有子标签"""
         return obj.has_children()
     
+    def get_mapping_count(self, obj):
+        """获取使用此标签的映射数量"""
+        try:
+            from django.apps import apps
+            
+            # 获取映射模型
+            Expense = apps.get_model('maps', 'Expense')
+            Assets = apps.get_model('maps', 'Assets')
+            Income = apps.get_model('maps', 'Income')
+            
+            # 获取当前用户
+            request = self.context.get('request')
+            if not request:
+                return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+            
+            # 统计使用此标签的映射数量
+            expense_count = Expense.objects.filter(tags=obj, owner=user).count()
+            assets_count = Assets.objects.filter(tags=obj, owner=user).count()
+            income_count = Income.objects.filter(tags=obj, owner=user).count()
+            
+            return {
+                'expense': expense_count,
+                'assets': assets_count,
+                'income': income_count,
+                'total': expense_count + assets_count + income_count
+            }
+        except Exception:
+            return {'expense': 0, 'assets': 0, 'income': 0, 'total': 0}
+    
     def validate_name(self, value):
-        """验证标签名称格式"""
-        # 标签名称不能包含空格、#号等特殊字符
+        """验证标签名称格式
+        
+        支持两种输入方式：
+        1. 完整路径：Project/Decoration（自动创建父标签）
+        2. 单个名称：Irregular（无父标签）
+        """
         if not value or not value.strip():
             raise serializers.ValidationError("标签名称不能为空")
         
-        # 检查是否包含非法字符
+        # 检查是否包含非法字符（斜杠除外，用于路径）
         invalid_chars = [' ', '#', '\n', '\r', '\t']
         for char in invalid_chars:
             if char in value:

@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
+from django.apps import apps
 
 from project.apps.tags.models import Tag
 from project.apps.tags.serializers import (
@@ -285,6 +286,88 @@ class TagViewSet(ModelViewSet):
         except Exception as e:
             return Response(
                 {'error': f'删除标签失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'])
+    def mappings(self, request, pk=None):
+        """获取标签相关的映射"""
+        tag = self.get_object()
+
+        try:
+            Expense = apps.get_model('maps', 'Expense')
+            Assets = apps.get_model('maps', 'Assets')
+            Income = apps.get_model('maps', 'Income')
+
+            # 获取当前用户的映射，匿名用户使用id=1用户的映射
+            User = get_user_model()
+            if request.user.is_authenticated:
+                user = request.user
+            else:
+                # 匿名用户使用id=1用户的映射
+                try:
+                    user = User.objects.get(id=1)
+                except User.DoesNotExist:
+                    return Response(
+                        {'error': '默认用户（ID=1）不存在'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
+            # 通过多对多关系获取包含该标签的映射
+            expense_mappings = Expense.objects.filter(
+                tags=tag, 
+                owner=user
+            )
+            assets_mappings = Assets.objects.filter(
+                tags=tag, 
+                owner=user
+            )
+            income_mappings = Income.objects.filter(
+                tags=tag, 
+                owner=user
+            )
+
+            result = {
+                'tag': tag.get_full_path(),
+                'tag_id': tag.id,
+                'expense_mappings': [
+                    {
+                        'id': m.id, 
+                        'key': m.key, 
+                        'payee': m.payee,
+                        'account': m.expend.account if m.expend else None,
+                        'currency': m.currency,
+                        'enable': m.enable
+                    }
+                    for m in expense_mappings
+                ],
+                'assets_mappings': [
+                    {
+                        'id': m.id, 
+                        'key': m.key, 
+                        'full': m.full,
+                        'account': m.assets.account if m.assets else None,
+                        'enable': m.enable
+                    }
+                    for m in assets_mappings
+                ],
+                'income_mappings': [
+                    {
+                        'id': m.id, 
+                        'key': m.key, 
+                        'payer': m.payer,
+                        'account': m.income.account if m.income else None,
+                        'enable': m.enable
+                    }
+                    for m in income_mappings
+                ],
+                'total_count': expense_mappings.count() + assets_mappings.count() + income_mappings.count()
+            }
+
+            return Response(result)
+        except Exception as e:
+            return Response(
+                {'error': f'获取映射失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     

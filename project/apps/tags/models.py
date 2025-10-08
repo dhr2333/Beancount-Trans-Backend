@@ -41,7 +41,7 @@ class Tag(BaseModel):
                 current = current.parent
     
     def save(self, *args, **kwargs):
-        """保存标签时自动处理父标签和状态同步"""
+        """保存标签时自动创建父标签，并同步状态"""
         # 检查enable字段是否发生变化
         enable_changed = False
         name_changed = False
@@ -57,11 +57,56 @@ class Tag(BaseModel):
             except Tag.DoesNotExist:
                 pass
         
+        # 如果没有父标签，但name中包含斜杠，自动创建父标签
+        if not self.parent and '/' in self.name:
+            parent_tag_path = '/'.join(self.name.split('/')[:-1])
+            # 提取最后一个部分作为实际的name
+            self.name = self.name.split('/')[-1]
+            try:
+                # 尝试获取已存在的父标签
+                self.parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
+            except Tag.DoesNotExist:
+                # 自动创建父标签
+                self.parent = self._create_parent_tag(parent_tag_path)
+        
         super().save(*args, **kwargs)
         
         # 如果enable状态发生变化，同步更新子标签状态
         if enable_changed and not self.enable:
             self._disable_children()
+    
+    def _create_parent_tag(self, parent_tag_path):
+        """递归创建父标签（参考 Account 的实现）"""
+        try:
+            # 尝试获取父标签
+            parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
+            return parent
+        except Tag.DoesNotExist:
+            # 如果父标签不存在，递归创建
+            if '/' in parent_tag_path:
+                # 还有更上级的父标签，先创建上级父标签
+                grandparent_path = '/'.join(parent_tag_path.split('/')[:-1])
+                grandparent = self._create_parent_tag(grandparent_path)
+                
+                # 提取当前层级的标签名
+                current_name = parent_tag_path.split('/')[-1]
+                
+                # 创建当前父标签
+                parent = Tag.objects.create(
+                    name=current_name,
+                    owner=self.owner,
+                    parent=grandparent,
+                    enable=True
+                )
+            else:
+                # 这是根级标签，直接创建
+                parent = Tag.objects.create(
+                    name=parent_tag_path,
+                    owner=self.owner,
+                    enable=True
+                )
+            
+            return parent
     
     def _disable_children(self):
         """递归禁用所有子标签"""
