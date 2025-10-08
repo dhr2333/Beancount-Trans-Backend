@@ -40,7 +40,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         installment_cycle = get_installment_cycle(row)
         discount = get_discount(row)
         currency = expense_handler.get_currency()
-        
+
         # 获取映射标签并合并
         mapping_tags = expense_handler.get_mapping_tags()
         merged_tag = merge_tags(

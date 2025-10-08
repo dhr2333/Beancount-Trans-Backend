@@ -209,7 +209,7 @@ class ExpenseHandler:
         if self.selected_expense_instance:
             # 获取映射关联的标签
             self._load_mapping_tags(self.selected_expense_instance)
-            
+
             if self.selected_key:
                 self.selected_expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=self.selected_key).first()
                 if self.selected_expense_instance:
@@ -227,7 +227,7 @@ class ExpenseHandler:
                 return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
-    
+
     def _load_mapping_tags(self, mapping_instance):
         """加载映射关联的标签"""
         try:
@@ -235,7 +235,7 @@ class ExpenseHandler:
         except Exception as e:
             logger.error(f"加载映射标签失败: {str(e)}")
             self.mapping_tags = []
-    
+
     def get_mapping_tags(self):
         """获取当前映射的标签列表"""
         return self.mapping_tags

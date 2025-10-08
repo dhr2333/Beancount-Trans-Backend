@@ -46,7 +46,7 @@ sys.modules['django.conf'] = type('MockDjangoConf', (), {
 def test_storage_import():
     """测试存储模块导入"""
     print("测试存储模块导入...")
-    
+
     try:
         from project.utils.storage_factory import StorageBackend, StorageFactory, get_storage_client
         print("✓ 成功导入存储模块")
@@ -58,25 +58,25 @@ def test_storage_import():
 def test_storage_backend_creation():
     """测试存储后端创建"""
     print("测试存储后端创建...")
-    
+
     try:
         from project.utils.storage_factory import StorageBackend, StorageFactory
-        
+
         # 测试MinIO后端
         from project.utils.minio import MinIOBackend
         minio_backend = MinIOBackend(MockSettings.MINIO_CONFIG)
         print("✓ MinIO后端创建成功")
-        
+
         # 测试OSS后端
         from project.utils.oss_conn import OSSBackend
         oss_backend = OSSBackend(MockSettings.OSS_CONFIG)
         print("✓ OSS后端创建成功")
-        
+
         # 测试S3后端
         from project.utils.s3_conn import S3Backend
         s3_backend = S3Backend(MockSettings.S3_CONFIG)
         print("✓ S3后端创建成功")
-        
+
         return True
     except Exception as e:
         print(f"✗ 后端创建失败: {e}")
@@ -87,10 +87,10 @@ def test_storage_backend_creation():
 def test_storage_factory():
     """测试存储工厂"""
     print("测试存储工厂...")
-    
+
     try:
         from project.utils.storage_factory import StorageFactory
-        
+
         # 测试工厂单例
         factory1 = StorageFactory()
         factory2 = StorageFactory()
@@ -99,14 +99,14 @@ def test_storage_factory():
         else:
             print("✗ 工厂单例模式异常")
             return False
-        
+
         # 测试获取后端（这里会失败，因为没有真实的连接）
         try:
             backend = factory1.get_backend()
             print(f"✓ 成功获取后端: {type(backend).__name__}")
         except Exception as e:
             print(f"⚠ 获取后端时出现预期错误（因为没有真实连接）: {e}")
-        
+
         return True
     except Exception as e:
         print(f"✗ 工厂测试失败: {e}")
@@ -115,14 +115,14 @@ def test_storage_factory():
 def test_abstract_methods():
     """测试抽象方法"""
     print("测试抽象方法...")
-    
+
     try:
         from project.utils.storage_factory import StorageBackend
         from project.utils.minio import MinIOBackend
-        
+
         # 创建MinIO后端实例
         backend = MinIOBackend(MockSettings.MINIO_CONFIG)
-        
+
         # 检查是否有必要的方法
         required_methods = ['upload_file', 'download_file', 'delete_file', 'file_exists', 'get_file_url']
         for method in required_methods:
@@ -131,7 +131,7 @@ def test_abstract_methods():
             else:
                 print(f"✗ 方法 {method} 缺失")
                 return False
-        
+
         return True
     except Exception as e:
         print(f"✗ 抽象方法测试失败: {e}")
@@ -142,17 +142,17 @@ def main():
     print("=" * 50)
     print("存储系统简化测试")
     print("=" * 50)
-    
+
     tests = [
         ("模块导入", test_storage_import),
         ("抽象方法", test_abstract_methods),
         ("后端创建", test_storage_backend_creation),
         ("存储工厂", test_storage_factory),
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test_name, test_func in tests:
         print(f"\n--- {test_name} ---")
         if test_func():
@@ -160,10 +160,10 @@ def main():
             print(f"✓ {test_name} 通过")
         else:
             print(f"✗ {test_name} 失败")
-    
+
     print("\n" + "=" * 50)
     print(f"测试结果: {passed}/{total} 通过")
-    
+
     if passed == total:
         print("🎉 所有测试通过！存储抽象层实现正确。")
         print("\n下一步:")

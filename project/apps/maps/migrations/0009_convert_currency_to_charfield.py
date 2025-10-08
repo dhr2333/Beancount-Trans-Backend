@@ -8,7 +8,7 @@ def convert_currency_fk_to_string(apps, schema_editor):
     # Currency表已经不存在了，需要使用原始SQL
     # 如果currency_id字段存在且有值，我们将其设置为'CNY'作为默认值
     # 因为无法再获取原来的货币代码
-    
+
     # 检查currency_id列是否存在
     with schema_editor.connection.cursor() as cursor:
         # 检查maps_expense表是否有currency_id列
@@ -18,7 +18,7 @@ def convert_currency_fk_to_string(apps, schema_editor):
             WHERE table_name='maps_expense' AND column_name='currency_id'
         """)
         expense_has_currency_id = cursor.fetchone() is not None
-        
+
         if expense_has_currency_id:
             # 将有currency_id的记录设置currency_temp为'CNY'
             cursor.execute("""
@@ -26,7 +26,7 @@ def convert_currency_fk_to_string(apps, schema_editor):
                 SET currency_temp = 'CNY' 
                 WHERE currency_id IS NOT NULL
             """)
-        
+
         # 检查maps_template_item表是否有currency_id列
         cursor.execute("""
             SELECT column_name 
@@ -34,7 +34,7 @@ def convert_currency_fk_to_string(apps, schema_editor):
             WHERE table_name='maps_template_item' AND column_name='currency_id'
         """)
         item_has_currency_id = cursor.fetchone() is not None
-        
+
         if item_has_currency_id:
             # 将有currency_id的记录设置currency_temp为'CNY'
             cursor.execute("""

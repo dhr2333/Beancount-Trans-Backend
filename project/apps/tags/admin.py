@@ -10,7 +10,7 @@ class TagAdmin(admin.ModelAdmin):
     search_fields = ['name', 'description']
     ordering = ['owner', 'name']
     raw_id_fields = ['owner', 'parent']
-    
+
     fieldsets = (
         ('基础信息', {
             'fields': ('name', 'parent', 'description')
@@ -26,14 +26,14 @@ class TagAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     readonly_fields = ['created', 'modified']
-    
+
     def get_queryset(self, request):
         """优化查询性能"""
         qs = super().get_queryset(request)
         return qs.select_related('parent', 'owner')
-    
+
     def get_full_path(self, obj):
         """显示完整路径"""
         return obj.get_full_path()

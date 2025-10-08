@@ -14,7 +14,7 @@ class BaseMappingViewSet(ModelViewSet):
     permission_classes = [AnonymousReadOnlyPermission]
     filter_backends = [AnonymousUserFilterBackend]
     authentication_classes = [JWTAuthentication]
-    
+
     def create(self, request, *args, **kwargs):
         """重写create方法，实现批量创建"""
         if self.request.user.is_anonymous:
@@ -40,15 +40,15 @@ class BaseMappingViewSet(ModelViewSet):
         key = self.request.data.get("key")
         if key and self.get_queryset().filter(owner_id=self.request.user, key=key).exists():
             raise ValidationError("Account already exists.")
-        
+
         serializer.save(owner=self.request.user)
 
     def perform_update(self, serializer):
         """更新时检查重复"""
         instance = self.get_object()
         key = self.request.data.get('key', instance.key)
-        
+
         if key and self.get_queryset().filter(owner_id=self.request.user, key=key).exclude(id=instance.id).exists():
             raise ValidationError("Account already exists.")
-        
+
         serializer.save(owner=self.request.user)

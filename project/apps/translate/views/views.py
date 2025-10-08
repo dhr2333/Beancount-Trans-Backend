@@ -240,19 +240,19 @@ class MultiBillAnalyzeView(APIView):
             parse_file = ParseFile.objects.filter(file_id=file_id).first()
             if parse_file and parse_file.status in ['pending', 'processing']:
                 pending_files.append(file_id)
-        
+
         if pending_files:
             return Response({
                 'error': '部分文件已在处理队列中',
                 'pending_files': pending_files
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 更新文件状态为待处理
         for file_id in file_ids:
             parse_file, _ = ParseFile.objects.get_or_create(file_id=file_id)
             parse_file.status = 'pending'
             parse_file.save()
-        
+
         # 创建任务组
         tasks = []
         args = {
@@ -264,20 +264,20 @@ class MultiBillAnalyzeView(APIView):
             'isCSVOnly': False
             # 'ignore_level': request.data.get('ignore_level', 'basic')  # 忽略级别
         }
-        
+
         for file_id in file_ids:
             task = parse_single_file_task.s(file_id, request.user.id, args)
             tasks.append(task)
-        
+
         task_group = group(tasks)
         group_result = task_group.apply_async()
-        
+
          # 获取每个任务的任务ID
         task_ids = [task.id for task in group_result.children] if group_result.children else []
-        
+
         # 生成任务组ID（使用UUID避免冲突）
         task_group_id = str(uuid.uuid4())
-        
+
         # 存储任务组信息到Redis
         task_group_info = {
             'group_id': group_result.id,
@@ -287,14 +287,14 @@ class MultiBillAnalyzeView(APIView):
             'status': 'pending'
         }
         cache.set(f'task_group:{task_group_id}', json.dumps(task_group_info), timeout=24*3600)
-        
+
         # 初始化任务状态
         for task_id in task_group_info['task_ids']:
             cache.set(f'task_status:{task_id}', {
                 'status': 'pending',
                 'file_id': file_ids[task_group_info['task_ids'].index(task_id)]
             }, timeout=24*3600)
-        
+
         return Response({
             'task_group_id': task_group_id,
             'status': 'pending'
@@ -312,15 +312,15 @@ class TaskGroupStatusView(APIView):
         # task_group_id = request.data.get('task_group_id')
         if not task_group_id:
             return Response({'error': '缺少任务组ID'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 从缓存获取任务组信息
         task_group_info = cache.get(f'task_group:{task_group_id}')
         if not task_group_info:
             return Response({'error': '任务组不存在或已过期'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         task_group_info = json.loads(task_group_info)
         group_result = GroupResult.restore(task_group_info['group_id'])
-        
+
         # 获取所有任务状态
         tasks_status = []
         completed_count = 0
@@ -335,7 +335,7 @@ class TaskGroupStatusView(APIView):
             })
             if task_status['status'] in ['success', 'failed']:
                 completed_count += 1
-        
+
         # 检查整体状态
         if completed_count == len(tasks_status):
             # 所有子任务都已完成（无论成功/失败）
@@ -344,10 +344,10 @@ class TaskGroupStatusView(APIView):
             task_group_info['status'] = 'completed'
         else:
             task_group_info['status'] = 'processing'
-        
+
         # 更新缓存
         cache.set(f'task_group:{task_group_id}', json.dumps(task_group_info), timeout=24*3600)
-        
+
         return Response({
             'task_group_id': task_group_id,
             'status': task_group_info['status'],

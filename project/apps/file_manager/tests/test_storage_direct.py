@@ -15,18 +15,18 @@ sys.path.insert(0, utils_path)
 def test_storage_factory():
     """测试存储工厂模块"""
     print("测试存储工厂模块...")
-    
+
     try:
         # 直接导入存储工厂
         from storage_factory import StorageBackend, StorageFactory, get_storage_client
         print("✓ 成功导入存储工厂模块")
-        
+
         # 测试抽象基类
         print("✓ StorageBackend抽象基类存在")
-        
+
         # 测试工厂类
         print("✓ StorageFactory类存在")
-        
+
         return True
     except ImportError as e:
         print(f"✗ 导入失败: {e}")
@@ -35,10 +35,10 @@ def test_storage_factory():
 def test_minio_backend():
     """测试MinIO后端"""
     print("测试MinIO后端...")
-    
+
     try:
         from minio import MinIOBackend
-        
+
         # 测试配置
         config = {
             'ENDPOINT': '127.0.0.1:9000',
@@ -47,11 +47,11 @@ def test_minio_backend():
             'BUCKET_NAME': 'beancount-trans',
             'USE_HTTPS': False
         }
-        
+
         # 创建后端实例
         backend = MinIOBackend(config)
         print("✓ MinIO后端创建成功")
-        
+
         # 检查方法
         methods = ['upload_file', 'download_file', 'delete_file', 'file_exists', 'get_file_url']
         for method in methods:
@@ -60,7 +60,7 @@ def test_minio_backend():
             else:
                 print(f"✗ 方法 {method} 缺失")
                 return False
-        
+
         return True
     except ImportError as e:
         print(f"✗ MinIO后端导入失败: {e}")
@@ -72,10 +72,10 @@ def test_minio_backend():
 def test_oss_backend():
     """测试OSS后端"""
     print("测试OSS后端...")
-    
+
     try:
         from oss_conn import OSSBackend
-        
+
         # 测试配置
         config = {
             'ENDPOINT': 'https://oss-cn-hangzhou.aliyuncs.com',
@@ -84,11 +84,11 @@ def test_oss_backend():
             'BUCKET_NAME': 'beancount-trans',
             'REGION': 'cn-hangzhou'
         }
-        
+
         # 创建后端实例
         backend = OSSBackend(config)
         print("✓ OSS后端创建成功")
-        
+
         # 检查方法
         methods = ['upload_file', 'download_file', 'delete_file', 'file_exists', 'get_file_url']
         for method in methods:
@@ -97,7 +97,7 @@ def test_oss_backend():
             else:
                 print(f"✗ 方法 {method} 缺失")
                 return False
-        
+
         return True
     except ImportError as e:
         print(f"✗ OSS后端导入失败: {e}")
@@ -109,10 +109,10 @@ def test_oss_backend():
 def test_s3_backend():
     """测试S3后端"""
     print("测试S3后端...")
-    
+
     try:
         from s3_conn import S3Backend
-        
+
         # 测试配置
         config = {
             'ENDPOINT_URL': 'https://s3.amazonaws.com',
@@ -123,11 +123,11 @@ def test_s3_backend():
             'USE_SSL': True,
             'VERIFY_SSL': True
         }
-        
+
         # 创建后端实例
         backend = S3Backend(config)
         print("✓ S3后端创建成功")
-        
+
         # 检查方法
         methods = ['upload_file', 'download_file', 'delete_file', 'file_exists', 'get_file_url']
         for method in methods:
@@ -136,7 +136,7 @@ def test_s3_backend():
             else:
                 print(f"✗ 方法 {method} 缺失")
                 return False
-        
+
         return True
     except ImportError as e:
         print(f"✗ S3后端导入失败: {e}")
@@ -148,20 +148,20 @@ def test_s3_backend():
 def test_abstract_interface():
     """测试抽象接口"""
     print("测试抽象接口...")
-    
+
     try:
         from storage_factory import StorageBackend
-        
+
         # 检查抽象基类的方法
         abstract_methods = StorageBackend.__abstractmethods__
         expected_methods = {'upload_file', 'download_file', 'delete_file', 'file_exists', 'get_file_url'}
-        
+
         if abstract_methods == expected_methods:
             print("✓ 抽象方法定义正确")
         else:
             print(f"✗ 抽象方法不匹配: 期望 {expected_methods}, 实际 {abstract_methods}")
             return False
-        
+
         return True
     except Exception as e:
         print(f"✗ 抽象接口测试失败: {e}")
@@ -172,7 +172,7 @@ def main():
     print("=" * 50)
     print("存储模块直接测试")
     print("=" * 50)
-    
+
     tests = [
         ("存储工厂", test_storage_factory),
         ("抽象接口", test_abstract_interface),
@@ -180,10 +180,10 @@ def main():
         ("OSS后端", test_oss_backend),
         ("S3后端", test_s3_backend),
     ]
-    
+
     passed = 0
     total = len(tests)
-    
+
     for test_name, test_func in tests:
         print(f"\n--- {test_name} ---")
         if test_func():
@@ -191,10 +191,10 @@ def main():
             print(f"✓ {test_name} 通过")
         else:
             print(f"✗ {test_name} 失败")
-    
+
     print("\n" + "=" * 50)
     print(f"测试结果: {passed}/{total} 通过")
-    
+
     if passed == total:
         print("🎉 所有测试通过！存储模块实现正确。")
         print("\n存储系统特性:")

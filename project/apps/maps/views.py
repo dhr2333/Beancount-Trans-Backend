@@ -39,25 +39,25 @@ class ExpenseViewSet(BaseMappingViewSet):
             'tags': serializer.data,
             'count': tags.count()
         })
-    
+
     @action(detail=True, methods=['post'])
     def add_tags(self, request, pk=None):
         """为支出映射添加标签
-        
+
         请求体: {"tag_ids": [1, 2, 3]}
         """
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         expense = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 验证标签是否存在且属于当前用户
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user, enable=True)
@@ -66,46 +66,46 @@ class ExpenseViewSet(BaseMappingViewSet):
                 {"error": "部分标签不存在、已禁用或无权限访问"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 添加标签（不会重复添加）
         expense.tags.add(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         all_tags = expense.tags.filter(enable=True)
         serializer = TagSerializer(all_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功添加 {len(tag_ids)} 个标签',
             'tags': serializer.data
         })
-    
+
     @action(detail=True, methods=['post'])
     def remove_tags(self, request, pk=None):
         """从支出映射中移除标签
-        
+
         请求体: {"tag_ids": [1, 2, 3]}
         """
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         expense = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 移除标签
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user)
         expense.tags.remove(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         remaining_tags = expense.tags.filter(enable=True)
         serializer = TagSerializer(remaining_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功移除 {len(tag_ids)} 个标签',
             'tags': serializer.data
@@ -116,16 +116,16 @@ class ExpenseViewSet(BaseMappingViewSet):
         """批量更新支出映射的账户"""
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         serializer = ExpenseBatchUpdateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         data = serializer.validated_data
         expense_ids = data['expense_ids']
         expend_id = data.get('expend_id')
         currency = data.get('currency')
-        
+
         # 验证支出映射是否属于当前用户
         expenses = Expense.objects.filter(id__in=expense_ids, owner=request.user)
         if len(expenses) != len(expense_ids):
@@ -133,7 +133,7 @@ class ExpenseViewSet(BaseMappingViewSet):
                 {"error": "部分支出映射不存在或无权限访问"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 验证账户是否存在
         if expend_id:
             from project.apps.account.models import Account
@@ -144,7 +144,7 @@ class ExpenseViewSet(BaseMappingViewSet):
                     {"error": "指定的支出账户不存在或无权限访问"}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        
+
         # 批量更新
         updated_count = 0
         for expense in expenses:
@@ -154,7 +154,7 @@ class ExpenseViewSet(BaseMappingViewSet):
                 expense.currency = currency
             expense.save()
             updated_count += 1
-        
+
         return Response({
             "message": f"成功更新 {updated_count} 个支出映射",
             "updated_count": updated_count
@@ -185,22 +185,22 @@ class AssetsViewSet(BaseMappingViewSet):
             'tags': serializer.data,
             'count': tags.count()
         })
-    
+
     @action(detail=True, methods=['post'])
     def add_tags(self, request, pk=None):
         """为资产映射添加标签"""
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         asset = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user, enable=True)
         if tags.count() != len(tag_ids):
@@ -208,41 +208,41 @@ class AssetsViewSet(BaseMappingViewSet):
                 {"error": "部分标签不存在、已禁用或无权限访问"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         asset.tags.add(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         all_tags = asset.tags.filter(enable=True)
         serializer = TagSerializer(all_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功添加 {len(tag_ids)} 个标签',
             'tags': serializer.data
         })
-    
+
     @action(detail=True, methods=['post'])
     def remove_tags(self, request, pk=None):
         """从资产映射中移除标签"""
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         asset = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user)
         asset.tags.remove(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         remaining_tags = asset.tags.filter(enable=True)
         serializer = TagSerializer(remaining_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功移除 {len(tag_ids)} 个标签',
             'tags': serializer.data
@@ -273,22 +273,22 @@ class IncomeViewSet(BaseMappingViewSet):
             'tags': serializer.data,
             'count': tags.count()
         })
-    
+
     @action(detail=True, methods=['post'])
     def add_tags(self, request, pk=None):
         """为收入映射添加标签"""
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         income = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user, enable=True)
         if tags.count() != len(tag_ids):
@@ -296,41 +296,41 @@ class IncomeViewSet(BaseMappingViewSet):
                 {"error": "部分标签不存在、已禁用或无权限访问"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         income.tags.add(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         all_tags = income.tags.filter(enable=True)
         serializer = TagSerializer(all_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功添加 {len(tag_ids)} 个标签',
             'tags': serializer.data
         })
-    
+
     @action(detail=True, methods=['post'])
     def remove_tags(self, request, pk=None):
         """从收入映射中移除标签"""
         if request.user.is_anonymous:
             raise PermissionDenied("Permission denied. Please log in.")
-        
+
         income = self.get_object()
         tag_ids = request.data.get('tag_ids', [])
-        
+
         if not tag_ids:
             return Response(
                 {"error": "tag_ids字段不能为空"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         from project.apps.tags.models import Tag
         tags = Tag.objects.filter(id__in=tag_ids, owner=request.user)
         income.tags.remove(*tags)
-        
+
         from project.apps.tags.serializers import TagSerializer
         remaining_tags = income.tags.filter(enable=True)
         serializer = TagSerializer(remaining_tags, many=True, context={'request': request})
-        
+
         return Response({
             'message': f'成功移除 {len(tag_ids)} 个标签',
             'tags': serializer.data
@@ -373,7 +373,7 @@ class TemplateViewSet(ModelViewSet):
 
         # 对于详情视图，预取items以提高性能
         context['queryset'] = Template.objects.prefetch_related('items')
-        
+
         return context
 
     def retrieve(self, request, *args, **kwargs):

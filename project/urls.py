@@ -60,7 +60,7 @@ router.register(
 urlpatterns = [
     path('api/', include(router.urls)),
     path('admin/', admin.site.urls),  # 管理地址
-    
+
     # API文档 - drf-spectacular
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI schema
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI

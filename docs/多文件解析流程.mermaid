@@ -11,7 +11,7 @@ sequenceDiagram
     F->>B: POST /translate/multi (文件ID列表)
     B->>DB: 查询ParseFile状态
     DB-->>B: 返回文件状态
-    
+
     alt 有文件已在处理中
         B-->>F: 返回错误(400) + 处理中文件列表
     else 所有文件可处理
@@ -29,11 +29,11 @@ sequenceDiagram
         DB-->>W: 返回MinIO存储路径
         W->>M: 获取文件内容
         M-->>W: 返回文件数据
-        
+
         W->>W: 解析账单内容
         W->>FS: 写入.bean文件
         W->>DB: 更新ParseFile状态为success/failed
-        
+
         W->>R: 更新任务状态(key: task_status:<task_id>)
         W->>R: 更新任务组进度(key: task_group:<id>)
         W-->>C: 返回任务结果

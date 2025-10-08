@@ -14,7 +14,7 @@ class BaseModelTestMixin:
             username='testuser',
             password='testpass123'
         )
-        
+
         # 创建测试账户
         cls.expense_account = Account.objects.create(
             account="Expenses:Groceries",
