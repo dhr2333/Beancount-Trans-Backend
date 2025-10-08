@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
 from project.apps.account.models import Account
+from project.apps.tags.models import Tag
 
 
 class AccountSummarySerializer(serializers.ModelSerializer):
@@ -10,11 +11,21 @@ class AccountSummarySerializer(serializers.ModelSerializer):
         fields = ['id', 'account', 'enable']
 
 
+class TagSummarySerializer(serializers.ModelSerializer):
+    """标签摘要序列化器，用于在映射中显示标签信息"""
+    full_path = serializers.CharField(source='get_full_path', read_only=True)
+    
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'full_path', 'enable']
+
+
 class ExpenseSerializer(serializers.ModelSerializer):
     payee = serializers.CharField(allow_blank=True, allow_null=True)
     
     # 读取时显示详细信息
     expend = AccountSummarySerializer(read_only=True)
+    tags = TagSummarySerializer(many=True, read_only=True)
     
     # 写入时使用ID
     expend_id = serializers.PrimaryKeyRelatedField(
@@ -24,21 +35,52 @@ class ExpenseSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        help_text="标签ID列表"
+    )
     
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Expense
-        fields = ['id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'currency', 'enable']
+        fields = ['id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'currency', 'enable', 'tags', 'tag_ids']
         extra_kwargs = {
             'key': {'required': False}  # 允许更新时不传 key
         }
+    
+    def create(self, validated_data):
+        """创建支出映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', [])
+        expense = Expense.objects.create(**validated_data)
+        if tag_ids:
+            expense.tags.set(tag_ids)
+        return expense
+    
+    def update(self, instance, validated_data):
+        """更新支出映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # 更新基本字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # 更新标签关联（如果提供了tag_ids）
+        if tag_ids is not None:
+            instance.tags.set(tag_ids)
+        
+        return instance
 
 
 class AssetsSerializer(serializers.ModelSerializer):
     # 读取时显示详细信息
     assets = AccountSummarySerializer(read_only=True)
+    tags = TagSummarySerializer(many=True, read_only=True)
     
     # 写入时使用ID
     assets_id = serializers.PrimaryKeyRelatedField(
@@ -48,18 +90,49 @@ class AssetsSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        help_text="标签ID列表"
+    )
     
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Assets
-        fields = ['id', 'owner', 'key', 'full', 'assets', 'assets_id', 'enable']
+        fields = ['id', 'owner', 'key', 'full', 'assets', 'assets_id', 'enable', 'tags', 'tag_ids']
+    
+    def create(self, validated_data):
+        """创建资产映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', [])
+        asset = Assets.objects.create(**validated_data)
+        if tag_ids:
+            asset.tags.set(tag_ids)
+        return asset
+    
+    def update(self, instance, validated_data):
+        """更新资产映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # 更新基本字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # 更新标签关联（如果提供了tag_ids）
+        if tag_ids is not None:
+            instance.tags.set(tag_ids)
+        
+        return instance
 
 
 class IncomeSerializer(serializers.ModelSerializer):
     # 读取时显示详细信息
     income = AccountSummarySerializer(read_only=True)
+    tags = TagSummarySerializer(many=True, read_only=True)
     
     # 写入时使用ID
     income_id = serializers.PrimaryKeyRelatedField(
@@ -69,13 +142,43 @@ class IncomeSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True
     )
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        help_text="标签ID列表"
+    )
     
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Income
-        fields = ['id', 'owner', 'key', 'payer', 'income', 'income_id', 'enable']
+        fields = ['id', 'owner', 'key', 'payer', 'income', 'income_id', 'enable', 'tags', 'tag_ids']
+    
+    def create(self, validated_data):
+        """创建收入映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', [])
+        income = Income.objects.create(**validated_data)
+        if tag_ids:
+            income.tags.set(tag_ids)
+        return income
+    
+    def update(self, instance, validated_data):
+        """更新收入映射，处理标签关联"""
+        tag_ids = validated_data.pop('tag_ids', None)
+        
+        # 更新基本字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # 更新标签关联（如果提供了tag_ids）
+        if tag_ids is not None:
+            instance.tags.set(tag_ids)
+        
+        return instance
 
 
 class TemplateItemSerializer(serializers.ModelSerializer):

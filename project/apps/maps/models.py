@@ -12,6 +12,7 @@ class Expense(BaseModel):
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
     currency = models.CharField(max_length=24, null=True, blank=True, help_text="货币代码")
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
+    tags = models.ManyToManyField('tags.Tag', blank=True, related_name='expense_mappings', help_text="关联标签")
 
     class Meta:
         db_table = 'maps_expense'
@@ -28,6 +29,7 @@ class Assets(BaseModel):
     assets = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="资产账户")
     owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
+    tags = models.ManyToManyField('tags.Tag', blank=True, related_name='assets_mappings', help_text="关联标签")
 
     class Meta:
         db_table = 'maps_assets'
@@ -44,6 +46,7 @@ class Income(BaseModel):
     income = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="收入账户")
     owner = models.ForeignKey(User, related_name='income', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
+    tags = models.ManyToManyField('tags.Tag', blank=True, related_name='income_mappings', help_text="关联标签")
 
     class Meta:
         db_table = 'maps_income'
