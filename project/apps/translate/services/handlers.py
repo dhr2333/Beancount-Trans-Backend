@@ -102,6 +102,7 @@ class ExpenseHandler:
         self.model = model
         self.selected_expense_key = None
         self.expense_candidates_with_score = []  # 如果你想带分数
+        self.mapping_tags = []  # 新增：存储映射关联的标签
 
         # 初始化相似度计算模型
         if model == "BERT":
@@ -206,8 +207,13 @@ class ExpenseHandler:
                 self.selected_expense_key = self.selected_expense_instance.key
 
         if self.selected_expense_instance:
+            # 获取映射关联的标签
+            self._load_mapping_tags(self.selected_expense_instance)
+            
             if self.selected_key:
                 self.selected_expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=self.selected_key).first()
+                if self.selected_expense_instance:
+                    self._load_mapping_tags(self.selected_expense_instance)
                 expend = self.selected_expense_instance.expend.account
                 if expend == "Expenses:Food":
                     expend += self._determine_food_category(self.time)
@@ -221,6 +227,18 @@ class ExpenseHandler:
                 return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
+    
+    def _load_mapping_tags(self, mapping_instance):
+        """加载映射关联的标签"""
+        try:
+            self.mapping_tags = list(mapping_instance.tags.filter(enable=True))
+        except Exception as e:
+            logger.error(f"加载映射标签失败: {str(e)}")
+            self.mapping_tags = []
+    
+    def get_mapping_tags(self):
+        """获取当前映射的标签列表"""
+        return self.mapping_tags
 
     def _process_income(self, data: Dict, ownerid: int) -> str:
         """处理收入逻辑"""
