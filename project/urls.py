@@ -19,6 +19,7 @@ from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet
 from project.apps.translate.views.views import UserConfigAPI
 from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
 from project.apps.account.views import AccountViewSet
+from project.apps.tags.views import TagViewSet
 from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
@@ -42,6 +43,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 router = routers.DefaultRouter()
 router.register(r'account', AccountViewSet, basename='account')
+router.register(r'tags', TagViewSet, basename='tag')
 router.register(r'expense', ExpenseViewSet, basename="expense")
 router.register(r'assets', AssetsViewSet, basename="assets")
 router.register(r'income', IncomeViewSet, basename="income")
