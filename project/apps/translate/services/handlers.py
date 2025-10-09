@@ -103,6 +103,7 @@ class ExpenseHandler:
         self.selected_expense_key = None
         self.expense_candidates_with_score = []  # 如果你想带分数
         self.mapping_tags = []  # 新增：存储映射关联的标签
+        self.all_candidates_tags = []  # 新增：存储所有候选映射的标签
 
         # 初始化相似度计算模型
         if model == "BERT":
@@ -189,6 +190,10 @@ class ExpenseHandler:
                     max_order = current_order
                     self.selected_expense_instance = expense_instance
 
+        # 收集所有候选映射的标签
+        if len(conflict_candidates) > 0:
+            self._load_all_candidates_tags(conflict_candidates)
+
         if len(conflict_candidates) > 1 and self.model != "None":
             selected_instance = self._resolve_expense_conflict(conflict_candidates,
                 f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元")  # 构造语义化查询
@@ -236,9 +241,32 @@ class ExpenseHandler:
             logger.error(f"加载映射标签失败: {str(e)}")
             self.mapping_tags = []
 
+    def _load_all_candidates_tags(self, conflict_candidates: List[Tuple[int, object]]):
+        """加载所有候选映射的标签"""
+        try:
+            all_tags = []
+            for _, instance in conflict_candidates:
+                tags = list(instance.tags.filter(enable=True))
+                all_tags.extend(tags)
+            # 去重，保持标签对象唯一性
+            seen_tag_ids = set()
+            unique_tags = []
+            for tag in all_tags:
+                if tag.id not in seen_tag_ids:
+                    seen_tag_ids.add(tag.id)
+                    unique_tags.append(tag)
+            self.all_candidates_tags = unique_tags
+        except Exception as e:
+            logger.error(f"加载候选标签失败: {str(e)}")
+            self.all_candidates_tags = []
+
     def get_mapping_tags(self):
         """获取当前映射的标签列表"""
         return self.mapping_tags
+
+    def get_all_candidates_tags(self):
+        """获取所有候选映射的标签列表"""
+        return self.all_candidates_tags
 
     def _process_income(self, data: Dict, ownerid: int) -> str:
         """处理收入逻辑"""

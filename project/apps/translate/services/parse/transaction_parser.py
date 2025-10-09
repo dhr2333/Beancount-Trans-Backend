@@ -41,11 +41,11 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         discount = get_discount(row)
         currency = expense_handler.get_currency()
 
-        # 获取映射标签并合并
-        mapping_tags = expense_handler.get_mapping_tags()
+        # 获取所有候选映射的标签并合并
+        all_candidates_tags = expense_handler.get_all_candidates_tags()
         merged_tag = merge_tags(
             source_tag=source_tag,
-            mapping_tags=mapping_tags,
+            mapping_tags=all_candidates_tags,
             config={
                 'deduplicate': True,
                 'keep_source': True,  # 保留原始标签
