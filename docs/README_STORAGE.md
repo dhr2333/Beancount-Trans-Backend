@@ -90,17 +90,17 @@ class FileViewSet(ModelViewSet):
     def create(self, request):
         storage_client = get_storage_client()
         uploaded_file = request.FILES['file']
-        
+
         # 生成存储名称
         storage_name = f"{generate_file_hash(uploaded_file)}{os.path.splitext(uploaded_file.name)[1]}"
-        
+
         # 上传文件
         success = storage_client.upload_file(
             storage_name,
             uploaded_file,
             content_type=uploaded_file.content_type
         )
-        
+
         if success:
             # 保存到数据库
             file_obj = File.objects.create(

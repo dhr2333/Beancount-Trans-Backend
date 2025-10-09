@@ -346,12 +346,12 @@ class BeanFileManager:
         """
         bean_path = BeanFileManager.get_bean_file_path(username, filename)
         BeanFileManager.ensure_user_assets_dir(username)
-        
+
         if not os.path.exists(bean_path):
             with open(bean_path, 'w', encoding='utf-8') as f:
                 pass  # 创建空文件
             # logger.info(f"创建空bean文件: {bean_path}")
-        
+
         return os.path.basename(bean_path)
         # user_assets_path = BeanFileManager.get_user_assets_path(username)
         # os.makedirs(user_assets_path, exist_ok=True)

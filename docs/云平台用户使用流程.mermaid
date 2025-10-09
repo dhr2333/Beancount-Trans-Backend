@@ -10,13 +10,13 @@ sequenceDiagram
     participant Fava容器
     participant 文件系统
     participant 定时任务
-    
+
     用户->>前端: 1. 上传账单文件
     前端->>后端: 发送文件
     后端->>MinIO: 存储原始文件
     后端->>文件系统: 创建同名.bean文件
     后端->>PostgreSQL: 记录上传信息
-    
+
     用户->>前端: 2. 提交批量解析
     前端->>后端: 提交解析请求
     后端->>Celery: 创建任务
@@ -29,13 +29,13 @@ sequenceDiagram
     end
     Worker->>文件系统: 存储解析结果(.bean)
     后端-->>前端: 返回任务ID
-    
+
     loop 状态轮询
         用户->>前端: 查看进度
         前端->>后端: 查询任务状态
         后端-->>前端: 返回进度
     end
-    
+
     用户->>前端: 3. 访问"平台账本"
     前端->>后端: GET /api/fava
     alt 实例存在
@@ -46,7 +46,7 @@ sequenceDiagram
     后端-->>前端: 返回账本URL
     前端->>Fava容器: 302重定向到实例URL
     Fava容器-->>用户: 显示报表
-    
+
     rect rgba(0, 255, 0, 0.1)
         定时任务->>后端: 每分钟触发
         后端->>Fava容器: 检查最后访问时间

@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from project.apps.maps.models import Expense, Assets, Income
-from project.apps.account.models import Account, Currency
+from project.apps.account.models import Account
 
 class BaseModelTestMixin:
     """测试模型公共基类的共享逻辑"""
@@ -14,7 +14,7 @@ class BaseModelTestMixin:
             username='testuser',
             password='testpass123'
         )
-        
+
         # 创建测试账户
         cls.expense_account = Account.objects.create(
             account="Expenses:Groceries",
@@ -40,13 +40,6 @@ class BaseModelTestMixin:
             account="Income:Other",
             owner=cls.user
         )
-        
-        # 创建测试货币
-        cls.currency = Currency.objects.create(
-            code="CNY",
-            name="人民币",
-            owner=cls.user
-        )
 
 class ExpenseModelTest(BaseModelTestMixin, TestCase):
     def test_expense_creation(self):
@@ -55,7 +48,7 @@ class ExpenseModelTest(BaseModelTestMixin, TestCase):
             key="food",
             payee="超市",
             expend=self.expense_account,
-            currency=self.currency,
+            currency="CNY",
             owner=self.user
         )
 
@@ -63,7 +56,7 @@ class ExpenseModelTest(BaseModelTestMixin, TestCase):
         self.assertEqual(expense.key, "food")
         self.assertEqual(expense.payee, "超市")
         self.assertEqual(expense.expend.account, "Expenses:Groceries")
-        self.assertEqual(expense.currency.code, "CNY")
+        self.assertEqual(expense.currency, "CNY")
         self.assertEqual(expense.owner.username, "testuser")
 
         # 测试默认值

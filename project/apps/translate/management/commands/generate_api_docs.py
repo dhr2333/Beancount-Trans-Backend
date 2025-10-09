@@ -30,18 +30,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         output_file = options['output']
         output_format = options['format']
-        
+
         self.stdout.write('正在生成API文档...')
-        
+
         # 创建schema生成器
         generator = SchemaGenerator()
         schema = generator.get_schema(request=None, public=True)
-        
+
         # 确保输出目录存在
         output_dir = os.path.dirname(output_file)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # 根据格式输出文件
         if output_format == 'json':
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -50,11 +50,11 @@ class Command(BaseCommand):
             import yaml
             with open(output_file, 'w', encoding='utf-8') as f:
                 yaml.dump(schema, f, default_flow_style=False, allow_unicode=True)
-        
+
         self.stdout.write(
             self.style.SUCCESS(f'API文档已生成: {output_file}')
         )
-        
+
         # 显示访问URL
         self.stdout.write('\nAPI文档访问地址:')
         self.stdout.write(f'  Swagger UI: http://localhost:8000/api/docs/')

@@ -3,6 +3,7 @@ from datetime import timedelta, datetime
 from typing import Dict
 from project.apps.translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
 from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
+from project.apps.translate.services.tag_merger import merge_tags
 
 
 def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_key: str) -> Dict:
@@ -28,7 +29,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         amount = get_amount(row)
         payee = payee_handler.get_payee(row, owner_id)
         note = get_note(row)
-        tag = get_tag(row)
+        source_tag = get_tag(row)  # 原始标签
         balance = get_balance(row)
         balance_date = (datetime.strptime(row['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(row)
@@ -39,6 +40,19 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         installment_cycle = get_installment_cycle(row)
         discount = get_discount(row)
         currency = expense_handler.get_currency()
+
+        # 获取所有候选映射的标签并合并
+        all_candidates_tags = expense_handler.get_all_candidates_tags()
+        merged_tag = merge_tags(
+            source_tag=source_tag,
+            mapping_tags=all_candidates_tags,
+            config={
+                'deduplicate': True,
+                'keep_source': True,  # 保留原始标签
+                'separator': ' ',
+                'sort_alpha': False
+            }
+        )
 
         # 根据beancount规范重新制订返回的字段
         # result = {
@@ -73,7 +87,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
             "status": status,
             "payee": payee,
             "note": note,
-            "tag": tag,
+            "tag": merged_tag,  # 使用合并后的标签
             "balance": balance,
             "balance_date": balance_date,
             "expense": expense,

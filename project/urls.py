@@ -18,7 +18,8 @@ from django.urls import path, include
 from project.apps.maps.views import ExpenseViewSet, AssetsViewSet, IncomeViewSet, TemplateViewSet,TemplateItemViewSet
 from project.apps.translate.views.views import UserConfigAPI
 from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
-from project.apps.account.views import AccountViewSet, CurrencyViewSet
+from project.apps.account.views import AccountViewSet
+from project.apps.tags.views import TagViewSet
 from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
@@ -42,7 +43,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 
 router = routers.DefaultRouter()
 router.register(r'account', AccountViewSet, basename='account')
-router.register(r'currencies', CurrencyViewSet, basename='currency')
+router.register(r'tags', TagViewSet, basename='tag')
 router.register(r'expense', ExpenseViewSet, basename="expense")
 router.register(r'assets', AssetsViewSet, basename="assets")
 router.register(r'income', IncomeViewSet, basename="income")
@@ -59,7 +60,7 @@ router.register(
 urlpatterns = [
     path('api/', include(router.urls)),
     path('admin/', admin.site.urls),  # 管理地址
-    
+
     # API文档 - drf-spectacular
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI schema
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI

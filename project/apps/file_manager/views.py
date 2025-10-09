@@ -21,7 +21,7 @@ from project.utils.file import BeanFileManager
 class DirectoryViewSet(ModelViewSet):
     """
     目录管理视图集
-    
+
     提供目录的增删改查功能，包括获取目录内容等操作。
     所有操作都需要用户认证，且只能操作自己的数据。
     """
@@ -156,7 +156,7 @@ class FileViewSet(ModelViewSet):
                 uploaded_file,
                 content_type=uploaded_file.content_type
             )
-            
+
             if not success:
                 return Response({"error": "文件上传失败"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -173,7 +173,7 @@ class FileViewSet(ModelViewSet):
             ParseFile.objects.create(
                file=file_obj,
             )
-            
+
             bean_filename = BeanFileManager.create_bean_file(
                 request.user.username,
                 uploaded_file.name
@@ -199,10 +199,10 @@ class FileViewSet(ModelViewSet):
         try:
             # 从存储获取文件
             file_data = storage_client.download_file(file_obj.storage_name)
-            
+
             if file_data is None:
                 return Response({"error": "文件不存在"}, status=status.HTTP_404_NOT_FOUND)
-            
+
             from urllib.parse import quote
             safe_name = quote(file_obj.name)
             content_disposition = f"attachment; filename*=UTF-8''{safe_name}"
@@ -260,7 +260,7 @@ class FileViewSet(ModelViewSet):
             bean_filename,
             action='remove'
         )
-        
+
         # 删除.bean文件
         BeanFileManager.delete_bean_file(
             request.user.username,

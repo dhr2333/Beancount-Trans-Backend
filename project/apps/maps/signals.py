@@ -12,11 +12,11 @@ def apply_official_templates(user):
     """应用官方模板到用户"""
     # 获取所有官方模板
     official_templates = Template.objects.filter(is_official=True)
-    
+
     # 创建一个模拟的视图实例来处理模板应用
     view = TemplateViewSet()
     view.request = type('Request', (), {'user': user})()  # 模拟请求对象
-    
+
     for template in official_templates:
         # 使用合并方式，跳过冲突
         if template.type == 'expense':
