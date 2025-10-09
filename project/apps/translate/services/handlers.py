@@ -25,6 +25,8 @@ class AccountHandler:
         self.account = ASSETS_OTHER
         self.bill = data['bill_identifier']
         self.balance = data['transaction_type']
+        self.selected_asset_instance = None  # 新增：存储选中的资产映射实例
+        self.asset_tags = []  # 新增：存储资产映射关联的标签
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -50,6 +52,21 @@ class AccountHandler:
         elif self.bill == BILL_CCB_DEBIT:
             self.key = ccb_debit_init_key(data)
 
+    def _load_asset_tags(self, asset_key: str, ownerid: int) -> None:
+        """加载资产映射关联的标签"""
+        try:
+            asset_instance = Assets.objects.filter(key=asset_key, owner_id=ownerid, enable=True).first()
+            if asset_instance:
+                self.selected_asset_instance = asset_instance
+                self.asset_tags = list(asset_instance.tags.filter(enable=True))
+        except Exception as e:
+            logger.error(f"加载资产标签失败: {str(e)}")
+            self.asset_tags = []
+
+    def get_asset_tags(self):
+        """获取资产映射的标签列表"""
+        return self.asset_tags
+
     def get_account(self, data, ownerid):
         self.initialize_key(data)
         self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
@@ -60,28 +77,32 @@ class AccountHandler:
 
         if self.balance == "收入":
             if self.bill == BILL_ALI:
-                return alipay_get_income_account(self, actual_assets, ownerid)
+                account = alipay_get_income_account(self, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
-                return wechatpay_get_income_account(self, actual_assets, ownerid)
+                account = wechatpay_get_income_account(self, actual_assets, ownerid)
         elif self.balance == "支出":
             if self.bill == BILL_ALI:
-                return alipay_get_expense_account(self, actual_assets, ownerid)
+                account = alipay_get_expense_account(self, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
-                return wechatpay_get_expense_account(self, actual_assets, ownerid)
+                account = wechatpay_get_expense_account(self, actual_assets, ownerid)
         elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
             if self.bill == BILL_ALI:
-                return alipay_get_balance_account(self, data, actual_assets, ownerid)
+                account = alipay_get_balance_account(self, data, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
-                return wechatpay_get_balance_account(self, data, actual_assets, ownerid)
-
-        if self.bill == BILL_BOC_DEBIT:
-            return boc_debit_get_account(self, ownerid)
+                account = wechatpay_get_balance_account(self, data, actual_assets, ownerid)
+        elif self.bill == BILL_BOC_DEBIT:
+            account = boc_debit_get_account(self, ownerid)
         elif self.bill == BILL_CMB_CREDIT:
-            return cmb_credit_get_account(self, ownerid)
+            account = cmb_credit_get_account(self, ownerid)
         elif self.bill == BILL_ICBC_DEBIT:
-            return icbc_debit_get_account(self, ownerid)
+            account = icbc_debit_get_account(self, ownerid)
         elif self.bill == BILL_CCB_DEBIT:
-            return ccb_debit_get_account(self, ownerid)
+            account = ccb_debit_get_account(self, ownerid)
+        
+        # 加载资产标签
+        if self.key and self.key in self.key_list:
+            self._load_asset_tags(self.key, ownerid)
+        
         return account
 
 
@@ -272,14 +293,35 @@ class ExpenseHandler:
         """处理收入逻辑"""
         matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
         max_order = None
+        income_candidates = []
 
         for matching_key in matching_keys:
             income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
             if income_instance:
                 income_priority = income_instance.income.account.count(":") * 100
+                income_candidates.append(income_instance)
                 if max_order is None or income_priority > max_order:
                     max_order = income_priority
                     self.selected_income_instance = income_instance
+
+        # 收集所有收入候选的标签
+        if income_candidates:
+            try:
+                all_tags = []
+                for instance in income_candidates:
+                    tags = list(instance.tags.filter(enable=True))
+                    all_tags.extend(tags)
+                # 去重
+                seen_tag_ids = set()
+                unique_tags = []
+                for tag in all_tags:
+                    if tag.id not in seen_tag_ids:
+                        seen_tag_ids.add(tag.id)
+                        unique_tags.append(tag)
+                self.all_candidates_tags = unique_tags
+            except Exception as e:
+                logger.error(f"加载收入标签失败: {str(e)}")
+                self.all_candidates_tags = []
 
         return self.selected_income_instance.income.account if self.selected_income_instance else self.income
 
