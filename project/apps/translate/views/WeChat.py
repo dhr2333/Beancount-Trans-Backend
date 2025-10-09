@@ -59,12 +59,16 @@ def wechatpay_get_expense_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-        return account_instance.assets
+        if account_instance and account_instance.assets:
+            return account_instance.assets
+        return ASSETS_OTHER
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
         if digits in self.key_list:  # 判断提取到的数字是否在列表中
             account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
-            return account_instance.assets
+            if account_instance and account_instance.assets:
+                return account_instance.assets
+            return ASSETS_OTHER
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
     else:
@@ -82,7 +86,9 @@ def wechatpay_get_income_account(self, assets, ownerid):
 
     if key in self.key_list:  # 6428
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-        return account_instance.assets
+        if account_instance and account_instance.assets:
+            return account_instance.assets
+        return ASSETS_OTHER
     else:
         return ASSETS_OTHER
 
@@ -94,8 +100,9 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         for key in self.key_list:
             if key in data['counterparty']:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
         account = ASSETS_OTHER
     elif self.type == "零钱充值":
         account = assets["WECHATPAY"]
@@ -105,8 +112,9 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
         account = ASSETS_OTHER
     elif self.type == "转入零钱通":
         account = assets["WECHATFUND"]
@@ -115,8 +123,9 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
             else:
                 account = ASSETS_OTHER
     elif self.type == "购买理财通":
@@ -124,8 +133,9 @@ def wechatpay_get_balance_account(self, data, assets, ownerid):
         for full in self.full_list:
             if result in full:
                 account_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
     return account
 
 
@@ -138,8 +148,9 @@ def wechatpay_get_balance_expense(self, data, assets, ownerid):
         for key in self.key_list:
             if key in data['counterparty']:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
         expend = ASSETS_OTHER
     elif self.type == "零钱通转出":
         expend = assets["WECHATFUND"]
@@ -149,16 +160,18 @@ def wechatpay_get_balance_expense(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
         expend = ASSETS_OTHER
     elif self.type == "信用卡还款":
         result = data['counterparty'][:data['counterparty'].index("还款")]  # 例如"华夏银行信用卡"
         for full in self.full_list:
             if result in full:
                 account_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
     elif self.type == "购买理财通":
         expend = ASSETS_OTHER
     return expend

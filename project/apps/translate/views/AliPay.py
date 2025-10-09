@@ -60,14 +60,18 @@ def alipay_get_expense_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-        return account_instance.assets
+        if account_instance and account_instance.assets:
+            return account_instance.assets
+        return ASSETS_OTHER
     elif key == "":
         return assets["ALIPAY"]
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
         if digits in self.key_list:  # 判断提取到的数字是否在列表中
             account_instance = Assets.objects.filter(key=digits, owner_id=ownerid).first()
-            return account_instance.assets
+            if account_instance and account_instance.assets:
+                return account_instance.assets
+            return ASSETS_OTHER
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
     else:
@@ -78,14 +82,18 @@ def alipay_get_income_account(self, assets, ownerid):
     key = self.key
     if key in self.key_list:
         account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-        return account_instance.assets
+        if account_instance and account_instance.assets:
+            return account_instance.assets
+        return ASSETS_OTHER
     elif key == "":
         return assets["ALIPAY"]
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
         if digits in self.key_list:  # 判断提取到的数字是否在列表中
             account_instance = Assets.objects.filter(key=digits, owner_id=ownerid, enable=True).first()
-            return account_instance.assets
+            if account_instance and account_instance.assets:
+                return account_instance.assets
+            return ASSETS_OTHER
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
 
@@ -104,8 +112,9 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
             else:
                 expend = ASSETS_OTHER
     elif self.type == "余额宝-转出到银行卡":
@@ -121,8 +130,9 @@ def alipay_get_balance_account(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                account = account_instance.assets
-                return account
+                if account_instance and account_instance.assets:
+                    return account_instance.assets
+                return ASSETS_OTHER
             else:
                 account = ASSETS_OTHER
         # account = ASSETS_OTHER  # 支付宝账单中提现最大颗粒度只到具体银行，若该银行有两张银行卡便有问题，需要手动对账
@@ -145,8 +155,9 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         for key in self.key_list:
             if key in result:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
         expend = ASSETS_OTHER
     elif self.type == "充值-普通充值":
         expend = assets["ALIPAY"]  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
@@ -155,8 +166,9 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         for full in self.full_list:
             if result in full:
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
     elif re.match(pattern["花呗主动还款"], self.type) or re.match(pattern["花呗自动还款"], self.type):  # 账单类型匹配"花呗主动还款-2022年09月账单"
         expend = assets["HUABEI"]
     elif ("蚂蚁借呗放款至银行卡" in self.type) or ("蚂蚁借呗还款" in self.type):
@@ -168,15 +180,17 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         for full in self.full_list:
             if result in full:
                 expend_instance = Assets.objects.filter(full=full, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
     elif re.match(pattern["基金"], self.type):
         result = data['commodity'][data['commodity'].index("卖出至") + len("卖出至"):]
         for key in self.key_list:
             if result in key:
                 expend_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
-                expend = expend_instance.assets
-                return expend
+                if expend_instance and expend_instance.assets:
+                    return expend_instance.assets
+                return ASSETS_OTHER
         expend = ASSETS_OTHER
     else:
         expend = ASSETS_OTHER

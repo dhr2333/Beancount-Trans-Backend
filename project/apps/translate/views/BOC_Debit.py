@@ -5,6 +5,7 @@ import pdfplumber
 
 from project.apps.maps.models import Assets
 from project.apps.translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
+from project.apps.translate.utils import ASSETS_OTHER
 # from project.apps.translate.utils import InitStrategy, IgnoreData, BILL_BOC_DEBIT
 
 # boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"
@@ -128,7 +129,9 @@ def boc_debit_get_account(self, ownerid):
     key = self.key
     if key in self.full_list:
         account_instance = Assets.objects.filter(full=key, owner_id=ownerid, enable=True).first()
-        return account_instance.assets
+        if account_instance and account_instance.assets:
+            return account_instance.assets
+    return ASSETS_OTHER
 
 
 def boc_debit_get_balance(data):

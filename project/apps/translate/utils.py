@@ -57,8 +57,8 @@ def get_default_assets(ownerid):
 
     for asset_name, var_name in default_assets.items():
         asset = Assets.objects.filter(full=asset_name, enable=True, owner_id=ownerid).first()
-        globals()[var_name] = asset.assets.account if asset else ASSETS_OTHER
-        actual_assets[var_name] = asset.assets.account if asset else ASSETS_OTHER
+        globals()[var_name] = asset.assets.account if (asset and asset.assets) else ASSETS_OTHER
+        actual_assets[var_name] = asset.assets.account if (asset and asset.assets) else ASSETS_OTHER
     return actual_assets
 
 
