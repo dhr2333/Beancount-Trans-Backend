@@ -1,4 +1,4 @@
-FROM postgres:17.4 AS production-stage
+FROM postgres:17.4-alpine AS production-stage
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 
 ENV POSTGRES_DB=beancount-trans
