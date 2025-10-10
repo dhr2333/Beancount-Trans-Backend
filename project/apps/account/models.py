@@ -298,3 +298,49 @@ class Account(BaseModel):
         }
 
         return result
+
+
+class AccountTemplate(BaseModel):
+    """账户模板"""
+    name = models.CharField(max_length=32, null=False, help_text="模板名称")
+    description = models.TextField(blank=True, help_text="模板描述")
+    is_public = models.BooleanField(default=False, help_text="是否公开")
+    is_official = models.BooleanField(default=False, help_text="是否官方")
+    version = models.CharField(max_length=16, blank=True, default="1.0.0", help_text="版本号")
+    update_notes = models.TextField(null=True, blank=True, help_text="更新说明")
+    owner = models.ForeignKey(User, related_name='account_templates', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'account_template'
+        verbose_name = '账户模板'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'owner'],
+                name='unique_account_template_per_user'
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class AccountTemplateItem(BaseModel):
+    """账户模板项"""
+    template = models.ForeignKey(AccountTemplate, related_name='items', on_delete=models.CASCADE)
+    account_path = models.CharField(max_length=128, null=False, help_text="账户路径")
+    enable = models.BooleanField(default=True, help_text="默认启用状态")
+
+    class Meta:
+        db_table = 'account_template_item'
+        verbose_name = '账户模板项'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['template', 'account_path'],
+                name='unique_account_per_template'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.template.name} - {self.account_path}"

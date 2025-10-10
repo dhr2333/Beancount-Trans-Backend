@@ -3,6 +3,7 @@ import re
 
 # from project.apps.translate.utils import InitStrategy, BILL_CCB_DEBIT
 from project.apps.maps.models import Assets
+from project.apps.translate.services.mapping_provider import extract_account_string
 # from datetime import datetime
 
 # ccb_debit_sourcefile_identifier = "中国建设银行个人活期账户全部交易明细"  # 能唯一标识所属银行及账单类型的原始上传文件
@@ -183,9 +184,9 @@ def ccb_debit_get_account(self, ownerid):
     from project.apps.translate.utils import ASSETS_OTHER
     key = self.key
     if key in self.full_list:
-        account_instance = Assets.objects.filter(full=key, owner_id=ownerid, enable=True).first()
+        account_instance = self.find_asset_by_full(key)
         if account_instance and account_instance.assets:
-            return account_instance.assets
+            return extract_account_string(account_instance.assets)
     return ASSETS_OTHER
 
 

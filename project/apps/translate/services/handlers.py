@@ -11,6 +11,7 @@ from project.apps.translate.views.CMB_Credit import *
 from project.apps.translate.views.ICBC_Debit import *
 from project.apps.translate.views.CCB_Debit import *
 from project.apps.translate.services.similarity import BertSimilarity, SpacySimilarity, DeepSeekSimilarity
+from project.apps.translate.services.mapping_provider import get_mapping_provider
 import logging
 
 
@@ -27,6 +28,15 @@ class AccountHandler:
         self.balance = data['transaction_type']
         self.selected_asset_instance = None  # 新增：存储选中的资产映射实例
         self.asset_tags = []  # 新增：存储资产映射关联的标签
+        self._asset_mappings = []  # 缓存资产映射数据
+    
+    def find_asset_by_key(self, key: str):
+        """根据 key 查找资产映射"""
+        return next((m for m in self._asset_mappings if m.key == key), None)
+    
+    def find_asset_by_full(self, full: str):
+        """根据 full 查找资产映射"""
+        return next((m for m in self._asset_mappings if m.full == full), None)
 
     def initialize_type(self, data):
         if self.bill == BILL_ALI:
@@ -35,8 +45,12 @@ class AccountHandler:
             self.type = wechatpay_get_type(data)
 
     def initialize_key_list(self, ownerid):
-        self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
-        self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
+        # 使用映射数据提供者获取资产映射
+        provider = get_mapping_provider(ownerid)
+        asset_mappings = provider.get_asset_mappings(enable_only=True)
+        self.key_list = [m.key for m in asset_mappings]
+        self.full_list = [m.full for m in asset_mappings]
+        self._asset_mappings = asset_mappings  # 缓存以供后续使用
 
     def initialize_key(self, data):
         if self.bill == BILL_ALI:
@@ -55,7 +69,8 @@ class AccountHandler:
     def _load_asset_tags(self, asset_key: str, ownerid: int) -> None:
         """加载资产映射关联的标签"""
         try:
-            asset_instance = Assets.objects.filter(key=asset_key, owner_id=ownerid, enable=True).first()
+            # 从缓存的映射数据中查找
+            asset_instance = next((m for m in self._asset_mappings if m.key == asset_key), None)
             if asset_instance:
                 self.selected_asset_instance = asset_instance
                 self.asset_tags = list(asset_instance.tags.filter(enable=True))
@@ -125,6 +140,9 @@ class ExpenseHandler:
         self.expense_candidates_with_score = []  # 如果你想带分数
         self.mapping_tags = []  # 新增：存储映射关联的标签
         self.all_candidates_tags = []  # 新增：存储所有候选映射的标签
+        self._expense_mappings = []  # 缓存支出映射数据
+        self._income_mappings = []  # 缓存收入映射数据
+        self._asset_mappings = []  # 缓存资产映射数据
 
         # 初始化相似度计算模型
         if model == "BERT":
@@ -138,6 +156,14 @@ class ExpenseHandler:
         else:
             self.similarity_model = BertSimilarity()  # 默认使用BERT
 
+    def find_asset_by_key(self, key: str):
+        """根据 key 查找资产映射"""
+        return next((m for m in self._asset_mappings if m.key == key), None)
+    
+    def find_asset_by_full(self, full: str):
+        """根据 full 查找资产映射"""
+        return next((m for m in self._asset_mappings if m.full == full), None)
+
     def initialize_type(self, data: Dict) -> None:
         """初始化交易类型"""
         if self.bill == BILL_ALI:
@@ -147,13 +173,25 @@ class ExpenseHandler:
 
     def initialize_key_list(self, data: Dict, ownerid: int) -> None:
         """初始化关键字列表"""
+        provider = get_mapping_provider(ownerid)
+        
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
-            self.key_list = Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
+            expense_mappings = provider.get_expense_mappings(enable_only=True)
+            self.key_list = [m.key for m in expense_mappings]
+            self._expense_mappings = expense_mappings  # 缓存
         elif self.balance == "收入":
-            self.key_list = Income.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
+            income_mappings = provider.get_income_mappings(enable_only=True)
+            self.key_list = [m.key for m in income_mappings]
+            self._income_mappings = income_mappings  # 缓存
         elif self.balance in ("/", "不计收支"):
-            self.key_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True)
-        self.full_list = Assets.objects.filter(owner_id=ownerid, enable=True).values_list('full', flat=True)
+            asset_mappings = provider.get_asset_mappings(enable_only=True)
+            self.key_list = [m.key for m in asset_mappings]
+            self._asset_mappings = asset_mappings  # 缓存
+        
+        # full_list 用于资产查询，如果还没缓存资产映射，则获取并缓存
+        if not self._asset_mappings:
+            self._asset_mappings = provider.get_asset_mappings(enable_only=True)
+        self.full_list = [m.full for m in self._asset_mappings]
 
     def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str):
         try:
@@ -200,7 +238,8 @@ class ExpenseHandler:
         max_order = None
 
         for matching_key in matching_keys:
-            expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
+            # 从缓存的映射数据中查找
+            expense_instance = next((m for m in self._expense_mappings if m.key == matching_key), None)
             if expense_instance and expense_instance.expend:
                 expend_priority = expense_instance.expend.account.count(":") * 100
                 payee_priority = 50 if expense_instance.payee else 0
@@ -237,7 +276,8 @@ class ExpenseHandler:
             self._load_mapping_tags(self.selected_expense_instance)
 
             if self.selected_key:
-                self.selected_expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=self.selected_key).first()
+                # 从缓存的映射数据中查找
+                self.selected_expense_instance = next((m for m in self._expense_mappings if m.key == self.selected_key), None)
                 if self.selected_expense_instance:
                     self._load_mapping_tags(self.selected_expense_instance)
                     if self.selected_expense_instance.expend:
@@ -298,7 +338,8 @@ class ExpenseHandler:
         income_candidates = []
 
         for matching_key in matching_keys:
-            income_instance = Income.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
+            # 从缓存的映射数据中查找
+            income_instance = next((m for m in self._income_mappings if m.key == matching_key), None)
             if income_instance and income_instance.income:
                 income_priority = income_instance.income.account.count(":") * 100
                 income_candidates.append(income_instance)
@@ -361,9 +402,14 @@ class PayeeHandler:
         self.payee = data['counterparty']
         self.notes = data['commodity']
         self.bill = data['bill_identifier']
+        self._expense_mappings = []  # 缓存映射数据
 
     def get_payee(self, data, ownerid): #TODO
-        self.key_list = list(Expense.objects.filter(owner_id=ownerid, enable=True).values_list('key', flat=True))
+        # 使用映射数据提供者
+        provider = get_mapping_provider(ownerid)
+        expense_mappings = provider.get_expense_mappings(enable_only=True)
+        self.key_list = [m.key for m in expense_mappings]
+        self._expense_mappings = expense_mappings
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/" and data['transaction_category'] == "信用卡还款":
             return data['counterparty']
         elif data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
@@ -384,7 +430,8 @@ class PayeeHandler:
         matching_keys = [k for k in self.key_list if k in self.payee or k in self.notes]  # 通过列表推导式获取所有匹配的key形成新的列表
         max_order = None
         for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
-            expense_instance = Expense.objects.filter(owner_id=ownerid, enable=True, key=matching_key).first()
+            # 从缓存的映射数据中查找
+            expense_instance = next((m for m in self._expense_mappings if m.key == matching_key), None)
             matching_max_order = None  # 每次循环初始化
             if expense_instance and expense_instance.expend:  # 通过Expenses及Payee计算优先级
                 expend_instance_priority = expense_instance.expend.account.count(":") * 100

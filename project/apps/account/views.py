@@ -9,14 +9,16 @@ from django.contrib.auth import get_user_model
 # from django.shortcuts import get_object_or_404
 from django.apps import apps
 
-from project.apps.account.models import Account
+from project.apps.account.models import Account, AccountTemplate, AccountTemplateItem
 from project.apps.account.serializers import (
     AccountSerializer, AccountTreeSerializer,
-    AccountBatchUpdateSerializer, AccountMigrationSerializer, AccountDeleteSerializer
+    AccountBatchUpdateSerializer, AccountMigrationSerializer, AccountDeleteSerializer,
+    AccountTemplateItemSerializer, AccountTemplateListSerializer, 
+    AccountTemplateDetailSerializer, AccountTemplateApplySerializer
 )
 from project.apps.account.filters import AccountTypeFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission, TemplatePermission
 from project.apps.common.filters import CurrentUserFilterBackend, AnonymousUserFilterBackend
 
 
@@ -259,3 +261,104 @@ class AccountViewSet(ModelViewSet):
                 'account_type': account.get_account_type()
             }
         })
+
+
+class AccountTemplateViewSet(ModelViewSet):
+    """账户模板管理视图集"""
+    permission_classes = [TemplatePermission]
+
+    def get_serializer_class(self):
+        """根据操作类型选择序列化器"""
+        if self.action == 'list':
+            return AccountTemplateListSerializer
+        elif self.action == 'retrieve':
+            return AccountTemplateDetailSerializer
+        return AccountTemplateDetailSerializer
+
+    def get_queryset(self):
+        """获取查询集"""
+        # 官方模板对所有用户可见
+        queryset = AccountTemplate.objects.filter(is_official=True)
+
+        # 登录用户可以看到自己的模板和公开模板
+        if self.request.user.is_authenticated:
+            user_templates = AccountTemplate.objects.filter(owner=self.request.user)
+            public_templates = AccountTemplate.objects.filter(is_public=True, is_official=False)
+            queryset = queryset | user_templates | public_templates
+
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        """创建时设置属主"""
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def apply(self, request, pk=None):
+        """应用模板到用户账户
+        
+        请求体: {
+            "action": "merge|overwrite",
+            "conflict_resolution": "skip|overwrite"
+        }
+        """
+        template = self.get_object()
+        serializer = AccountTemplateApplySerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        action_type = data['action']
+        conflict_resolution = data.get('conflict_resolution', 'skip')
+
+        try:
+            with transaction.atomic():
+                result = self._apply_account_template(
+                    template, 
+                    request.user, 
+                    action_type, 
+                    conflict_resolution
+                )
+                return Response({
+                    "message": "账户模板应用成功",
+                    "result": result
+                })
+        except Exception as e:
+            return Response(
+                {'error': f'应用模板失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def _apply_account_template(self, template, user, action_type, conflict_resolution):
+        """应用账户模板到用户"""
+        result = {
+            'created': 0,
+            'skipped': 0,
+            'overwritten': 0
+        }
+
+        if action_type == 'overwrite':
+            # 删除用户现有的所有账户
+            Account.objects.filter(owner=user).delete()
+
+        for item in template.items.all():
+            # 检查是否已存在相同路径的账户
+            existing = Account.objects.filter(owner=user, account=item.account_path).first()
+
+            if existing:
+                if conflict_resolution == 'skip':
+                    result['skipped'] += 1
+                    continue
+                elif conflict_resolution == 'overwrite':
+                    existing.delete()
+                    result['overwritten'] += 1
+
+            # 创建新账户（Account.save() 会自动创建父账户）
+            Account.objects.create(
+                owner=user,
+                account=item.account_path,
+                enable=item.enable
+            )
+            result['created'] += 1
+
+        return result

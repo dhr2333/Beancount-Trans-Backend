@@ -9,6 +9,7 @@ import re
 from project.apps.maps.models import Assets
 from project.apps.translate.utils import ASSETS_OTHER
 from project.apps.translate.services.init.strategies.cmb_credit_init_strategy import CMBCreditInitStrategy
+from project.apps.translate.services.mapping_provider import extract_account_string
 
 # cmb_credit_sourcefile_identifier = "CMB Credit Card Statement"
 # cmb_credit_csvfile_identifier = "招商银行信用卡账单明细"
@@ -113,16 +114,16 @@ def cmb_credit_init_key(data):
 def cmb_credit_get_account(self, ownerid):
     key = self.key
     if key in self.key_list:
-        account_instance = Assets.objects.filter(key=key, owner_id=ownerid, enable=True).first()
+        account_instance = self.find_asset_by_key(key)
         if account_instance and account_instance.assets:
-            return account_instance.assets
+            return extract_account_string(account_instance.assets)
         return ASSETS_OTHER
     elif '(' in key and ')' in key:
         digits = key.split('(')[1].split(')')[0]  # 提取 account 中的数字部分，例如中信银行信用卡(6428) -> 6428
         if digits in self.key_list:  # 判断提取到的数字是否在列表中
-            account_instance = Assets.objects.filter(key=digits, owner_id=ownerid, enable=True).first()
+            account_instance = self.find_asset_by_key(digits)
             if account_instance and account_instance.assets:
-                return account_instance.assets
+                return extract_account_string(account_instance.assets)
             return ASSETS_OTHER
         else:
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账

@@ -5,7 +5,7 @@ from django.utils.html import format_html
 from django.db import models
 from django.forms import TextInput
 
-from project.apps.account.models import Account
+from project.apps.account.models import Account, AccountTemplate, AccountTemplateItem
 
 
 @admin.register(Account)
@@ -178,3 +178,32 @@ class AccountAdmin(admin.ModelAdmin):
             f'成功关闭了 {closed_count} 个账户。'
         )
     close_accounts.short_description = "关闭选中的账户"
+
+
+@admin.register(AccountTemplate)
+class AccountTemplateAdmin(admin.ModelAdmin):
+    """账户模板管理"""
+    list_display = ['name', 'type_display', 'is_public', 'is_official', 'owner', 'version', 'items_count']
+    list_per_page = 100
+    list_filter = ['is_public', 'is_official', 'owner']
+    search_fields = ['name', 'description', 'update_notes']
+    readonly_fields = ['items_count']
+
+    def type_display(self, obj):
+        """显示模板类型"""
+        return '账户'
+    type_display.short_description = '模板类型'
+
+    def items_count(self, obj):
+        """显示模板项数量"""
+        return obj.items.count()
+    items_count.short_description = '账户数量'
+
+
+@admin.register(AccountTemplateItem)
+class AccountTemplateItemAdmin(admin.ModelAdmin):
+    """账户模板项管理"""
+    list_display = ['template', 'account_path', 'enable']
+    list_per_page = 500
+    list_filter = ['template', 'enable']
+    search_fields = ['account_path']

@@ -44,6 +44,8 @@ def get_default_assets(ownerid):
     :param ownerid: 用户id
     :return: None
     """
+    from project.apps.translate.services.mapping_provider import get_mapping_provider, extract_account_string
+    
     default_assets = {
         "微信零钱": "WECHATPAY",
         "微信零钱通": "WECHATFUND",
@@ -54,11 +56,17 @@ def get_default_assets(ownerid):
         "支付宝备用金": "BEIYONGJIN"
     }
     actual_assets = {}
+    
+    # 使用映射数据提供者获取资产映射
+    provider = get_mapping_provider(ownerid)
+    asset_mappings = provider.get_asset_mappings(enable_only=True)
 
     for asset_name, var_name in default_assets.items():
-        asset = Assets.objects.filter(full=asset_name, enable=True, owner_id=ownerid).first()
-        globals()[var_name] = asset.assets.account if (asset and asset.assets) else ASSETS_OTHER
-        actual_assets[var_name] = asset.assets.account if (asset and asset.assets) else ASSETS_OTHER
+        # 从映射列表中查找
+        asset = next((m for m in asset_mappings if m.full == asset_name), None)
+        account_str = extract_account_string(asset.assets) if (asset and asset.assets) else ASSETS_OTHER
+        globals()[var_name] = account_str
+        actual_assets[var_name] = account_str
     return actual_assets
 
 

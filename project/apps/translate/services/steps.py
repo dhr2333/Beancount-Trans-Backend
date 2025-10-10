@@ -124,6 +124,8 @@ class ParseStep(Step):
                     context['parsed_data'] = []
                 context['parsed_data'].append(parsed_entry)
         except Exception as e:
+            import traceback
+            logger.error(f"解析步骤详细错误: {traceback.format_exc()}")
             return self._error(context, f"解析步骤异常: {str(e)}")
         # logger.info(context['parsed_data'])
         return context

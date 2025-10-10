@@ -4,6 +4,7 @@ import pdfplumber
 
 from project.apps.maps.models import Assets
 from project.apps.translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
+from project.apps.translate.services.mapping_provider import extract_account_string
 # from project.apps.translate.utils import InitStrategy, BILL_ICBC_DEBIT
 
 # icbc_debit_sourcefile_identifier = "中国工商银行借记账户历史明细"
@@ -167,9 +168,9 @@ def icbc_debit_get_account(self, ownerid):
     from project.apps.translate.utils import ASSETS_OTHER
     key = self.key
     if key in self.full_list:
-        account_instance = Assets.objects.filter(full=key, owner_id=ownerid, enable=True).first()
+        account_instance = self.find_asset_by_full(key)
         if account_instance and account_instance.assets:
-            return account_instance.assets
+            return extract_account_string(account_instance.assets)
     return ASSETS_OTHER
 
 

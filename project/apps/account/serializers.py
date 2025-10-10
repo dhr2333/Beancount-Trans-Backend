@@ -1,6 +1,6 @@
 from rest_framework import serializers
 # from django.contrib.auth.models import User
-from project.apps.account.models import Account
+from project.apps.account.models import Account, AccountTemplate, AccountTemplateItem
 
 
 class AccountTreeSerializer(serializers.ModelSerializer):
@@ -233,3 +233,84 @@ class AccountDeleteSerializer(serializers.Serializer):
             return value
         except Account.DoesNotExist:
             raise serializers.ValidationError("目标账户不存在")
+
+
+class AccountTemplateItemSerializer(serializers.ModelSerializer):
+    """账户模板项序列化器"""
+    class Meta:
+        model = AccountTemplateItem
+        fields = ['id', 'account_path', 'enable', 'created', 'modified']
+        read_only_fields = ['created', 'modified']
+
+
+class AccountTemplateListSerializer(serializers.ModelSerializer):
+    """账户模板列表序列化器"""
+    owner_name = serializers.CharField(source='owner.username', read_only=True)
+    items_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccountTemplate
+        fields = ['id', 'name', 'description', 'is_public', 'is_official', 
+                 'version', 'update_notes', 'owner', 'owner_name', 'items_count',
+                 'created', 'modified']
+        read_only_fields = ['created', 'modified', 'owner']
+
+    def get_items_count(self, obj):
+        """获取模板项数量"""
+        return obj.items.count()
+
+
+class AccountTemplateDetailSerializer(serializers.ModelSerializer):
+    """账户模板详情序列化器（含模板项）"""
+    items = AccountTemplateItemSerializer(many=True, required=False)
+    owner_name = serializers.CharField(source='owner.username', read_only=True)
+
+    class Meta:
+        model = AccountTemplate
+        fields = '__all__'
+        read_only_fields = ['created', 'modified', 'owner']
+
+    def create(self, validated_data):
+        """创建模板及其项"""
+        from project.apps.account.models import AccountTemplate, AccountTemplateItem
+        
+        items_data = validated_data.pop('items', [])
+        template = AccountTemplate.objects.create(**validated_data)
+        
+        for item_data in items_data:
+            AccountTemplateItem.objects.create(template=template, **item_data)
+        
+        return template
+
+    def update(self, instance, validated_data):
+        """更新模板及其项"""
+        from project.apps.account.models import AccountTemplateItem
+        
+        items_data = validated_data.pop('items', [])
+
+        # 更新模板基本信息
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 处理模板项 - 先删除所有现有项，然后重新创建
+        instance.items.all().delete()
+        for item_data in items_data:
+            AccountTemplateItem.objects.create(template=instance, **item_data)
+
+        return instance
+
+
+class AccountTemplateApplySerializer(serializers.Serializer):
+    """账户模板应用序列化器"""
+    template_id = serializers.IntegerField(help_text="模板ID")
+    action = serializers.ChoiceField(
+        choices=['overwrite', 'merge'],
+        help_text="应用方式：overwrite=覆盖所有账户，merge=合并到现有账户"
+    )
+    conflict_resolution = serializers.ChoiceField(
+        choices=['skip', 'overwrite'],
+        required=False,
+        default='skip',
+        help_text="冲突解决策略：skip=跳过冲突项，overwrite=覆盖冲突项"
+    )
