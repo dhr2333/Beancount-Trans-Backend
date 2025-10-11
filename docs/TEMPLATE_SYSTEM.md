@@ -240,7 +240,7 @@ class XxxTemplate(BaseModel):
     version = CharField()       # 版本号
     update_notes = TextField()  # 更新说明
     owner = ForeignKey(User)    # 属主
-    
+
 class XxxTemplateItem(BaseModel):
     template = ForeignKey(XxxTemplate)
     # ... 具体字段根据模板类型而定

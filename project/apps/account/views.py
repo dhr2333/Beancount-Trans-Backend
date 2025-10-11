@@ -295,7 +295,7 @@ class AccountTemplateViewSet(ModelViewSet):
     @action(detail=True, methods=['post'])
     def apply(self, request, pk=None):
         """应用模板到用户账户
-        
+
         请求体: {
             "action": "merge|overwrite",
             "conflict_resolution": "skip|overwrite"
@@ -340,25 +340,33 @@ class AccountTemplateViewSet(ModelViewSet):
         if action_type == 'overwrite':
             # 删除用户现有的所有账户
             Account.objects.filter(owner=user).delete()
+            # 直接创建所有模板账户，无需检查冲突
+            for item in template.items.all():
+                Account.objects.create(
+                    owner=user,
+                    account=item.account_path,
+                    enable=item.enable
+                )
+                result['created'] += 1
+        else:  # merge 模式
+            for item in template.items.all():
+                # 检查是否已存在相同路径的账户
+                existing = Account.objects.filter(owner=user, account=item.account_path).first()
 
-        for item in template.items.all():
-            # 检查是否已存在相同路径的账户
-            existing = Account.objects.filter(owner=user, account=item.account_path).first()
+                if existing:
+                    if conflict_resolution == 'skip':
+                        result['skipped'] += 1
+                        continue
+                    elif conflict_resolution == 'overwrite':
+                        existing.delete()
+                        result['overwritten'] += 1
 
-            if existing:
-                if conflict_resolution == 'skip':
-                    result['skipped'] += 1
-                    continue
-                elif conflict_resolution == 'overwrite':
-                    existing.delete()
-                    result['overwritten'] += 1
-
-            # 创建新账户（Account.save() 会自动创建父账户）
-            Account.objects.create(
-                owner=user,
-                account=item.account_path,
-                enable=item.enable
-            )
-            result['created'] += 1
+                # 创建新账户（Account.save() 会自动创建父账户）
+                Account.objects.create(
+                    owner=user,
+                    account=item.account_path,
+                    enable=item.enable
+                )
+                result['created'] += 1
 
         return result

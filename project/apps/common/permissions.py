@@ -115,13 +115,14 @@ class TemplatePermission(permissions.BasePermission):
     - 未登录用户只能查看官方模板
     - 登录用户可以查看官方模板、公开模板和自己的模板
     - 只有所有者或管理员可以修改/删除模板
+    - 所有登录用户都可以应用模板到自己的账户
     """
     def has_permission(self, request, view):
         # 允许所有用户查看模板列表和详情
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # 只有登录用户可以创建模板
+        # 只有登录用户可以创建模板或应用模板
         return request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
@@ -129,7 +130,11 @@ class TemplatePermission(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return obj.is_official or obj.is_public or obj.owner == request.user
 
-        # 只有所有者或管理员可以修改/删除
+        # apply action: 所有登录用户都可以应用模板
+        if hasattr(view, 'action') and view.action == 'apply':
+            return request.user.is_authenticated
+
+        # 只有所有者或管理员可以修改/删除模板
         return obj.owner == request.user or request.user.is_superuser
 
 

@@ -401,80 +401,152 @@ class TemplateViewSet(ModelViewSet):
 
         # 根据模板类型应用不同的映射
         if template.type == 'expense':
-            self._apply_expense_template(template, action_type, conflict_resolution)
+            result = self._apply_expense_template(template, action_type, conflict_resolution)
         elif template.type == 'income':
-            self._apply_income_template(template, action_type, conflict_resolution)
+            result = self._apply_income_template(template, action_type, conflict_resolution)
         elif template.type == 'assets':
-            self._apply_assets_template(template, action_type, conflict_resolution)
+            result = self._apply_assets_template(template, action_type, conflict_resolution)
+        else:
+            return Response({"error": "未知的模板类型"}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({"message": "模板应用成功"})
+        return Response({
+            "message": "模板应用成功",
+            "result": result
+        })
 
     def _apply_expense_template(self, template, action_type, conflict_resolution):
         """应用支出模板"""
+        result = {
+            'created': 0,
+            'skipped': 0,
+            'overwritten': 0
+        }
+
         if action_type == 'overwrite':
             # 删除用户现有的所有支出映射
             Expense.objects.filter(owner=self.request.user).delete()
+            # 直接创建所有模板映射，无需检查冲突
+            for item in template.items.all():
+                Expense.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    payee=item.payee,
+                    expend=item.account,
+                    currency=item.currency
+                )
+                result['created'] += 1
+        else:  # merge 模式
+            for item in template.items.all():
+                # 检查是否已存在相同关键字的映射
+                existing = Expense.objects.filter(owner=self.request.user, key=item.key).first()
 
-        for item in template.items.all():
-            # 检查是否已存在相同关键字的映射
-            existing = Expense.objects.filter(owner=self.request.user, key=item.key).first()
+                if existing:
+                    if conflict_resolution == 'skip':
+                        result['skipped'] += 1
+                        continue
+                    elif conflict_resolution == 'overwrite':
+                        existing.delete()
+                        result['overwritten'] += 1
 
-            if existing:
-                if conflict_resolution == 'skip':
-                    continue
-                elif conflict_resolution == 'overwrite':
-                    existing.delete()
+                # 创建新的映射
+                Expense.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    payee=item.payee,
+                    expend=item.account,
+                    currency=item.currency
+                )
+                result['created'] += 1
 
-            # 创建新的映射
-            expense = Expense.objects.create(
-                owner=self.request.user,
-                key=item.key,
-                payee=item.payee,
-                expend=item.account,
-                currency=item.currency
-            )
+        return result
 
     def _apply_income_template(self, template, action_type, conflict_resolution):
         """应用收入模板"""
+        result = {
+            'created': 0,
+            'skipped': 0,
+            'overwritten': 0
+        }
+
         if action_type == 'overwrite':
+            # 删除用户现有的所有收入映射
             Income.objects.filter(owner=self.request.user).delete()
+            # 直接创建所有模板映射，无需检查冲突
+            for item in template.items.all():
+                Income.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    payer=item.payer,
+                    income=item.account
+                )
+                result['created'] += 1
+        else:  # merge 模式
+            for item in template.items.all():
+                # 检查是否已存在相同关键字的映射
+                existing = Income.objects.filter(owner=self.request.user, key=item.key).first()
 
-        for item in template.items.all():
-            existing = Income.objects.filter(owner=self.request.user, key=item.key).first()
+                if existing:
+                    if conflict_resolution == 'skip':
+                        result['skipped'] += 1
+                        continue
+                    elif conflict_resolution == 'overwrite':
+                        existing.delete()
+                        result['overwritten'] += 1
 
-            if existing:
-                if conflict_resolution == 'skip':
-                    continue
-                elif conflict_resolution == 'overwrite':
-                    existing.delete()
+                # 创建新的映射
+                Income.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    payer=item.payer,
+                    income=item.account
+                )
+                result['created'] += 1
 
-            income = Income.objects.create(
-                owner=self.request.user,
-                key=item.key,
-                payer=item.payer,
-                income=item.account
-            )
+        return result
 
     def _apply_assets_template(self, template, action_type, conflict_resolution):
         """应用资产模板"""
+        result = {
+            'created': 0,
+            'skipped': 0,
+            'overwritten': 0
+        }
+
         if action_type == 'overwrite':
+            # 删除用户现有的所有资产映射
             Assets.objects.filter(owner=self.request.user).delete()
+            # 直接创建所有模板映射，无需检查冲突
+            for item in template.items.all():
+                Assets.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    full=item.full,
+                    assets=item.account
+                )
+                result['created'] += 1
+        else:  # merge 模式
+            for item in template.items.all():
+                # 检查是否已存在相同关键字的映射
+                existing = Assets.objects.filter(owner=self.request.user, key=item.key).first()
 
-        for item in template.items.all():
-            existing = Assets.objects.filter(owner=self.request.user, key=item.key).first()
+                if existing:
+                    if conflict_resolution == 'skip':
+                        result['skipped'] += 1
+                        continue
+                    elif conflict_resolution == 'overwrite':
+                        existing.delete()
+                        result['overwritten'] += 1
 
-            if existing:
-                if conflict_resolution == 'skip':
-                    continue
-                elif conflict_resolution == 'overwrite':
-                    existing.delete()
+                # 创建新的映射
+                Assets.objects.create(
+                    owner=self.request.user,
+                    key=item.key,
+                    full=item.full,
+                    assets=item.account
+                )
+                result['created'] += 1
 
-            assets = Assets.objects.create(
-                owner=self.request.user,
-                key=item.key,
-                full=item.full,
-                assets=item.account
-            )
+        return result
 
 class TemplateItemViewSet(ModelViewSet):
     serializer_class = TemplateItemSerializer

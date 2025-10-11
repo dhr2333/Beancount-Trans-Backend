@@ -43,15 +43,15 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
 
         # 获取所有候选映射的标签并合并（支出、收入、资产）
         all_tags = []
-        
+
         # 1. 获取支出/收入映射的标签
         expense_tags = expense_handler.get_all_candidates_tags()
         all_tags.extend(expense_tags)
-        
+
         # 2. 获取资产映射的标签
         asset_tags = account_handler.get_asset_tags()
         all_tags.extend(asset_tags)
-        
+
         # 3. 去重（保持标签对象唯一性）
         seen_tag_ids = set()
         unique_tags = []
@@ -59,7 +59,7 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
             if tag.id not in seen_tag_ids:
                 seen_tag_ids.add(tag.id)
                 unique_tags.append(tag)
-        
+
         # 4. 合并所有标签
         merged_tag = merge_tags(
             source_tag=source_tag,

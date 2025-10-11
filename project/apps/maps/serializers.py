@@ -279,9 +279,11 @@ class ExpenseBatchUpdateSerializer(serializers.Serializer):
 
 
 class TemplateApplySerializer(serializers.Serializer):
-    """非模型序列化器，因为应用模板的操作不直接对应模型的创建或更新，而是触发一个动作（应用模板到用户映射）"""
+    """映射模板应用序列化器
 
-    template_id = serializers.IntegerField()
+    注意：template_id 不需要传递，因为模板 ID 已在 URL 中
+    应用模板的操作不直接对应模型的创建或更新，而是触发一个动作（应用模板到用户映射）
+    """
     action = serializers.ChoiceField(choices=['overwrite', 'merge'])
     conflict_resolution = serializers.ChoiceField(
         choices=['skip', 'overwrite'], 

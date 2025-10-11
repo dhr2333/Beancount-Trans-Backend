@@ -29,11 +29,11 @@ class AccountHandler:
         self.selected_asset_instance = None  # 新增：存储选中的资产映射实例
         self.asset_tags = []  # 新增：存储资产映射关联的标签
         self._asset_mappings = []  # 缓存资产映射数据
-    
+
     def find_asset_by_key(self, key: str):
         """根据 key 查找资产映射"""
         return next((m for m in self._asset_mappings if m.key == key), None)
-    
+
     def find_asset_by_full(self, full: str):
         """根据 full 查找资产映射"""
         return next((m for m in self._asset_mappings if m.full == full), None)
@@ -113,11 +113,11 @@ class AccountHandler:
             account = icbc_debit_get_account(self, ownerid)
         elif self.bill == BILL_CCB_DEBIT:
             account = ccb_debit_get_account(self, ownerid)
-        
+
         # 加载资产标签
         if self.key and self.key in self.key_list:
             self._load_asset_tags(self.key, ownerid)
-        
+
         return account
 
 
@@ -159,7 +159,7 @@ class ExpenseHandler:
     def find_asset_by_key(self, key: str):
         """根据 key 查找资产映射"""
         return next((m for m in self._asset_mappings if m.key == key), None)
-    
+
     def find_asset_by_full(self, full: str):
         """根据 full 查找资产映射"""
         return next((m for m in self._asset_mappings if m.full == full), None)
@@ -174,7 +174,7 @@ class ExpenseHandler:
     def initialize_key_list(self, data: Dict, ownerid: int) -> None:
         """初始化关键字列表"""
         provider = get_mapping_provider(ownerid)
-        
+
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
             expense_mappings = provider.get_expense_mappings(enable_only=True)
             self.key_list = [m.key for m in expense_mappings]
@@ -187,7 +187,7 @@ class ExpenseHandler:
             asset_mappings = provider.get_asset_mappings(enable_only=True)
             self.key_list = [m.key for m in asset_mappings]
             self._asset_mappings = asset_mappings  # 缓存
-        
+
         # full_list 用于资产查询，如果还没缓存资产映射，则获取并缓存
         if not self._asset_mappings:
             self._asset_mappings = provider.get_asset_mappings(enable_only=True)

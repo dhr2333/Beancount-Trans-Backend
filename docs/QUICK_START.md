@@ -13,7 +13,7 @@
    ```bash
    python manage.py init_official_templates
    ```
-   
+
    此命令会：
    - 创建 admin 用户（id=1，密码: admin123456）
    - 创建官方账户模板（66 个标准账户）
@@ -28,10 +28,10 @@
    from django.contrib.auth import get_user_model
    from project.apps.account.models import Account
    from project.apps.maps.models import Expense, Assets, Income
-   
+
    User = get_user_model()
    admin = User.objects.get(id=1)
-   
+
    print(f'账户数量: {Account.objects.filter(owner=admin).count()}')
    print(f'支出映射: {Expense.objects.filter(owner=admin).count()}')
    print(f'资产映射: {Assets.objects.filter(owner=admin).count()}')

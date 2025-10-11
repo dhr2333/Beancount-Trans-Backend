@@ -45,7 +45,7 @@ def get_default_assets(ownerid):
     :return: None
     """
     from project.apps.translate.services.mapping_provider import get_mapping_provider, extract_account_string
-    
+
     default_assets = {
         "微信零钱": "WECHATPAY",
         "微信零钱通": "WECHATFUND",
@@ -56,7 +56,7 @@ def get_default_assets(ownerid):
         "支付宝备用金": "BEIYONGJIN"
     }
     actual_assets = {}
-    
+
     # 使用映射数据提供者获取资产映射
     provider = get_mapping_provider(ownerid)
     asset_mappings = provider.get_asset_mappings(enable_only=True)

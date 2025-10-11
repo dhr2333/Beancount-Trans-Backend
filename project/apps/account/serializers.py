@@ -273,19 +273,19 @@ class AccountTemplateDetailSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """创建模板及其项"""
         from project.apps.account.models import AccountTemplate, AccountTemplateItem
-        
+
         items_data = validated_data.pop('items', [])
         template = AccountTemplate.objects.create(**validated_data)
-        
+
         for item_data in items_data:
             AccountTemplateItem.objects.create(template=template, **item_data)
-        
+
         return template
 
     def update(self, instance, validated_data):
         """更新模板及其项"""
         from project.apps.account.models import AccountTemplateItem
-        
+
         items_data = validated_data.pop('items', [])
 
         # 更新模板基本信息
@@ -302,8 +302,10 @@ class AccountTemplateDetailSerializer(serializers.ModelSerializer):
 
 
 class AccountTemplateApplySerializer(serializers.Serializer):
-    """账户模板应用序列化器"""
-    template_id = serializers.IntegerField(help_text="模板ID")
+    """账户模板应用序列化器
+
+    注意：template_id 不需要传递，因为模板 ID 已在 URL 中
+    """
     action = serializers.ChoiceField(
         choices=['overwrite', 'merge'],
         help_text="应用方式：overwrite=覆盖所有账户，merge=合并到现有账户"

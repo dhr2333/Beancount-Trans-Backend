@@ -71,7 +71,7 @@ class MappingDataProvider:
         # 自动判断数据来源
         has_own_data = Expense.objects.filter(owner=user).exists()
         self.use_templates = not has_own_data
-    
+
     def get_expense_mappings(self):
         if self.use_templates:
             return self._get_from_official_template()  # 官方模板
