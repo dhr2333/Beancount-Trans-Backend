@@ -13,7 +13,7 @@ omit =
     */wsgi.py
     */asgi.py
     manage.py
-    */settings/*
+    */settings/*.py
     */__pycache__/*
     */static/*
     */media/*
