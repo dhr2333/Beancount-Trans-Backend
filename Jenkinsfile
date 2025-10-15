@@ -50,7 +50,7 @@ pipeline {
                         echo "🏗️ 构建测试Docker镜像..."
                         updateGitHubStatus('pending', '正在构建测试镜像...')
 
-                        sh "docker build -f Dockerfile-Test -t ${IMAGE_NAME}:${TEST_IMAGE_TAG} ."
+                        sh "DOCKER_BUILDKIT=1 docker build -f Dockerfile-Test-Legacy -t ${IMAGE_NAME}:${TEST_IMAGE_TAG} ."
                         echo "✅ 测试镜像构建完成: ${IMAGE_NAME}:${TEST_IMAGE_TAG}"
                     }
                 }

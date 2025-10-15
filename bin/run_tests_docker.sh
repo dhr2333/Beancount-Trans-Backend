@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # 配置
 TEST_IMAGE="beancount-trans-backend:test"
 REPORTS_DIR="$(pwd)/reports"
-DOCKERFILE="Dockerfile-Test"
+DOCKERFILE="Dockerfile-Test-Legacy"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Beancount-Trans 测试套件 (Docker)${NC}"
