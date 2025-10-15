@@ -92,11 +92,13 @@ if [ -f "${REPORTS_DIR}/coverage.xml" ]; then
     echo -e "${BLUE}📊 代码覆盖率: ${COVERAGE}%${NC}"
 fi
 
-# 清理测试镜像（可选）
+# 清理测试镜像（默认删除）
 echo ""
-read -p "是否删除测试镜像? (y/N): " -n 1 -r
+read -p "是否删除测试镜像? (Y/n): " -n 1 -r
 echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $REPLY =~ ^[Nn]$ ]]; then
+    echo -e "${YELLOW}⏭️  保留测试镜像${NC}"
+else
     echo -e "${YELLOW}🗑️  删除测试镜像...${NC}"
     docker rmi "${TEST_IMAGE}" || true
     echo -e "${GREEN}✅ 测试镜像已删除${NC}"

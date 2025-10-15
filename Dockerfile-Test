@@ -2,7 +2,7 @@
 # 基于生产环境Dockerfile，添加测试依赖和配置
 # 优化构建缓存策略以提升构建速度
 
-FROM python:3.12-slim AS builder
+FROM python:3.12 AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,22 +12,16 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /build
 
-# 配置镜像源并安装编译依赖（合并为一层减少镜像大小）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    python3-dev \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# 完整镜像已包含所需依赖，无需额外安装
 
 # 升级 pip 和安装基础工具
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --upgrade pip wheel
 
-# 安装所有依赖（包括测试依赖）
-# 先复制 requirements.txt，利用 Docker 层缓存
-COPY requirements.txt .
+# 安装测试专用依赖（完整版，排除大型 ML 包）
+COPY requirements-test-full.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user -r requirements.txt
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user -r requirements-test-full.txt
 
 # 安装预训练模型
 # COPY pretrained_models/ /build/pretrained_models
@@ -41,7 +35,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 #     && apt-get purge -y --auto-remove build-essential python3-dev
 
 # 测试阶段：运行时镜像
-FROM python:3.12-slim
+FROM python:3.12
 
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
 LABEL purpose="test"
@@ -52,12 +46,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 配置镜像源并安装运行时依赖（合并为一层）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    libexpat1 \
-    libpq5 \
-    && rm -rf /var/lib/apt/lists/*
+# 完整镜像已包含所需依赖，无需额外安装
 
 # 从 builder 阶段复制 Python 包
 COPY --from=builder /root/.local /root/.local
