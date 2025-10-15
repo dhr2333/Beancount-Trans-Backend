@@ -255,7 +255,7 @@ pipeline {
         always {
             script {
                 echo '🧹 清理测试镜像...'
-                sh "docker rmi ${IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
+                // sh "docker rmi ${IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
             }
             cleanWs()
         }
