@@ -55,7 +55,7 @@ beancount-trans-backend.tar
 # Python 环境管理
 /Pipfile
 /Pipfile.lock
-/pyproject.toml
+# /pyproject.toml  # 测试需要此文件，不要忽略
 
 
 # 其他 Dockerfiles

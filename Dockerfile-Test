@@ -1,4 +1,6 @@
-# FROM python:3.12-slim AS builder
+# 测试专用Docker镜像
+# 基于生产环境Dockerfile，添加测试依赖和配置
+
 FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
@@ -19,10 +21,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --upgrade pip \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user wheel uwsgi
 
+# 安装所有依赖（包括测试依赖）
 COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user -r requirements.txt
 
+# 安装预训练模型
 COPY pretrained_models/ /build/pretrained_models
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0 \
@@ -33,36 +37,46 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl \
     && apt-get purge -y --auto-remove build-essential python3-dev
 
-# 第二阶段：生产镜像
-# FROM python:3.12-slim
+# 测试阶段
 FROM python:3.12-slim
 
 LABEL maintainer="daihaorui <Dai_Haorui@163.com>"
+LABEL purpose="test"
 
 ENV PYTHONUNBUFFERED=1 \
-    PATH="/root/.local/bin:${PATH}"
+    PATH="/root/.local/bin:${PATH}" \
+    DJANGO_SETTINGS_MODULE="project.settings.test"
 
-WORKDIR /code/beancount-trans/
+WORKDIR /app
 
+# 安装运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libexpat1 \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
+# 从builder阶段复制Python包
 COPY --from=builder /root/.local /root/.local
-COPY --from=builder /build/pretrained_models/bert-base-chinese /code/beancount-trans/pretrained_models/bert-base-chinese
+COPY --from=builder /build/pretrained_models/bert-base-chinese /app/pretrained_models/bert-base-chinese
 
+# 复制项目文件
 COPY bin ./bin
 COPY conf ./conf
 COPY logs ./logs
-# COPY static ./static
-# COPY collectstatic ./collectstatic
 COPY templates ./templates
 COPY manage.py ./manage.py
 COPY project ./project
-RUN chmod +x /code/beancount-trans/bin/celery_beat_start.sh \
-    && chmod +x /code/beancount-trans/bin/celery_worker_start.sh \
-    && chmod +x /code/beancount-trans/bin/docker_start.sh \
-    && chmod +x /code/beancount-trans/bin/check_system_status.py
-# ENTRYPOINT ["/code/beancount-trans/bin/docker_start.sh"]
+COPY pyproject.toml ./pyproject.toml
+COPY .coveragerc ./.coveragerc
+
+# 创建报告输出目录
+RUN mkdir -p /app/reports
+
+# 设置权限
+RUN chmod +x /app/bin/*.sh 2>/dev/null || true
+
+# 默认命令：运行pytest测试
+CMD ["pytest", "--no-migrations", "--reuse-db"]
+
+
