@@ -282,7 +282,7 @@ def updateGitHubStatus(String state, String description) {
     
     // 使用GitHub Token更新状态
     try {
-        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+        withCredentials([string(credentialsId: '1b709f07-d907-4000-8a8a-2adafa6fc658', variable: 'GITHUB_TOKEN')]) {
             sh """
                 curl -X POST \
                     -H "Authorization: token \${GITHUB_TOKEN}" \
