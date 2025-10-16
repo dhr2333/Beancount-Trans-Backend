@@ -14,8 +14,8 @@ pipeline {
         GITHUB_REPO = 'dhr2333/Beancount-Trans-Backend'
         GITHUB_API_URL = 'https://api.github.com'
         
-        // 报告目录
-        REPORTS_DIR = "/jenkins-share/test-reports/${JOB_NAME}/${BUILD_NUMBER}"
+        // 报告目录 - 使用安全的路径格式避免URL编码问题
+        REPORTS_DIR = "/jenkins-share/test-reports/${JOB_NAME.replaceAll('/', '_')}/${BUILD_NUMBER}"
     }
 
     stages {
