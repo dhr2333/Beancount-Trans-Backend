@@ -120,13 +120,13 @@ pipeline {
                 script {
                     echo "📊 发布测试报告..."
 
-                    // 创建符号链接而不是复制文件，节省存储空间
-                    echo "📁 创建报告文件符号链接..."
+                    // 复制报告文件到workspace（Jenkins插件需要真实文件）
+                    echo "📁 复制报告文件到workspace..."
                     sh "mkdir -p ${WORKSPACE}/reports"
-                    sh "ln -sf ${REPORTS_DIR}/junit.xml ${WORKSPACE}/reports/junit.xml"
-                    sh "ln -sf ${REPORTS_DIR}/pytest-report.html ${WORKSPACE}/reports/pytest-report.html"
-                    sh "ln -sf ${REPORTS_DIR}/coverage.xml ${WORKSPACE}/reports/coverage.xml"
-                    sh "ln -sf ${REPORTS_DIR}/htmlcov ${WORKSPACE}/reports/htmlcov"
+                    sh "cp ${REPORTS_DIR}/junit.xml ${WORKSPACE}/reports/ 2>/dev/null || true"
+                    sh "cp ${REPORTS_DIR}/pytest-report.html ${WORKSPACE}/reports/ 2>/dev/null || true"
+                    sh "cp ${REPORTS_DIR}/coverage.xml ${WORKSPACE}/reports/ 2>/dev/null || true"
+                    sh "cp -r ${REPORTS_DIR}/htmlcov ${WORKSPACE}/reports/ 2>/dev/null || true"
 
                     // 发布JUnit测试结果
                     junit allowEmptyResults: true, testResults: "reports/junit.xml"
@@ -167,6 +167,11 @@ pipeline {
 
                     echo "📈 代码覆盖率: ${coverage}%"
                     env.COVERAGE_PERCENT = coverage
+                    
+                    // 清理workspace中的报告文件以节省空间（报告已发布）
+                    echo "🧹 清理workspace中的临时报告文件..."
+                    sh "rm -rf ${WORKSPACE}/reports/htmlcov 2>/dev/null || true"
+                    sh "rm -f ${WORKSPACE}/reports/pytest-report.html 2>/dev/null || true"
                 }
             }
         }
