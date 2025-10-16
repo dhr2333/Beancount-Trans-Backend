@@ -25,3 +25,4 @@ uwsgi.pid
 fixtures/Develop.sql
 beancount-trans-backend.tar
 training_data.jsonl
+reports/

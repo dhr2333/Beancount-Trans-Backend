@@ -92,15 +92,14 @@ Beancount-Trans-Backend/
 ### API 端点
 
 - `/api/account/` - 账户管理
-- `/api/account-templates/` - 账户模板
-- `/api/templates/` - 映射模板
+- `/api/expense/` - 支出映射
 - `/api/translate/trans` - 单文件解析
 - `/api/translate/multi` - 多文件解析
 
 ### 管理后台
 
 - `/admin/` - Django Admin
-- `/api/schema/swagger-ui/` - API 文档
+- `/api/redoc/` - API 文档
 
 ## 故障排查
 

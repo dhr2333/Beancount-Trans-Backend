@@ -1,0 +1,65 @@
+[run]
+# 指定覆盖率分析的源代码目录
+source = project
+
+# 忽略的文件和目录
+omit =
+    */tests/*
+    */test_*
+    *_tests.py
+    */migrations/*
+    */admin.py
+    */apps.py
+    */wsgi.py
+    */asgi.py
+    manage.py
+    */settings/*.py
+    */__pycache__/*
+    */static/*
+    */media/*
+    */templates/*
+    */fixtures/*
+    */pretrained_models/*
+    */bin/*
+    */conf/*
+    */htmlcov/*
+    */collectstatic/*
+
+[report]
+# 显示缺少覆盖的行号
+show_missing = True
+
+# 精度设置
+precision = 2
+
+# 忽略错误
+ignore_errors = True
+
+# 排除某些行不计入覆盖率
+exclude_lines =
+    # 标准排除项
+    pragma: no cover
+    def __repr__
+    def __str__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abstract
+    # 调试代码
+    if settings.DEBUG
+    # 类型检查
+    if False:
+    # 平台特定代码
+    if platform.system
+
+[html]
+# HTML报告输出目录
+directory = reports/htmlcov
+
+[xml]
+# XML报告输出文件
+output = reports/coverage.xml
+
+

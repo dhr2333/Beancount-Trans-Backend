@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 # Django 配置
-DJANGO_SETTINGS_MODULE = "project.settings.develop"
+DJANGO_SETTINGS_MODULE = "project.settings.test"
 # 禁用自动探测
 # django_find_project = "false"
 # 测试路径
@@ -11,7 +11,18 @@ python_files = ["tests.py", "test_*.py", "*_tests.py"]
 filterwarnings = [
     "ignore::DeprecationWarning:coreapi.*",
     "ignore::DeprecationWarning:cgi.*",
-    "ignore::DeprecationWarning:PyPDF2.*"
+    "ignore::DeprecationWarning:PyPDF2.*",
 ]
-# 附加参数（禁用迁移加速测试）
-addopts = "--no-migrations --reuse-db"
+# 附加参数
+addopts = """
+    --no-migrations
+    --reuse-db
+    --cov=project
+    --cov-report=html:reports/htmlcov
+    --cov-report=xml:reports/coverage.xml
+    --cov-report=term-missing
+    --html=reports/pytest-report.html
+    --self-contained-html
+    --junitxml=reports/junit.xml
+    -v
+"""

@@ -1,63 +1,94 @@
-# 通用忽略规则
-**/.git
-**/.gitignore
-**/.vscode
-**/.idea
-**/__pycache__
-**/*.py[cod]
-**/*.swp
-**/*.bak
-**/*~*
-**/.DS_Store
-**/Thumbs.db
-**/env
-**/venv
-**/.env
+# Python 缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
-# 项目特定忽略规则
-# 测试相关
-/tests/
-/htmlcov/
-/coverage.xml
+# 分发/打包
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 测试和覆盖率报告
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+reports/
 
 # 日志文件
-# /logs/
+*.log
+logs/*.log
 
-# 开发配置
-/conf/develop.py
-/conf/__pycache__/
+# 环境配置
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# 备份文件
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 项目特定
+Assets/
+fixtures/
+collectstatic/
+static/
+node_modules/
 *.tar
+*.tar.gz
+*.zip
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+Jenkinsfile
+.github/
+
+# 文档
+docs/
+*.md
+README*
+LICENSE*
+SECURITY.md
+
+# 其他
 *.bak
-requirements.txt.bak
-
-# 数据库相关
-# /fixtures/
-
-# 构建产物
-/collectstatic/
-/static/
-/dist/
-/build/
-*.egg-info/
-beancount-trans-backend.tar
-
-# 文档文件
-/docs/
-
-# 临
-/uwsgi.pid
-
-# CI/CD 文件
-/Jenkinsfile
-
-# Python 环境管理
-/Pipfile
-/Pipfile.lock
-/pyproject.toml
-
-
-# 其他 Dockerfiles
-# /Dockerfile-Mysql
-# /Dockerfile-Postgres
+*.tmp
+temp/
+tmp/
