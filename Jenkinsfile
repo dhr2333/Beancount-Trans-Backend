@@ -50,8 +50,8 @@ pipeline {
                         echo "🏗️ 构建测试Docker镜像..."
                         updateGitHubStatus('pending', '正在构建测试镜像...')
 
-                        sh "DOCKER_BUILDKIT=1 docker build -f Dockerfile-Test-Legacy -t ${IMAGE_NAME}:${TEST_IMAGE_TAG} ."
-                        echo "✅ 测试镜像构建完成: ${IMAGE_NAME}:${TEST_IMAGE_TAG}"
+                        sh "DOCKER_BUILDKIT=1 docker build -f Dockerfile-Test-Legacy -t ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} ."
+                        echo "✅ 测试镜像构建完成: ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG}"
                     }
                 }
             }
@@ -68,22 +68,49 @@ pipeline {
                     sh "mkdir -p ${REPORTS_DIR}"
                     
                     // 在容器内运行测试，挂载报告目录
+                    echo "🐳 启动测试容器，挂载报告目录: ${REPORTS_DIR} -> /app/reports"
                     sh """
                         docker run --rm \
                             -v ${REPORTS_DIR}:/app/reports \
-                            ${IMAGE_NAME}:${TEST_IMAGE_TAG} \
-                            pytest --no-migrations --reuse-db || exit 0
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
+                            pytest --no-migrations --reuse-db --junitxml=/app/reports/junit.xml --html=/app/reports/pytest-report.html --self-contained-html || exit 0
                     """
                     
-                    // 检查测试结果
+                    // 检查测试结果 - 增加调试信息和重试机制
+                    echo "🔍 检查测试报告文件..."
+                    echo "报告目录: ${REPORTS_DIR}"
+                    
+                    // 列出报告目录内容进行调试
+                    sh "ls -la ${REPORTS_DIR} || echo '报告目录不存在'"
+                    
+                    // 等待文件系统同步
+                    sleep(2)
+                    
                     def testResult = sh(
                         script: "test -f ${REPORTS_DIR}/junit.xml && echo 'exists' || echo 'missing'",
                         returnStdout: true
                     ).trim()
                     
+                    echo "测试结果检查: ${testResult}"
+                    
                     if (testResult == 'missing') {
-                        updateGitHubStatus('failure', '测试报告生成失败')
-                        error("测试报告生成失败")
+                        echo "❌ 测试报告文件未找到，尝试从宿主机检查..."
+                        // 尝试从宿主机路径检查（如果Jenkins容器有访问权限）
+                        def hostResult = sh(
+                            script: "test -f /var/jenkins_home/workspace/${env.JOB_NAME}/reports/junit.xml && echo 'exists' || echo 'missing'",
+                            returnStdout: true
+                        ).trim()
+                        echo "宿主机检查结果: ${hostResult}"
+                        
+                        if (hostResult == 'missing') {
+                            updateGitHubStatus('failure', '测试报告生成失败')
+                            error("测试报告生成失败")
+                        } else {
+                            echo "✅ 在宿主机找到测试报告，继续执行"
+                        }
+                    } else {
+                        echo "✅ 测试报告文件存在"
                     }
                 }
             }
