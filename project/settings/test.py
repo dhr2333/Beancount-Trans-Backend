@@ -5,7 +5,7 @@
 - 禁用Celery任务
 - 简化日志输出
 """
-from .develop import *
+from .settings import *
 
 # 测试模式标记
 TESTING = True
