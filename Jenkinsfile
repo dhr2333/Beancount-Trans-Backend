@@ -15,7 +15,7 @@ pipeline {
         GITHUB_API_URL = 'https://api.github.com'
         
         // 报告目录
-        REPORTS_DIR = "${WORKSPACE}/reports"
+        REPORTS_DIR = "/jenkins-share/test-reports/${JOB_NAME}/${BUILD_NUMBER}"
     }
 
     stages {
@@ -63,21 +63,19 @@ pipeline {
                     echo "🧪 在Docker容器内运行pytest测试..."
                     updateGitHubStatus('pending', '正在运行测试...')
                     
-                    // 清理旧报告
-                    sh "rm -rf ${REPORTS_DIR}"
-                    sh "mkdir -p ${REPORTS_DIR}"
+                    // 报告目录将在容器内自动创建
                     
-                    // 在容器内运行测试，挂载报告目录
-                    echo "🐳 启动测试容器，挂载报告目录: ${REPORTS_DIR} -> /app/reports"
+                    // 在容器内运行测试，挂载共享卷
+                    echo "🐳 启动测试容器，使用共享卷: ${REPORTS_DIR}"
                     sh """
                         docker run --rm \
-                            -v ${REPORTS_DIR}:/app/reports \
+                            -v dhr2333-jenkins-share:/jenkins-share \
                             -v /var/run/docker.sock:/var/run/docker.sock \
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
-                            pytest --no-migrations --reuse-db --junitxml=/app/reports/junit.xml --html=/app/reports/pytest-report.html --self-contained-html || exit 0
+                            bash -c "mkdir -p ${REPORTS_DIR} && pytest --no-migrations --reuse-db --junitxml=${REPORTS_DIR}/junit.xml --html=${REPORTS_DIR}/pytest-report.html --self-contained-html --cov-report=xml:${REPORTS_DIR}/coverage.xml --cov-report=html:${REPORTS_DIR}/htmlcov || exit 0"
                     """
                     
-                    // 检查测试结果 - 增加调试信息和重试机制
+                    // 检查测试结果
                     echo "🔍 检查测试报告文件..."
                     echo "报告目录: ${REPORTS_DIR}"
                     
@@ -95,20 +93,9 @@ pipeline {
                     echo "测试结果检查: ${testResult}"
                     
                     if (testResult == 'missing') {
-                        echo "❌ 测试报告文件未找到，尝试从宿主机检查..."
-                        // 尝试从宿主机路径检查（如果Jenkins容器有访问权限）
-                        def hostResult = sh(
-                            script: "test -f /var/jenkins_home/workspace/${env.JOB_NAME}/reports/junit.xml && echo 'exists' || echo 'missing'",
-                            returnStdout: true
-                        ).trim()
-                        echo "宿主机检查结果: ${hostResult}"
-                        
-                        if (hostResult == 'missing') {
-                            updateGitHubStatus('failure', '测试报告生成失败')
-                            error("测试报告生成失败")
-                        } else {
-                            echo "✅ 在宿主机找到测试报告，继续执行"
-                        }
+                        echo "❌ 测试报告文件未找到"
+                        updateGitHubStatus('failure', '测试报告生成失败')
+                        error("测试报告生成失败")
                     } else {
                         echo "✅ 测试报告文件存在"
                     }
