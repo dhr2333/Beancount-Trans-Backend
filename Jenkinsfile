@@ -15,7 +15,7 @@ pipeline {
         GITHUB_API_URL = 'https://api.github.com'
         
         // 报告目录 - 使用安全的路径格式避免URL编码问题
-        REPORTS_DIR = "/jenkins-share/test-reports/${JOB_NAME.replaceAll('[^a-zA-Z0-9-_]', '_')}/${BUILD_NUMBER}"
+        REPORTS_DIR = "/jenkins-share/test-reports/${BUILD_NUMBER}"
     }
 
     stages {
