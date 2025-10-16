@@ -71,6 +71,7 @@ pipeline {
                         docker run --rm \
                             -v dhr2333-jenkins-share:/jenkins-share \
                             -v /var/run/docker.sock:/var/run/docker.sock \
+                            --user \$(id -u):\$(id -g) \
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
                             bash -c "mkdir -p ${REPORTS_DIR} && pytest --no-migrations --reuse-db --junitxml=${REPORTS_DIR}/junit.xml --html=${REPORTS_DIR}/pytest-report.html --self-contained-html --cov-report=xml:${REPORTS_DIR}/coverage.xml --cov-report=html:${REPORTS_DIR}/htmlcov || exit 0"
                     """
@@ -285,7 +286,7 @@ pipeline {
                         cd /jenkins-share/test-reports
                         if [ -d "${BUILD_NUMBER}" ]; then
                             # 获取所有构建号并删除旧的
-                            ls -1 | sort -n | head -n -3 | xargs -r rm -rf
+                            ls -1 | sort -n | head -n -3 | xargs -r rm -rf 2>/dev/null || true
                         fi
                     """
                 } catch (Exception e) {
