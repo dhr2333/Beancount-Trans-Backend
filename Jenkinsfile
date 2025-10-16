@@ -108,11 +108,13 @@ pipeline {
                 script {
                     echo "📊 发布测试报告..."
 
-                    // 将报告文件复制到workspace以便Jenkins插件访问
-                    echo "📁 复制报告文件到workspace..."
+                    // 创建符号链接而不是复制文件，节省存储空间
+                    echo "📁 创建报告文件符号链接..."
                     sh "mkdir -p ${WORKSPACE}/reports"
-                    sh "cp ${REPORTS_DIR}/* ${WORKSPACE}/reports/ 2>/dev/null || true"
-                    sh "cp -r ${REPORTS_DIR}/htmlcov ${WORKSPACE}/reports/ 2>/dev/null || true"
+                    sh "ln -sf ${REPORTS_DIR}/junit.xml ${WORKSPACE}/reports/junit.xml"
+                    sh "ln -sf ${REPORTS_DIR}/pytest-report.html ${WORKSPACE}/reports/pytest-report.html"
+                    sh "ln -sf ${REPORTS_DIR}/coverage.xml ${WORKSPACE}/reports/coverage.xml"
+                    sh "ln -sf ${REPORTS_DIR}/htmlcov ${WORKSPACE}/reports/htmlcov"
 
                     // 发布JUnit测试结果
                     junit allowEmptyResults: true, testResults: "reports/junit.xml"
@@ -138,13 +140,6 @@ pipeline {
                         reportName: '代码覆盖率报告',
                         reportTitles: '代码覆盖率报告'
                     ])
-
-                    // 发布Cobertura覆盖率（如果安装了插件）
-                    try {
-                        cobertura coberturaReportFile: "reports/coverage.xml"
-                    } catch (Exception e) {
-                        echo "Cobertura插件未安装或配置，跳过XML覆盖率报告"
-                    }
 
                     // 读取覆盖率百分比
                     def coverage = sh(
@@ -274,8 +269,28 @@ pipeline {
 
         always {
             script {
-                echo '🧹 清理测试镜像...'
-                // sh "docker rmi ${IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
+                echo '🧹 清理测试镜像和临时文件...'
+                
+                // 清理测试镜像（可选，节省磁盘空间）
+                try {
+                    sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
+                } catch (Exception e) {
+                    echo "清理测试镜像失败: ${e.message}"
+                }
+                
+                // 清理旧的测试报告（保留最近3个构建的报告）
+                try {
+                    sh """
+                        # 清理超过3个构建的旧报告目录
+                        cd /jenkins-share/test-reports
+                        if [ -d "${BUILD_NUMBER}" ]; then
+                            # 获取所有构建号并删除旧的
+                            ls -1 | sort -n | head -n -3 | xargs -r rm -rf
+                        fi
+                    """
+                } catch (Exception e) {
+                    echo "清理旧报告失败: ${e.message}"
+                }
             }
             cleanWs()
         }
