@@ -71,9 +71,20 @@ pipeline {
                         docker run --rm \
                             -v dhr2333-jenkins-share:/jenkins-share \
                             -v /var/run/docker.sock:/var/run/docker.sock \
-                            --user \$(id -u):\$(id -g) \
+                            -e PYTHONUNBUFFERED=1 \
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
-                            bash -c "mkdir -p ${REPORTS_DIR} && pytest --no-migrations --reuse-db --junitxml=${REPORTS_DIR}/junit.xml --html=${REPORTS_DIR}/pytest-report.html --self-contained-html --cov-report=xml:${REPORTS_DIR}/coverage.xml --cov-report=html:${REPORTS_DIR}/htmlcov || exit 0"
+                            bash -c "
+                                mkdir -p ${REPORTS_DIR}
+                                chmod 777 ${REPORTS_DIR}
+                                pytest --no-migrations --reuse-db \
+                                    --junitxml=${REPORTS_DIR}/junit.xml \
+                                    --html=${REPORTS_DIR}/pytest-report.html \
+                                    --self-contained-html \
+                                    --cov-report=xml:${REPORTS_DIR}/coverage.xml \
+                                    --cov-report=html:${REPORTS_DIR}/htmlcov \
+                                    || exit 0
+                                chmod -R 777 ${REPORTS_DIR}
+                            "
                     """
 
                     // 检查测试结果
@@ -285,8 +296,13 @@ pipeline {
                         # 清理超过3个构建的旧报告目录
                         cd /jenkins-share/test-reports
                         if [ -d "${BUILD_NUMBER}" ]; then
-                            # 获取所有构建号并删除旧的
-                            ls -1 | sort -n | head -n -3 | xargs -r rm -rf 2>/dev/null || true
+                            # 获取所有构建号并删除旧的，使用chmod确保权限
+                            ls -1 | sort -n | head -n -3 | while read dir; do
+                                if [ -d "\$dir" ]; then
+                                    chmod -R 777 "\$dir" 2>/dev/null || true
+                                    rm -rf "\$dir" 2>/dev/null || true
+                                fi
+                            done
                         fi
                     """
                 } catch (Exception e) {
