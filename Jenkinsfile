@@ -9,11 +9,11 @@ pipeline {
         // Docker配置
         REGISTRY = "harbor.dhr2333.cn/beancount-trans"
         IMAGE_NAME = "beancount-trans-backend"
-        
+
         // GitHub配置
         GITHUB_REPO = 'dhr2333/Beancount-Trans-Backend'
         GITHUB_API_URL = 'https://api.github.com'
-        
+
         // 报告目录 - 使用安全的路径格式避免URL编码问题
         REPORTS_DIR = "/jenkins-share/test-reports/${BUILD_NUMBER}"
     }
@@ -34,7 +34,7 @@ pipeline {
                     // 设置镜像标签
                     env.IMAGE_TAG = "git-${env.GIT_COMMIT_SHORT}"
                     env.TEST_IMAGE_TAG = "test-${env.IMAGE_TAG}"
-                    
+
                     echo "Git Commit短哈希: ${env.GIT_COMMIT_SHORT}"
                     echo "生产镜像标签: ${env.IMAGE_TAG}"
                     echo "测试镜像标签: ${env.TEST_IMAGE_TAG}"
@@ -42,7 +42,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('构建测试镜像') {
             steps {
                 retry(3) {
@@ -62,9 +62,9 @@ pipeline {
                 script {
                     echo "🧪 在Docker容器内运行pytest测试..."
                     updateGitHubStatus('pending', '正在运行测试...')
-                    
+
                     // 报告目录将在容器内自动创建
-                    
+
                     // 在容器内运行测试，挂载共享卷
                     echo "🐳 启动测试容器，使用共享卷: ${REPORTS_DIR}"
                     sh """
@@ -74,24 +74,24 @@ pipeline {
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
                             bash -c "mkdir -p ${REPORTS_DIR} && pytest --no-migrations --reuse-db --junitxml=${REPORTS_DIR}/junit.xml --html=${REPORTS_DIR}/pytest-report.html --self-contained-html --cov-report=xml:${REPORTS_DIR}/coverage.xml --cov-report=html:${REPORTS_DIR}/htmlcov || exit 0"
                     """
-                    
+
                     // 检查测试结果
                     echo "🔍 检查测试报告文件..."
                     echo "报告目录: ${REPORTS_DIR}"
-                    
+
                     // 列出报告目录内容进行调试
                     sh "ls -la ${REPORTS_DIR} || echo '报告目录不存在'"
-                    
+
                     // 等待文件系统同步
                     sleep(2)
-                    
+
                     def testResult = sh(
                         script: "test -f ${REPORTS_DIR}/junit.xml && echo 'exists' || echo 'missing'",
                         returnStdout: true
                     ).trim()
-                    
+
                     echo "测试结果检查: ${testResult}"
-                    
+
                     if (testResult == 'missing') {
                         echo "❌ 测试报告文件未找到"
                         updateGitHubStatus('failure', '测试报告生成失败')
@@ -107,51 +107,57 @@ pipeline {
             steps {
                 script {
                     echo "📊 发布测试报告..."
-                    
+
+                    // 将报告文件复制到workspace以便Jenkins插件访问
+                    echo "📁 复制报告文件到workspace..."
+                    sh "mkdir -p ${WORKSPACE}/reports"
+                    sh "cp ${REPORTS_DIR}/* ${WORKSPACE}/reports/ 2>/dev/null || true"
+                    sh "cp -r ${REPORTS_DIR}/htmlcov ${WORKSPACE}/reports/ 2>/dev/null || true"
+
                     // 发布JUnit测试结果
-                    junit allowEmptyResults: true, testResults: "${REPORTS_DIR}/junit.xml"
-                    
+                    junit allowEmptyResults: true, testResults: "reports/junit.xml"
+
                     // 发布HTML测试报告
                     publishHTML([
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
-                        reportDir: "${REPORTS_DIR}",
+                        reportDir: 'reports',
                         reportFiles: 'pytest-report.html',
                         reportName: 'Pytest测试报告',
                         reportTitles: 'Pytest测试报告'
                     ])
-                    
+
                     // 发布覆盖率报告
                     publishHTML([
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
-                        reportDir: "${REPORTS_DIR}/htmlcov",
+                        reportDir: 'reports/htmlcov',
                         reportFiles: 'index.html',
                         reportName: '代码覆盖率报告',
                         reportTitles: '代码覆盖率报告'
                     ])
-                    
+
                     // 发布Cobertura覆盖率（如果安装了插件）
                     try {
-                        cobertura coberturaReportFile: "${REPORTS_DIR}/coverage.xml"
+                        cobertura coberturaReportFile: "reports/coverage.xml"
                     } catch (Exception e) {
                         echo "Cobertura插件未安装或配置，跳过XML覆盖率报告"
                     }
-                    
+
                     // 读取覆盖率百分比
                     def coverage = sh(
                         script: """
-                            if [ -f ${REPORTS_DIR}/coverage.xml ]; then
-                                grep -oP 'line-rate="\\K[0-9.]+' ${REPORTS_DIR}/coverage.xml | head -1 | awk '{printf "%.0f", \$1*100}'
+                            if [ -f reports/coverage.xml ]; then
+                                grep -oP 'line-rate="\\K[0-9.]+' reports/coverage.xml | head -1 | awk '{printf "%.0f", \$1*100}'
                             else
                                 echo "0"
                             fi
                         """,
                         returnStdout: true
                     ).trim()
-                    
+
                     echo "📈 代码覆盖率: ${coverage}%"
                     env.COVERAGE_PERCENT = coverage
                 }
@@ -278,12 +284,21 @@ pipeline {
 
 // 更新GitHub提交状态的函数
 def updateGitHubStatus(String state, String description) {
-    // 获取当前commit SHA
-    def commitSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-    
+    // 获取当前commit SHA，优先使用环境变量，fallback到git命令
+    def commitSha = env.GIT_COMMIT ?: env.GIT_COMMIT_SHORT
+
+    if (!commitSha) {
+        try {
+            commitSha = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+        } catch (Exception e) {
+            echo "无法获取Git commit SHA: ${e.message}"
+            return
+        }
+    }
+
     // 构建Jenkins构建URL
     def targetUrl = "${env.BUILD_URL}"
-    
+
     // GitHub状态API payload
     def payload = """
     {
@@ -293,7 +308,7 @@ def updateGitHubStatus(String state, String description) {
         "context": "continuous-integration/jenkins/${env.BRANCH_NAME}"
     }
     """
-    
+
     // 使用GitHub Token更新状态
     try {
         withCredentials([string(credentialsId: '1b709f07-d907-4000-8a8a-2adafa6fc658', variable: 'GITHUB_TOKEN')]) {
