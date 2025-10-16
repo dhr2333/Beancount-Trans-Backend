@@ -109,14 +109,14 @@ pipeline {
                     echo "📊 发布测试报告..."
                     
                     // 发布JUnit测试结果
-                    junit allowEmptyResults: true, testResults: 'reports/junit.xml'
+                    junit allowEmptyResults: true, testResults: "${REPORTS_DIR}/junit.xml"
                     
                     // 发布HTML测试报告
                     publishHTML([
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
-                        reportDir: 'reports',
+                        reportDir: "${REPORTS_DIR}",
                         reportFiles: 'pytest-report.html',
                         reportName: 'Pytest测试报告',
                         reportTitles: 'Pytest测试报告'
@@ -127,7 +127,7 @@ pipeline {
                         allowMissing: false,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
-                        reportDir: 'reports/htmlcov',
+                        reportDir: "${REPORTS_DIR}/htmlcov",
                         reportFiles: 'index.html',
                         reportName: '代码覆盖率报告',
                         reportTitles: '代码覆盖率报告'
@@ -135,7 +135,7 @@ pipeline {
                     
                     // 发布Cobertura覆盖率（如果安装了插件）
                     try {
-                        cobertura coberturaReportFile: 'reports/coverage.xml'
+                        cobertura coberturaReportFile: "${REPORTS_DIR}/coverage.xml"
                     } catch (Exception e) {
                         echo "Cobertura插件未安装或配置，跳过XML覆盖率报告"
                     }
@@ -143,8 +143,8 @@ pipeline {
                     // 读取覆盖率百分比
                     def coverage = sh(
                         script: """
-                            if [ -f reports/coverage.xml ]; then
-                                grep -oP 'line-rate="\\K[0-9.]+' reports/coverage.xml | head -1 | awk '{printf "%.0f", \$1*100}'
+                            if [ -f ${REPORTS_DIR}/coverage.xml ]; then
+                                grep -oP 'line-rate="\\K[0-9.]+' ${REPORTS_DIR}/coverage.xml | head -1 | awk '{printf "%.0f", \$1*100}'
                             else
                                 echo "0"
                             fi
