@@ -39,6 +39,7 @@ requests-oauthlib==2.0.0
 uWSGI==2.0.28
 wheel==0.46.1
 xlrd==2.0.1
+pandas==2.2.3
 
 # 排除的大型包（注释掉）：
 # boto3==1.40.7          # AWS SDK (30MB)
@@ -46,7 +47,6 @@ xlrd==2.0.1
 # ipykernel==6.29.5      # Jupyter kernel
 # mysqlclient==2.2.6     # MySQL 驱动
 # openai==1.81.0         # OpenAI API (20MB)
-# pandas==2.2.3          # 数据分析 (50MB)
 # spacy==3.8.6           # NLP 库 (200MB)
 # torch==2.7.0           # PyTorch (2.5GB)
 # transformers==4.52.2   # Hugging Face (500MB)
