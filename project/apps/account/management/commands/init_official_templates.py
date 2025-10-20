@@ -57,6 +57,9 @@ class Command(BaseCommand):
         # 6. 确保 admin 用户有格式化配置
         self._ensure_format_config(admin_user)
 
+        # 7. 为 admin 用户创建案例文件
+        self._create_sample_files_for_admin(admin_user, force)
+
         self.stdout.write(self.style.SUCCESS('✓ 官方模板和默认用户初始化完成'))
 
     def _ensure_admin_user(self, skip_admin):
@@ -923,4 +926,126 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f'✓ 为 admin 用户创建映射: 支出={final_expenses}, 资产={final_assets}, 收入={final_incomes}'
         ))
+
+    def _create_sample_files_for_admin(self, admin_user, force):
+        """为 admin 用户创建案例文件"""
+        from project.apps.file_manager.models import Directory, File
+        from project.apps.translate.models import ParseFile
+        from project.utils.storage_factory import get_storage_client
+        from project.utils.file import generate_file_hash, BeanFileManager
+        import os
+
+        # 获取或创建 Root 目录
+        root_dir = Directory.objects.filter(
+            name='Root',
+            owner=admin_user,
+            parent__isnull=True
+        ).first()
+
+        if not root_dir:
+            root_dir = Directory.objects.create(
+                name='Root',
+                owner=admin_user,
+                parent=None
+            )
+
+        # 检查是否已有案例文件
+        existing_files = File.objects.filter(
+            owner=admin_user,
+            directory=root_dir,
+            name__in=['完整测试_微信.csv', '完整测试_支付宝.csv']
+        )
+
+        if existing_files.exists():
+            if force:
+                existing_files.delete()
+                self.stdout.write(self.style.WARNING('删除现有案例文件'))
+            else:
+                self.stdout.write(self.style.WARNING('案例文件已存在，使用 --force 强制重建'))
+                return
+
+        # 案例文件配置
+        sample_files = [
+            {
+                'name': '完整测试_微信.csv',
+                'directory': root_dir,
+                'local_path': 'fixtures/sample_files/完整测试_微信.csv',
+                'content_type': 'text/csv'
+            },
+            {
+                'name': '完整测试_支付宝.csv',
+                'directory': root_dir,
+                'local_path': 'fixtures/sample_files/完整测试_支付宝.csv',
+                'content_type': 'text/csv'
+            }
+        ]
+
+        storage_client = get_storage_client()
+        created_files = []
+
+        for file_config in sample_files:
+            local_path = file_config['local_path']
+            
+            # 检查本地文件是否存在
+            if not os.path.exists(local_path):
+                self.stdout.write(self.style.WARNING(f'本地文件不存在: {local_path}，跳过'))
+                continue
+
+            # 读取文件内容
+            with open(local_path, 'rb') as f:
+                file_content = f.read()
+
+            # 生成文件哈希和存储名称
+            import hashlib
+            hasher = hashlib.sha256()
+            hasher.update(file_content)
+            file_hash = hasher.hexdigest()
+            file_extension = os.path.splitext(file_config['name'])[1]
+            storage_name = f"{file_hash}{file_extension}"
+
+            # 上传到存储
+            from io import BytesIO
+            file_stream = BytesIO(file_content)
+            
+            success = storage_client.upload_file(
+                storage_name,
+                file_stream,
+                content_type=file_config['content_type']
+            )
+
+            if not success:
+                self.stdout.write(self.style.ERROR(f'文件上传失败: {file_config["name"]}'))
+                continue
+
+            # 创建文件记录
+            file_obj = File.objects.create(
+                name=file_config['name'],
+                directory=file_config['directory'],
+                storage_name=storage_name,
+                size=len(file_content),
+                owner=admin_user,
+                content_type=file_config['content_type']
+            )
+
+            # 创建解析记录
+            ParseFile.objects.create(file=file_obj)
+
+            # 创建对应的 .bean 文件
+            bean_filename = BeanFileManager.create_bean_file(
+                admin_user.username,
+                file_config['name']
+            )
+            BeanFileManager.update_main_bean_include(
+                admin_user.username,
+                bean_filename,
+                action='add'
+            )
+
+            created_files.append(file_config['name'])
+
+        self.stdout.write(self.style.SUCCESS(
+            f'✓ 为 admin 用户创建案例文件: {len(created_files)} 个文件'
+        ))
+        for filename in created_files:
+            self.stdout.write(f'  - {filename}')
 
