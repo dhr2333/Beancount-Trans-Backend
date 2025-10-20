@@ -3,7 +3,6 @@ pipeline {
 
     options {
         timeout(time: 30, unit: 'MINUTES')
-        buildDiscarder(logRotator(numToKeepStr: '3'))
     }
 
     environment {
@@ -168,7 +167,7 @@ pipeline {
 
                     echo "📈 代码覆盖率: ${coverage}%"
                     env.COVERAGE_PERCENT = coverage
-
+                    
                     // 清理workspace中的报告文件以节省空间（报告已发布）
                     echo "🧹 清理workspace中的临时报告文件..."
                     sh "rm -rf ${WORKSPACE}/reports/htmlcov 2>/dev/null || true"
@@ -288,14 +287,14 @@ pipeline {
         always {
             script {
                 echo '🧹 清理测试镜像和临时文件...'
-
+                
                 // 清理测试镜像（可选，节省磁盘空间）
                 try {
                     sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
                 } catch (Exception e) {
                     echo "清理测试镜像失败: ${e.message}"
                 }
-
+                
                 // 清理旧的测试报告（保留最近3个构建的报告）
                 try {
                     sh """
