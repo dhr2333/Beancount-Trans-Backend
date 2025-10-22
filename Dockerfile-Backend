@@ -23,14 +23,17 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user -r requirements.txt
 
-COPY pretrained_models/ /build/pretrained_models
-RUN --mount=type=cache,target=/root/.cache/pip \
+# 使用bind mount挂载预训练模型,避免将大文件COPY到镜像层
+RUN --mount=type=bind,source=pretrained_models,target=/build/pretrained_models \
+    --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0 \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user openai \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user pandas \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user transformers \
     && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user spacy \
     && pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl \
+    && mkdir -p /build/bert-base-chinese \
+    && cp -r /build/pretrained_models/bert-base-chinese /build/ \
     && apt-get purge -y --auto-remove build-essential python3-dev
 
 # 第二阶段：生产镜像
@@ -51,7 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.local /root/.local
-COPY --from=builder /build/pretrained_models/bert-base-chinese /code/beancount-trans/pretrained_models/bert-base-chinese
+COPY --from=builder /build/bert-base-chinese /code/beancount-trans/pretrained_models/bert-base-chinese
 
 COPY bin ./bin
 COPY conf ./conf

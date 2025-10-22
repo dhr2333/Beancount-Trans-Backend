@@ -34,25 +34,34 @@ pipeline {
 
                     // 设置镜像标签
                     env.IMAGE_TAG = "git-${env.GIT_COMMIT_SHORT}"
-                    env.TEST_IMAGE_TAG = "test-${env.IMAGE_TAG}"
 
                     echo "Git Commit短哈希: ${env.GIT_COMMIT_SHORT}"
-                    echo "生产镜像标签: ${env.IMAGE_TAG}"
-                    echo "测试镜像标签: ${env.TEST_IMAGE_TAG}"
+                    echo "镜像标签: ${env.IMAGE_TAG}"
                     echo "工作目录: ${env.WORKSPACE}"
                 }
             }
         }
 
-        stage('构建测试镜像') {
+        stage('构建生产镜像') {
             steps {
                 retry(3) {
                     script {
-                        echo "🏗️ 构建测试Docker镜像..."
-                        updateGitHubStatus('pending', '正在构建测试镜像...')
+                        echo "🐳 构建生产Docker镜像..."
+                        updateGitHubStatus('pending', '正在构建镜像...')
 
-                        sh "DOCKER_BUILDKIT=1 docker build -f Dockerfile-Test-Legacy -t ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} ."
-                        echo "✅ 测试镜像构建完成: ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG}"
+                        // 使用BuildKit的build context功能挂载预训练模型
+                        sh """
+                            DOCKER_BUILDKIT=1 docker build \
+                                --build-context pretrained_models=/jenkins-share/pretrained_models \
+                                -f Dockerfile-Backend \
+                                -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} .
+                        """
+                        
+                        if (env.BRANCH_NAME == 'main') {
+                            sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
+                        }
+                        
+                        echo "✅ 生产镜像构建完成: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                     }
                 }
             }
@@ -73,7 +82,7 @@ pipeline {
                             -v dhr2333-jenkins-share:/jenkins-share \
                             -v /var/run/docker.sock:/var/run/docker.sock \
                             -e PYTHONUNBUFFERED=1 \
-                            ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} \
+                            ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
                             bash -c "
                                 mkdir -p ${REPORTS_DIR}
                                 chmod 777 ${REPORTS_DIR}
@@ -289,11 +298,11 @@ pipeline {
             script {
                 echo '🧹 清理测试镜像和临时文件...'
 
-                // 清理测试镜像（可选，节省磁盘空间）
+                // 清理旧的生产镜像（可选，节省磁盘空间）
                 try {
-                    sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${TEST_IMAGE_TAG} || true"
+                    sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} || true"
                 } catch (Exception e) {
-                    echo "清理测试镜像失败: ${e.message}"
+                    echo "清理镜像失败: ${e.message}"
                 }
 
                 // 清理旧的测试报告（保留最近3个构建的报告）
