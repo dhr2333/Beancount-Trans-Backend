@@ -218,6 +218,12 @@ REST_AUTH = {
     "JWT_AUTH_HTTPONLY": False,
     'JWT_AUTH_COOKIE': 'beancount-trans-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
+    'JWT_AUTH_COOKIE_USE_CSRF': False,
+    'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
+    'JWT_ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=1),
+    'JWT_REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
+    'JWT_ROTATE_REFRESH_TOKENS': False,
+    'JWT_BLACKLIST_AFTER_ROTATION': True,
 }
 
 
@@ -379,26 +385,6 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # 自动生成 API 文档的模式类
 }
 
-
-# Simple JWT Settings
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=1),  # Access_Token 访问令牌的有效期
-    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),  # Refresh_Token 刷新令牌的有效期
-    'ROTATE_REFRESH_TOKENS': False,  # 是否在每次请求时旋转刷新令牌
-    'BLACKLIST_AFTER_ROTATION': True,  # 在旋转后是否将旧的刷新令牌列入黑名单
-    'ALGORITHM': 'HS256',  # 用于签名的算法
-    'SIGNING_KEY': SECRET_KEY,  # 签名的密钥
-    'VERIFYING_KEY': None,
-    'AUDIENCE': None,
-    'ISSUER': None,
-    'AUTH_HEADER_TYPES': ('Bearer',),  # 定义身份验证头的类型，通常是 Bearer
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),  # 定义用于生成的令牌类型
-    'TOKEN_TYPE_CLAIM': 'token_type',
-    'JTI_CLAIM': 'jti',
-    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
-}
 
 # DRF Spectacular Settings
 SPECTACULAR_SETTINGS = {
