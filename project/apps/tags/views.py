@@ -100,147 +100,147 @@ class TagViewSet(ModelViewSet):
         serializer = self.get_serializer(root_tags, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
-    def children(self, request, pk=None):
-        """
-        获取指定标签的直接子标签
+    # @action(detail=True, methods=['get'])
+    # def children(self, request, pk=None):
+    #     """
+    #     获取指定标签的直接子标签
 
-        Args:
-            pk: 标签ID
+    #     Args:
+    #         pk: 标签ID
 
-        Returns:
-            子标签列表
-        """
-        tag = self.get_object()
-        children = tag.children.filter(owner=request.user if request.user.is_authenticated else 1)
+    #     Returns:
+    #         子标签列表
+    #     """
+    #     tag = self.get_object()
+    #     children = tag.children.filter(owner=request.user if request.user.is_authenticated else 1)
 
-        serializer = TagSerializer(children, many=True, context={'request': request})
-        return Response(serializer.data)
+    #     serializer = TagSerializer(children, many=True, context={'request': request})
+    #     return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
-    def descendants(self, request, pk=None):
-        """
-        获取指定标签的所有后代标签（递归）
+    # @action(detail=True, methods=['get'])
+    # def descendants(self, request, pk=None):
+    #     """
+    #     获取指定标签的所有后代标签（递归）
 
-        Args:
-            pk: 标签ID
+    #     Args:
+    #         pk: 标签ID
 
-        Returns:
-            所有后代标签的ID列表
-        """
-        tag = self.get_object()
-        descendant_ids = tag.get_all_children()
+    #     Returns:
+    #         所有后代标签的ID列表
+    #     """
+    #     tag = self.get_object()
+    #     descendant_ids = tag.get_all_children()
 
-        return Response({
-            'tag_id': tag.id,
-            'tag_name': tag.name,
-            'descendant_ids': descendant_ids,
-            'count': len(descendant_ids)
-        })
+    #     return Response({
+    #         'tag_id': tag.id,
+    #         'tag_name': tag.name,
+    #         'descendant_ids': descendant_ids,
+    #         'count': len(descendant_ids)
+    #     })
 
-    @action(detail=True, methods=['post'])
-    def toggle_enable(self, request, pk=None):
-        """
-        切换标签的启用状态
+    # @action(detail=True, methods=['post'])
+    # def toggle_enable(self, request, pk=None):
+    #     """
+    #     切换标签的启用状态
 
-        注意：禁用父标签会自动禁用所有子标签
-        """
-        tag = self.get_object()
+    #     注意：禁用父标签会自动禁用所有子标签
+    #     """
+    #     tag = self.get_object()
 
-        with transaction.atomic():
-            tag.enable = not tag.enable
-            tag.save()
+    #     with transaction.atomic():
+    #         tag.enable = not tag.enable
+    #         tag.save()
 
-        serializer = self.get_serializer(tag)
-        return Response({
-            'message': f"标签已{'启用' if tag.enable else '禁用'}",
-            'tag': serializer.data
-        })
+    #     serializer = self.get_serializer(tag)
+    #     return Response({
+    #         'message': f"标签已{'启用' if tag.enable else '禁用'}",
+    #         'tag': serializer.data
+    #     })
 
-    @action(detail=False, methods=['post'])
-    def batch_update(self, request):
-        """
-        批量更新标签
+    # @action(detail=False, methods=['post'])
+    # def batch_update(self, request):
+    #     """
+    #     批量更新标签
 
-        支持的操作：
-        - enable: 启用标签
-        - disable: 禁用标签
-        - delete: 删除标签
+    #     支持的操作：
+    #     - enable: 启用标签
+    #     - disable: 禁用标签
+    #     - delete: 删除标签
 
-        请求体示例:
-        {
-            "tag_ids": [1, 2, 3],
-            "action": "disable"
-        }
-        """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+    #     请求体示例:
+    #     {
+    #         "tag_ids": [1, 2, 3],
+    #         "action": "disable"
+    #     }
+    #     """
+    #     serializer = self.get_serializer(data=request.data)
+    #     serializer.is_valid(raise_exception=True)
 
-        tag_ids = serializer.validated_data['tag_ids']
-        action_type = serializer.validated_data['action']
+    #     tag_ids = serializer.validated_data['tag_ids']
+    #     action_type = serializer.validated_data['action']
 
-        # 获取用户的标签
-        User = get_user_model()
-        if request.user.is_authenticated:
-            user = request.user
-        else:
-            try:
-                user = User.objects.get(id=1)
-            except User.DoesNotExist:
-                return Response(
-                    {'error': '默认用户（ID=1）不存在'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+    #     # 获取用户的标签
+    #     User = get_user_model()
+    #     if request.user.is_authenticated:
+    #         user = request.user
+    #     else:
+    #         try:
+    #             user = User.objects.get(id=1)
+    #         except User.DoesNotExist:
+    #             return Response(
+    #                 {'error': '默认用户（ID=1）不存在'},
+    #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #             )
 
-        tags = Tag.objects.filter(id__in=tag_ids, owner=user)
+    #     tags = Tag.objects.filter(id__in=tag_ids, owner=user)
 
-        if not tags.exists():
-            return Response(
-                {'error': '未找到指定的标签'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+    #     if not tags.exists():
+    #         return Response(
+    #             {'error': '未找到指定的标签'},
+    #             status=status.HTTP_404_NOT_FOUND
+    #         )
 
-        result = {
-            'action': action_type,
-            'affected_count': 0,
-            'tag_ids': []
-        }
+    #     result = {
+    #         'action': action_type,
+    #         'affected_count': 0,
+    #         'tag_ids': []
+    #     }
 
-        try:
-            with transaction.atomic():
-                if action_type == 'enable':
-                    tags.update(enable=True)
-                    result['affected_count'] = tags.count()
-                    result['tag_ids'] = list(tags.values_list('id', flat=True))
+    #     try:
+    #         with transaction.atomic():
+    #             if action_type == 'enable':
+    #                 tags.update(enable=True)
+    #                 result['affected_count'] = tags.count()
+    #                 result['tag_ids'] = list(tags.values_list('id', flat=True))
 
-                elif action_type == 'disable':
-                    # 禁用标签及其所有子标签
-                    all_tag_ids = []
-                    for tag in tags:
-                        all_tag_ids.append(tag.id)
-                        all_tag_ids.extend(tag.get_all_children())
+    #             elif action_type == 'disable':
+    #                 # 禁用标签及其所有子标签
+    #                 all_tag_ids = []
+    #                 for tag in tags:
+    #                     all_tag_ids.append(tag.id)
+    #                     all_tag_ids.extend(tag.get_all_children())
 
-                    Tag.objects.filter(id__in=all_tag_ids).update(enable=False)
-                    result['affected_count'] = len(all_tag_ids)
-                    result['tag_ids'] = all_tag_ids
+    #                 Tag.objects.filter(id__in=all_tag_ids).update(enable=False)
+    #                 result['affected_count'] = len(all_tag_ids)
+    #                 result['tag_ids'] = all_tag_ids
 
-                elif action_type == 'delete':
-                    # 删除标签（CASCADE会自动删除子标签）
-                    tag_ids_to_delete = list(tags.values_list('id', flat=True))
-                    tags.delete()
-                    result['affected_count'] = len(tag_ids_to_delete)
-                    result['tag_ids'] = tag_ids_to_delete
+    #             elif action_type == 'delete':
+    #                 # 删除标签（CASCADE会自动删除子标签）
+    #                 tag_ids_to_delete = list(tags.values_list('id', flat=True))
+    #                 tags.delete()
+    #                 result['affected_count'] = len(tag_ids_to_delete)
+    #                 result['tag_ids'] = tag_ids_to_delete
 
-            return Response({
-                'message': '批量操作成功',
-                'result': result
-            })
+    #         return Response({
+    #             'message': '批量操作成功',
+    #             'result': result
+    #         })
 
-        except Exception as e:
-            return Response(
-                {'error': f'批量操作失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+    #     except Exception as e:
+    #         return Response(
+    #             {'error': f'批量操作失败: {str(e)}'},
+    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #         )
 
     def destroy(self, request, pk=None):
         """
@@ -371,28 +371,28 @@ class TagViewSet(ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        """
-        获取标签统计信息
+    # @action(detail=False, methods=['get'])
+    # def stats(self, request):
+    #     """
+    #     获取标签统计信息
 
-        返回：
-        - 总标签数
-        - 启用的标签数
-        - 根标签数
-        - 子标签数
-        """
-        queryset = self.get_queryset()
+    #     返回：
+    #     - 总标签数
+    #     - 启用的标签数
+    #     - 根标签数
+    #     - 子标签数
+    #     """
+    #     queryset = self.get_queryset()
 
-        total = queryset.count()
-        enabled = queryset.filter(enable=True).count()
-        root = queryset.filter(parent__isnull=True).count()
-        children = queryset.filter(parent__isnull=False).count()
+    #     total = queryset.count()
+    #     enabled = queryset.filter(enable=True).count()
+    #     root = queryset.filter(parent__isnull=True).count()
+    #     children = queryset.filter(parent__isnull=False).count()
 
-        return Response({
-            'total': total,
-            'enabled': enabled,
-            'disabled': total - enabled,
-            'root_tags': root,
-            'child_tags': children
-        })
+    #     return Response({
+    #         'total': total,
+    #         'enabled': enabled,
+    #         'disabled': total - enabled,
+    #         'root_tags': root,
+    #         'child_tags': children
+    #     })
