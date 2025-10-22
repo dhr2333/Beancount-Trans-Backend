@@ -163,24 +163,6 @@ class TagSerializer(serializers.ModelSerializer):
         return data
 
 
-class TagBatchUpdateSerializer(serializers.Serializer):
-    """标签批量更新序列化器"""
-    tag_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        help_text="要更新的标签ID列表"
-    )
-    action = serializers.ChoiceField(
-        choices=['enable', 'disable', 'delete'],
-        help_text="操作类型"
-    )
-
-    def validate_tag_ids(self, value):
-        """验证标签ID列表"""
-        if not value:
-            raise serializers.ValidationError("标签ID列表不能为空")
-        return value
-
-
 class TagDeleteSerializer(serializers.Serializer):
     """标签删除序列化器"""
     force = serializers.BooleanField(
