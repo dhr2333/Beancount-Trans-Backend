@@ -66,17 +66,15 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
 
-    # 用户权限相关的urls
-    path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
-    path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证（包含JWT token获取、刷新、验证）
-
     # allauth
-    path("api/accounts/", include("allauth.urls")),
+    path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证（包含JWT token获取、刷新、验证）
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
     # 业务相关的urls
+    path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 格式化输出配置
     path('api/translate/', include('project.apps.translate.urls')),  # 解析地址
     path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
+    path("api/accounts/", include("allauth.urls")),
     # path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
 ]
