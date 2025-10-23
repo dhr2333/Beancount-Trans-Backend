@@ -76,6 +76,7 @@ COPY logs ./logs
 COPY templates ./templates
 COPY manage.py ./manage.py
 COPY project ./project
+COPY pyproject.toml ./pyproject.toml
 RUN chmod +x /code/beancount-trans/bin/celery_beat_start.sh \
     && chmod +x /code/beancount-trans/bin/celery_worker_start.sh \
     && chmod +x /code/beancount-trans/bin/docker_start.sh \
