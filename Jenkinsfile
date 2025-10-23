@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 1440, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '3'))
     }
 
@@ -49,10 +49,12 @@ pipeline {
                         echo "🐳 构建生产Docker镜像..."
                         updateGitHubStatus('pending', '正在构建镜像...')
 
-                        // 使用BuildKit的build context功能挂载预训练模型
+                        // 使用BuildKit的build context功能挂载预训练模型，启用构建缓存
                         sh """
                             DOCKER_BUILDKIT=1 docker build \
                                 --build-context pretrained_models=/jenkins-share/pretrained_models \
+                                --cache-from ${env.REGISTRY}/${env.IMAGE_NAME}:latest \
+                                --build-arg BUILDKIT_INLINE_CACHE=1 \
                                 -f Dockerfile-Backend \
                                 -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} .
                         """

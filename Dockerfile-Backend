@@ -25,15 +25,28 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # 从命名构建上下文复制预训练模型（需要 BuildKit）
 COPY --from=pretrained_models / /build/pretrained_models
+
+# 分步安装，利用Docker层缓存
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0 \
-    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user openai \
-    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user pandas \
-    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user transformers \
-    && pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user spacy \
-    && pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl \
-    && cp -r /build/pretrained_models/bert-base-chinese /build/ \
-    && apt-get purge -y --auto-remove build-essential python3-dev
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user torch==2.7.0
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user openai pandas
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user transformers
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --user spacy
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl
+
+# 复制bert模型到构建目录
+RUN cp -r /build/pretrained_models/bert-base-chinese /build/
+
+# 清理构建依赖
+RUN apt-get purge -y --auto-remove build-essential python3-dev
 
 # 第二阶段：生产镜像
 # FROM python:3.12-slim
