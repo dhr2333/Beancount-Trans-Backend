@@ -84,6 +84,7 @@ pipeline {
                             -v dhr2333-jenkins-share:/jenkins-share \
                             -v /var/run/docker.sock:/var/run/docker.sock \
                             -e PYTHONUNBUFFERED=1 \
+                            -e DJANGO_SETTINGS_MODULE=project.settings.test \
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
                             bash -c "
                                 mkdir -p ${REPORTS_DIR}
