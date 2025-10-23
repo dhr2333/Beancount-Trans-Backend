@@ -2,7 +2,7 @@
 # Django 配置
 DJANGO_SETTINGS_MODULE = "project.settings.test"
 # 禁用自动探测
-# django_find_project = false
+django_find_project = false
 # 测试路径
 # testpaths = ["translate/tests"]
 # 测试文件匹配模式
