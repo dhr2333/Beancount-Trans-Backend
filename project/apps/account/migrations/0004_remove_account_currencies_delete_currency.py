@@ -24,5 +24,15 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # 先删除字段，这会正确更新Django的迁移状态
+        migrations.RemoveField(
+            model_name='account',
+            name='currencies',
+        ),
+        # 然后删除模型
+        migrations.DeleteModel(
+            name='Currency',
+        ),
+        # 最后安全地清理数据库表（如果还存在的话）
         migrations.RunPython(safe_remove_currency_tables, migrations.RunPython.noop),
     ]
