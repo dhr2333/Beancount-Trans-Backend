@@ -12,7 +12,7 @@ from django.test import TestCase, TransactionTestCase
 from django.db import transaction
 
 # 设置Django环境
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.develop')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.test')
 django.setup()
 
 from project.apps.file_manager.models import Directory, File
