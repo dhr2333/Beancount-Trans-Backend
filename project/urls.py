@@ -23,7 +23,6 @@ from project.apps.tags.views import TagViewSet
 from project.views import authenticateByToken
 # from .views import GoogleLogin
 from rest_framework import routers
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 # from rest_framework import permissions
 # from drf_yasg.views import get_schema_view
@@ -67,20 +66,15 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
 
-    # 用户权限相关的urls
-    path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 登录认证
-    path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),  # 获取Token
-    path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'),  # 验证Token的有效性
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),  # 刷新Token有效期
-
     # allauth
-    path("api/accounts/", include("allauth.urls")),
+    path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证（包含JWT token获取、刷新、验证）
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
     # 业务相关的urls
+    path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 格式化输出配置
     path('api/translate/', include('project.apps.translate.urls')),  # 解析地址
     path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
+    path("api/accounts/", include("allauth.urls")),
     # path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
 ]

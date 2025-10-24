@@ -1,3 +1,10 @@
+import os
+import django
+
+# 设置Django环境
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.test')
+django.setup()
+
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError

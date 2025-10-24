@@ -22,7 +22,8 @@ translate/migrations/__pycache__/
 conf/__pycache_/
 htmlcov/
 uwsgi.pid
-fixtures/Develop.sql
+fixtures/*.sql
 beancount-trans-backend.tar
 training_data.jsonl
 reports/
+uploads/

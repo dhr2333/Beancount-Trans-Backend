@@ -1,5 +1,6 @@
 import jwt
 import typing
+import datetime
 from django.http import HttpRequest
 from allauth.headless.tokens.base import AbstractTokenStrategy
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
@@ -23,13 +24,17 @@ class JWTTokenStrategy(AbstractTokenStrategy):
     def create_access_token_payload(self, request: HttpRequest) -> typing.Optional[dict]:
         # 创建访问令牌的负载
         access_token = self.create_access_token(request)
-        # refresh_token = self.create_refresh_token(request)
+        refresh_token = self.create_refresh_token(request)
+
+        # 从settings获取token生命周期
+        access_token_lifetime = getattr(settings, 'REST_AUTH', {}).get('JWT_ACCESS_TOKEN_LIFETIME', datetime.timedelta(hours=1))
+        expires_in = int(access_token_lifetime.total_seconds())
 
         return {
             'access_token': access_token,
-            # 'refresh_token': refresh_token,
-            # 'token_type': 'Bearer',
-            # 'expires_in': AccessToken.LIFETIME.total_seconds(),
+            'refresh_token': refresh_token,
+            'token_type': 'Bearer',
+            'expires_in': expires_in,
         }
 
     def create_session_token(self, request: HttpRequest) -> str:

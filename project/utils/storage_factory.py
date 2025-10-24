@@ -68,6 +68,10 @@ class StorageFactory:
                 from .s3_conn import S3Backend
                 config = getattr(settings, 'S3_CONFIG', {})
                 self._backend = S3Backend(config)
+            elif storage_type == 'local':
+                from .local_storage import LocalStorageBackend
+                config = getattr(settings, 'LOCAL_STORAGE_CONFIG', {})
+                self._backend = LocalStorageBackend(config)
             else:
                 raise ValueError(f"不支持的存储类型: {storage_type}")
 

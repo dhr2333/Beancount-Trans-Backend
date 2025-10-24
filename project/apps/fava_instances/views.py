@@ -70,3 +70,63 @@ class FavaRedirectView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 data={'error': str(e)}
             )
+
+
+class FavaStopView(APIView):
+    """
+    停止用户的Fava实例
+
+    该视图用于在用户退出登录时停止其Fava容器实例
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        logger.info(f"User {user.username} is requesting to stop Fava instance.")
+
+        # 查找用户的所有运行中的Fava实例
+        running_instances = FavaInstance.objects.filter(
+            owner=user,
+            status__in=['running', 'starting']
+        )
+
+        if not running_instances.exists():
+            return Response(
+                status=status.HTTP_200_OK,
+                data={'message': 'No running Fava instances found for this user.'}
+            )
+
+        manager = FavaContainerManager()
+        stopped_count = 0
+
+        for instance in running_instances:
+            try:
+                # 更新实例状态为停止中
+                instance.status = 'stopping'
+                instance.save()
+
+                # 停止容器
+                if manager.stop_container(instance.container_id):
+                    instance.status = 'stopped'
+                    instance.container_id = ''
+                    instance.container_name = ''
+                    stopped_count += 1
+                else:
+                    instance.status = 'error'
+
+                instance.save()
+
+            except Exception as e:
+                logger.error(f"Error stopping Fava instance {instance.uuid}: {str(e)}")
+                instance.status = 'error'
+                instance.save()
+
+        return Response(
+            status=status.HTTP_200_OK,
+            data={
+                'message': f'Successfully stopped {stopped_count} Fava instance(s).',
+                'stopped_count': stopped_count
+            }
+        )

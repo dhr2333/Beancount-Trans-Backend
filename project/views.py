@@ -20,13 +20,24 @@ def authenticateByToken(request):
     # 确保用户已通过 Django-allauth 完成 OAuth 流程
     if request.user.is_authenticated:
         user = request.user
+
+        # 判断是否为首次登录（last_login 为 None 表示首次登录）
+        is_new_user = user.last_login is None
+
+        # 更新 last_login 时间
+        from django.utils import timezone
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
         # 生成 JWT 令牌
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
+
         # 构建响应数据
         data = {
             'access': access,
-            'username': user.username
+            'username': user.username,
+            'is_new_user': is_new_user
         }
         return JsonResponse(data)
     else:

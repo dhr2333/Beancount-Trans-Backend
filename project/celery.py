@@ -4,7 +4,7 @@ from celery import Celery
 from django.conf import settings
 
 # 设置默认的Django设置模块
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.develop')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.test')
 
 app = Celery('project')  # 创建Celery应用实例
 app.config_from_object('django.conf:settings', namespace='CELERY')  # 使用Django的设置文件配置Celery

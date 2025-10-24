@@ -72,7 +72,9 @@ node_modules/
 *.zip
 
 # Docker
-Dockerfile*
+Dockerfile-Test-*
+Dockerfile-Mysql
+Dockerfile-Postgres
 docker-compose*.yml
 .dockerignore
 

@@ -81,5 +81,3 @@ STORAGE_TYPE = 'local'
 
 # 测试报告输出目录
 TEST_REPORTS_DIR = BASE_DIR / 'reports'
-
-

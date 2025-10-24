@@ -10,7 +10,7 @@ import django
 from io import BytesIO
 
 # 设置Django环境
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.develop')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'project.settings.test')
 django.setup()
 
 from project.utils.storage_factory import get_storage_client
