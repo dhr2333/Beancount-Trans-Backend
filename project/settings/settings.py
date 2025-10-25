@@ -13,31 +13,49 @@ import datetime
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载 .env 文件（如果存在）
+load_dotenv()
 
 
 def env_to_bool(env, default):
+    """环境变量转布尔值"""
     str_val = os.environ.get(env)
-    return default if str_val is None else str_val == 'True'
+    return default if str_val is None else str_val.lower() in ('true', '1', 'yes')
+
+
+def env_to_list(env, default=''):
+    """环境变量转列表（逗号分隔）"""
+    value = os.environ.get(env, default)
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-
 # 对会话和密码进行加密和签名防止伪造，确保唯一性
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-agrzd=k49)kyjb8a(2ay(vb9mw#21wtqc!y15g7$x7ctpy00zf')
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("DJANGO_SECRET_KEY environment variable is required")
 
-DEBUG = env_to_bool('DJANGO_DEBUG', True)  # 是否开始Debug模式
+DEBUG = env_to_bool('DJANGO_DEBUG', False)
 REDIS_HOST = os.environ.get("TRANS_REDIS_HOST", "127.0.0.1")
 REDIS_PORT = os.environ.get("TRANS_REDIS_PORT", "6379")
 REDIS_PASSWORD = os.environ.get("TRANS_REDIS_PASSWORD", "root")
 
-ALLOWED_HOSTS = [  # 允许访问 Django 应用的主机名或 IP 地址
-    "127.0.0.1",
-    "localhost",
-    "*",
-]
+# ALLOWED_HOSTS 根据 DEBUG 模式自动配置
+if DEBUG:
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = env_to_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1')
+
+# CSRF 配置
+CSRF_TRUSTED_ORIGINS = env_to_list('CSRF_TRUSTED_ORIGINS', 'http://localhost')
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_HTTPONLY = True
 
 # Application definition
 INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
@@ -77,10 +95,16 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.fava_instances',
     'project.apps.file_manager',
     'project.apps.maps',
-    # 'project.apps.owntracks',
     'project.apps.tags',
     'project.apps.translate',
 ]
+
+# 根据 DEBUG 模式决定是否包含开发专用应用
+if DEBUG:
+    INSTALLED_APPS.extend([
+        # 'drf_spectacular_sidecar',
+        # 'project.apps.users',
+    ])
 
 MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图之前或在响应发送到客户端之前对其进行处理
     'corsheaders.middleware.CorsMiddleware',  # API 需要被不同域的前端应用访问时，使用此中间件来配置允许的跨域请求
@@ -114,31 +138,42 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'project.wsgi.application'  # WSGI 应用程序的路径，部署 Django 应用时与 WSGI 服务器（如 Gunicorn、uWSGI）进行交互
 
-
 # Allauth Configuration
 SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
-LOGIN_REDIRECT_URL = 'http://trans.localhost/api/accounts/github/login/callback/'  # 登录成功后重定向的 URL，必须要是该URL否则oauth登录报错
-LOGOUT_REDIRECT_URL = 'http://trans.localhost'  # 用户注销后重定向的 URL
+
+# 根据 BASE_URL 动态生成重定向 URL
+BASE_URL = os.environ.get('BASE_URL', 'localhost')
+if BASE_URL == 'localhost':
+    LOGIN_REDIRECT_URL = f'http://{BASE_URL}/api/accounts/github/login/callback/'
+    LOGOUT_REDIRECT_URL = f'http://{BASE_URL}'
+else:
+    LOGIN_REDIRECT_URL = f'https://{BASE_URL}/api/accounts/github/login/callback/'
+    LOGOUT_REDIRECT_URL = f'https://{BASE_URL}'
 
 SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
-SOCIALACCOUNT_AUTO_SIGNUP=True
+SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
-SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT=False
-SOCIALACCOUNT_STORE_TOKENS =True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+SOCIALACCOUNT_STORE_TOKENS = True
 SOCIALACCOUNT_LOGIN_ON_GET = False
+
+# OAuth 配置（使用环境变量）
+GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', '')
+GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '')
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
 # Social Account Providers Configuration
 SOCIALACCOUNT_PROVIDERS = {
-    'dummy':{
-
+    'dummy': {
     },
     'google': {
         'APPS': [
-          {
-              "client_id": "*.apps.googleusercontent.com",
-              "secret": "*",
-              "key": "",
-          },
+            {
+                "client_id": GOOGLE_CLIENT_ID,
+                "secret": GOOGLE_CLIENT_SECRET,
+                "key": "",
+            },
         ],
         'SCOPE': [
             'profile',
@@ -154,11 +189,11 @@ SOCIALACCOUNT_PROVIDERS = {
     },
     'github': {
         'APPS': [
-          {
-              "client_id": "*",
-              "secret": "*",
-              "key": "",
-          },
+            {
+                "client_id": GITHUB_CLIENT_ID,
+                "secret": GITHUB_CLIENT_SECRET,
+                "key": "",
+            },
         ],
         'SCOPE': [
             'user',
@@ -181,14 +216,11 @@ SOCIALACCOUNT_PROVIDERS = {
 HEADLESS_TOKEN_STRATEGY = "project.utils.token.JWTTokenStrategy"
 HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": "http://trans.localhost/api/accounts/verify-email/{key}",
-    "account_reset_password": "http://trans.localhost/api/accounts/password/reset",
-    "account_reset_password_from_key": "http://trans.localhost/api/accounts/password/reset/key/{key}",
-    "account_signup": "http://trans.localhost/api/accounts/signup",
-    "socialaccount_login_error": "http://trans.localhost/api/accounts/google/login/callback",
-    # "socialaccount_login_error": "/accounts/provider/callback",
-    # "socialaccount_login_error": "http://127.0.0.1:38001/_allauth/browser/v1/auth/provider/redirect",
-    # "socialaccount_login_error": "http://localhost:5173/",
+    "account_confirm_email": f"{LOGOUT_REDIRECT_URL}/api/accounts/verify-email/{{key}}",
+    "account_reset_password": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset",
+    "account_reset_password_from_key": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset/key/{{key}}",
+    "account_signup": f"{LOGOUT_REDIRECT_URL}/api/accounts/signup",
+    "socialaccount_login_error": f"{LOGOUT_REDIRECT_URL}/api/accounts/google/login/callback",
 }
 
 # MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
@@ -204,13 +236,14 @@ AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持�
 ]
 
 # 配置 Django Allauth
-ACCOUNT_AUTHENTICATION_METHOD = 'username'  # 用户登录时使用的身份验证方法
-ACCOUNT_USERNAME_REQUIRED = True  # 注册时是否需要提供用户名
-ACCOUNT_EMAIL_REQUIRED = False  # 注册时是否需要提供电子邮件地址
+ACCOUNT_LOGIN_METHODS = {'username'}
+ACCOUNT_SIGNUP_FIELDS = ['email', 'username*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'optional'  # 用户可以选择是否验证电子邮件,none mandatory optional
-ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE= False  # 用户在更改密码时是否自动注销
+ACCOUNT_LOGOUT_ON_PASSWORD_CHANGE = False  # 用户在更改密码时是否自动注销
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常是通过邮箱或短信发送的）进行登录，默认为False
 
+# JWT 配置（根据环境变量配置）
+JWT_ACCESS_TOKEN_HOURS = int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '1' if not DEBUG else '72'))
 
 # 配置用于 JWT 的 REST_AUTH
 REST_AUTH = {
@@ -220,19 +253,15 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
     'JWT_AUTH_COOKIE_USE_CSRF': False,
     'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
-    'JWT_ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=1),
+    'JWT_ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
     'JWT_REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
     'JWT_ROTATE_REFRESH_TOKENS': False,
     'JWT_BLACKLIST_AFTER_ROTATION': True,
 }
 
-
 # CORS Configuration
 CORS_ALLOW_CREDENTIALS = True  # 是否允许跨域请求中包含凭据(cookies、HTTP 认证信息)
-# CSRF_COOKIE_SAMESITE = 'Lax'
-# SESSION_COOKIE_SAMESITE = 'Lax'
-# CSRF_COOKIE_HTTPONLY = True
-# SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
 CORS_ALLOW_METHODS = (  # 指定允许的 HTTP 方法用于跨域请求
     'DELETE',
     'GET',
@@ -243,7 +272,6 @@ CORS_ALLOW_METHODS = (  # 指定允许的 HTTP 方法用于跨域请求
     'VIEW',
 )
 CORS_ALLOW_HEADERS = (  # 指定允许的 HTTP 请求头用于跨域请求
-    # '*',该通配符无效
     'XMLHttpRequest',
     'X_FILENAME',
     'accept-encoding',
@@ -256,34 +284,21 @@ CORS_ALLOW_HEADERS = (  # 指定允许的 HTTP 请求头用于跨域请求
     'x-requested-with',
     'Pragma',
 )
-if DEBUG:
-    CORS_ALLOWED_ORIGINS = [
-        # CORS_ORIGIN_ALLOW_ALL = True  # 是否允许来自所有域的跨域请求
-        # CORS_ALLOW_ALL_ORIGINS = True  # 是否允许来自所有域的跨域请求（最佳实践）
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "http://127.0.0.1:38001",
-        "http://localhost:38001",
-        "http://127.0.0.1:38000",
-        "http://localhost:38000",
-        "http://127.0.0.1:80",
-        "http://localhost:80",
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "http://trans.localhost"
-    ]
-else:
-    CORS_ALLOWED_ORIGINS = [  # 定义一个允许访问你的 API 的域名白名单
-        "https://trans.localhost",
-    ]
 
+# CORS 配置根据 DEBUG 模式自动调整
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = env_to_list('CORS_ALLOWED_ORIGINS',
+        'http://127.0.0.1:5173,http://localhost:5173')
+else:
+    CORS_ALLOWED_ORIGINS = env_to_list('CORS_ALLOWED_ORIGINS')
+    if not CORS_ALLOWED_ORIGINS:
+        raise ValueError("CORS_ALLOWED_ORIGINS is required in production")
 
 # Security Settings
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-
 # Database Configuration
-# https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -314,9 +329,7 @@ CACHES = {
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"  # 会话存储后端（数据库、缓存、文件系统）
 SESSION_CACHE_ALIAS = "session"  # 会话的缓存别名，适用于使用缓存存储会话时
 
-
 # Password validation
-# https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -332,17 +345,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },  # 阻止仅使用数字的密码
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/4.0/topics/i18n/
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'
 USE_I18N = True  # 国际化（i18n）功能
 USE_TZ = True  # 时区
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.0/howto/static-files/
 STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')  # 使用 python manage.py collectstatic 命令时，所有静态文件将被复制到此目录
 STATIC_URL = 'static/'  # 静态文件URL前缀
 STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件时会包含这些目录
@@ -351,10 +360,8 @@ STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件�
 MEDIA_URL = 'media/'  # 访问媒体文件的 URL 前缀，通常用于用户上传的文件
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目录
 
-
-# https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
+# Default auto field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字段类型，AutoField or BigAutoField
-
 
 # REST Framework Settings
 REST_FRAMEWORK = {
@@ -385,7 +392,6 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',  # 自动生成 API 文档的模式类
 }
 
-
 # DRF Spectacular Settings
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
@@ -413,7 +419,6 @@ SPECTACULAR_SETTINGS = {
         }
     ]
 }
-
 
 # Logging Configuration
 LOGGING = {
@@ -470,42 +475,41 @@ LOGGING = {
 }
 
 # 存储类型配置 (minio, oss, s3)
-STORAGE_TYPE = 'minio'  # 默认使用MinIO
+STORAGE_TYPE = os.environ.get('STORAGE_TYPE', 'minio')
 
 # MinIO配置
 MINIO_CONFIG = {
-    'ENDPOINT': '127.0.0.1:9000',  # MinIO服务器地址
-    'ACCESS_KEY': 'minioadmin',  # MinIO访问密钥
-    'SECRET_KEY': 'minioadmin',  # MinIO密钥
-    'BUCKET_NAME': 'beancount-trans',  # 默认存储桶名称
-    'USE_HTTPS': False  # 是否使用SSL
+    'ENDPOINT': os.environ.get('MINIO_ENDPOINT', '127.0.0.1:9000'),
+    'ACCESS_KEY': os.environ.get('MINIO_ACCESS_KEY', 'minioadmin'),
+    'SECRET_KEY': os.environ.get('MINIO_SECRET_KEY', 'minioadmin'),
+    'BUCKET_NAME': os.environ.get('MINIO_BUCKET_NAME', 'beancount-trans'),
+    'USE_HTTPS': env_to_bool('MINIO_USE_HTTPS', False)
 }
 
 # 阿里云OSS配置
 OSS_CONFIG = {
-    'ENDPOINT': 'https://oss-cn-hangzhou.aliyuncs.com',
-    'ACCESS_KEY_ID': 'your_access_key_id',
-    'ACCESS_KEY_SECRET': 'your_access_key_secret',
-    'BUCKET_NAME': 'beancount-trans',
-    'REGION': 'cn-hangzhou'
+    'ENDPOINT': os.environ.get('OSS_ENDPOINT', 'oss-cn-hangzhou.aliyuncs.com'),
+    'ACCESS_KEY_ID': os.environ.get('OSS_ACCESS_KEY_ID', ''),
+    'ACCESS_KEY_SECRET': os.environ.get('OSS_ACCESS_KEY_SECRET', ''),
+    'BUCKET_NAME': os.environ.get('OSS_BUCKET_NAME', 'beancount-trans'),
+    'REGION': os.environ.get('OSS_REGION', 'cn-hangzhou')
 }
 
 # S3配置 (通用S3兼容存储)
 S3_CONFIG = {
-    'ENDPOINT_URL': 'https://s3.amazonaws.com',
-    'ACCESS_KEY_ID': 'your_access_key_id',
-    'SECRET_ACCESS_KEY': 'your_secret_access_key',
-    'BUCKET_NAME': 'beancount-trans',
-    'REGION': 'us-east-1',
-    'USE_SSL': True,
-    'VERIFY_SSL': True
+    'ENDPOINT_URL': os.environ.get('S3_ENDPOINT_URL', 'https://s3.amazonaws.com'),
+    'ACCESS_KEY_ID': os.environ.get('S3_ACCESS_KEY_ID', ''),
+    'SECRET_ACCESS_KEY': os.environ.get('S3_SECRET_ACCESS_KEY', ''),
+    'BUCKET_NAME': os.environ.get('S3_BUCKET_NAME', 'beancount-trans'),
+    'REGION': os.environ.get('S3_REGION', 'us-east-1'),
+    'USE_SSL': env_to_bool('S3_USE_SSL', True),
+    'VERIFY_SSL': env_to_bool('S3_VERIFY_SSL', True)
 }
 
 # Traefik 配置
-TRAEFIK_NETWORK = "shared-network"  # 与Traefik共享的Docker网络
-FAVA_IMAGE = "harbor.dhr2333.cn/beancount-trans-assets:develop"  # Fava Docker专用镜像
-BASE_URL = "trans.localhost"  # Fava实例的基本URL
-CERTRESOLVER = "alicloud-dns"  # Traefik证书解析器名称
+TRAEFIK_NETWORK = os.environ.get('TRAEFIK_NETWORK', 'shared-network')
+FAVA_IMAGE = os.environ.get('FAVA_IMAGE', 'harbor.dhr2333.cn/beancount-trans-assets:develop')
+CERTRESOLVER = os.environ.get('CERTRESOLVER', 'alicloud-dns')
 
 # 容器生命周期 (1小时)
 FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)
@@ -523,5 +527,5 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # Bean文件相关配置
-ASSETS_BASE_PATH = BASE_DIR / 'Assets'  # Assets目录在项目中的路径
-ASSETS_HOST_PATH = "/Assets"  # Assets目录在宿主机中的路径
+ASSETS_BASE_PATH = BASE_DIR / 'Assets'
+ASSETS_HOST_PATH = os.environ.get('ASSETS_HOST_PATH', str(ASSETS_BASE_PATH))

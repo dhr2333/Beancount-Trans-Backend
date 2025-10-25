@@ -58,11 +58,11 @@ pipeline {
                                 -f Dockerfile-Backend \
                                 -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} .
                         """
-                        
+
                         if (env.BRANCH_NAME == 'main') {
                             sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
                         }
-                        
+
                         echo "✅ 生产镜像构建完成: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
                     }
                 }
@@ -127,7 +127,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('发布测试报告') {
             steps {
                 script {
@@ -189,49 +189,6 @@ pipeline {
             }
         }
 
-        /* ==================== 以下是CI/CD阶段（暂时禁用） ====================
-         * 
-         * 当前只实现CI（持续集成），即自动运行测试
-         * 等所有分支的测试稳定后，可以启用以下阶段实现CD（持续部署）
-         * 
-         * 启用方法：删除注释符号 /* 和 */
-        /*
-        stage('构建生产镜像') {
-            when {
-                branch 'main'
-            }
-            steps {
-                script {
-                    echo "🐳 构建生产Docker镜像..."
-                    updateGitHubStatus('pending', '正在构建生产镜像...')
-                    
-                    // 构建镜像
-                    sh "docker build -f Dockerfile-Backend -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ."
-                    
-                    // main分支同时打latest标签
-                    if (env.BRANCH_NAME == 'main') {
-                        sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
-                    }
-                    
-                    // 推送到Harbor仓库
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-registry-cred',
-                        usernameVariable: 'REGISTRY_USER',
-                        passwordVariable: 'REGISTRY_PASSWORD'
-                    )]) {
-                        sh "echo \${REGISTRY_PASSWORD} | docker login -u \${REGISTRY_USER} --password-stdin ${env.REGISTRY}"
-                        sh "docker push ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                        
-                        if (env.BRANCH_NAME == 'main') {
-                            sh "docker push ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
-                        }
-                    }
-                    
-                    echo "✅ 镜像构建并推送成功: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
-                }
-            }
-        }
-
         stage('部署到服务器') {
             when {
                 branch 'main'
@@ -240,53 +197,32 @@ pipeline {
                 script {
                     echo "🚀 开始部署到生产服务器..."
                     updateGitHubStatus('pending', '正在部署...')
-                    
-                    sshPublisher(
-                        publishers: [
-                            sshPublisherDesc(
-                                configName: 'dhr2333',
-                                transfers: [
-                                    sshTransfer(
-                                        cleanRemote: false,
-                                        excludes: '',
-                                        execCommand: """
-                                            echo ${env.IMAGE_TAG}
-                                            sed -i "s|image:.*beancount-trans-backend.*|image: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}|" /root/Manage/docker-compose-beancount-trans.yaml
-                                            docker compose -f /root/Manage/docker-compose-beancount-trans.yaml down
-                                            docker compose -f /root/Manage/docker-compose-beancount-trans.yaml up -d
-                                        """,
-                                        execTimeout: 120000,
-                                        flatten: false,
-                                        makeEmptyDirs: false,
-                                        noDefaultExcludes: false,
-                                        patternSeparator: '[, ]+',
-                                        remoteDirectory: '',
-                                        remoteDirectorySDF: false,
-                                        removePrefix: '',
-                                        sourceFiles: ''
-                                    )
-                                ],
-                                usePromotionTimestamp: false,
-                                useWorkspaceInPromotion: false,
-                                verbose: false
-                            )
-                        ]
-                    )
+
+                    sshagent([env.SSH_CREDENTIALS_ID]) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no -p ${env.DEPLOY_PORT} root@${env.DEPLOY_SERVER} "cd /root/Manage && docker compose -f docker-compose-beancount-trans-backend.yaml down && sed -i 's|image:.*beancount-trans-backend.*|image: ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}|' docker-compose-beancount-trans-backend.yaml && docker compose -f docker-compose-beancount-trans-backend.yaml up -d"
+                        """
+                    }
                     echo "✅ 部署完成"
                 }
             }
         }
-        ==================== CI/CD阶段结束 ==================== */
     }
-    
+
     post {
         success {
             script {
                 echo '✅ 构建成功'
-                def message = "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}%"
+                def message = env.BRANCH_NAME == 'main' ?
+                    "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}% | 已部署到生产环境" :
+                    "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}%"
                 updateGitHubStatus('success', message)
-                
+
                 echo "📊 测试覆盖率: ${env.COVERAGE_PERCENT}%"
+
+                if (env.BRANCH_NAME == 'main') {
+                    echo "🚀 已部署到生产环境"
+                }
             }
         }
 
@@ -299,13 +235,19 @@ pipeline {
 
         always {
             script {
-                echo '🧹 清理测试镜像和临时文件...'
+                echo '🧹 清理旧镜像和临时文件...'
 
-                // 清理旧的生产镜像（可选，节省磁盘空间）
+                // 清理上一次构建的镜像（保留当前构建的镜像）
                 try {
-                    sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} || true"
+                    // 获取上一次构建号
+                    def previousBuildNumber = env.BUILD_NUMBER.toInteger() - 1
+                    if (previousBuildNumber > 0) {
+                        def previousImageTag = "git-${previousBuildNumber}"
+                        echo "清理上一次构建的镜像: ${env.REGISTRY}/${env.IMAGE_NAME}:${previousImageTag}"
+                        sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${previousImageTag} || true"
+                    }
                 } catch (Exception e) {
-                    echo "清理镜像失败: ${e.message}"
+                    echo "清理旧镜像失败: ${e.message}"
                 }
 
                 // 清理旧的测试报告（保留最近3个构建的报告）

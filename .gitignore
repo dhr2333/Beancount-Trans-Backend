@@ -3,15 +3,21 @@
 .vscode
 /media/
 collectstatic
-/project/settings/prod.py
-/project/settings/develop.py
-/project/settings/docker_local.py
 logs/*.log
 static
 requirements.txt.bak
 pretrained_models
 # 用户账单文件存储路径
 /Assets/
+
+# 环境变量配置文件
+.env
+.env.local
+
+# 个人配置文件（不提交到开源仓库）
+project/settings/prod.py
+project/settings/develop.py
+project/settings/docker_local.py
 # zh_core_web_md-3.8.0-py3-none-any.whl
 
 # __pycache
