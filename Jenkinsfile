@@ -104,18 +104,18 @@ pipeline {
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
                             bash -c "
                                 echo '开始运行测试...'
-                                mkdir -p ${REPORTS_DIR}
-                                chmod 777 ${REPORTS_DIR}
+                                mkdir -p \${REPORTS_DIR}
+                                chmod 777 \${REPORTS_DIR}
                                 python manage.py check --deploy || echo 'Django check failed, continuing...'
-                                pytest --no-migrations --reuse-db \
-                                    --junitxml=${REPORTS_DIR}/junit.xml \
-                                    --html=${REPORTS_DIR}/pytest-report.html \
-                                    --self-contained-html \
-                                    --cov-report=xml:${REPORTS_DIR}/coverage.xml \
-                                    --cov-report=html:${REPORTS_DIR}/htmlcov \
-                                    --tb=short \
-                                    -v || echo 'pytest completed with exit code: $?'
-                                chmod -R 777 ${REPORTS_DIR}
+                                pytest --no-migrations --reuse-db \\
+                                    --junitxml=\${REPORTS_DIR}/junit.xml \\
+                                    --html=\${REPORTS_DIR}/pytest-report.html \\
+                                    --self-contained-html \\
+                                    --cov-report=xml:\${REPORTS_DIR}/coverage.xml \\
+                                    --cov-report=html:\${REPORTS_DIR}/htmlcov \\
+                                    --tb=short \\
+                                    -v || echo 'pytest completed with exit code: \$?'
+                                chmod -R 777 \${REPORTS_DIR}
                                 echo '测试完成'
                             "
                     """
