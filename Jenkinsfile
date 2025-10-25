@@ -85,18 +85,38 @@ pipeline {
                             -v /var/run/docker.sock:/var/run/docker.sock \
                             -e PYTHONUNBUFFERED=1 \
                             -e DJANGO_SETTINGS_MODULE=project.settings.test \
+                            -e DJANGO_SECRET_KEY=test-secret-key-for-jenkins-ci-${env.BUILD_NUMBER} \
+                            -e DJANGO_DEBUG=True \
+                            -e TRANS_POSTGRESQL_DATABASE=test_db \
+                            -e TRANS_POSTGRESQL_USER=test_user \
+                            -e TRANS_POSTGRESQL_PASSWORD=test_password \
+                            -e TRANS_POSTGRESQL_HOST=127.0.0.1 \
+                            -e TRANS_POSTGRESQL_PORT=5432 \
+                            -e TRANS_REDIS_HOST=127.0.0.1 \
+                            -e TRANS_REDIS_PORT=6379 \
+                            -e TRANS_REDIS_PASSWORD=test_redis_password \
+                            -e STORAGE_TYPE=local \
+                            -e ASSETS_HOST_PATH=/code/beancount-trans/Assets \
+                            -e BASE_URL=localhost \
+                            -e TRAEFIK_NETWORK=test-network \
+                            -e FAVA_IMAGE=test-fava-image:latest \
+                            -e CERTRESOLVER=test-resolver \
                             ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
                             bash -c "
+                                echo '开始运行测试...'
                                 mkdir -p ${REPORTS_DIR}
                                 chmod 777 ${REPORTS_DIR}
+                                python manage.py check --deploy || echo 'Django check failed, continuing...'
                                 pytest --no-migrations --reuse-db \
                                     --junitxml=${REPORTS_DIR}/junit.xml \
                                     --html=${REPORTS_DIR}/pytest-report.html \
                                     --self-contained-html \
                                     --cov-report=xml:${REPORTS_DIR}/coverage.xml \
                                     --cov-report=html:${REPORTS_DIR}/htmlcov \
-                                    || exit 0
+                                    --tb=short \
+                                    -v || echo 'pytest completed with exit code: $?'
                                 chmod -R 777 ${REPORTS_DIR}
+                                echo '测试完成'
                             "
                     """
 
