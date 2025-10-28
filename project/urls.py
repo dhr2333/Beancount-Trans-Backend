@@ -75,6 +75,5 @@ urlpatterns = [
     path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 格式化输出配置
     path('api/translate/', include('project.apps.translate.urls')),  # 解析地址
     path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
-    path("api/accounts/", include("allauth.urls")),
     # path('api/owntracks/', include('owntracks.urls')),  # owntracks服务
 ]

@@ -140,12 +140,6 @@ SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 
 # 根据 BASE_URL 动态生成重定向 URL
 BASE_URL = os.environ.get('BASE_URL', 'localhost')
-if BASE_URL == 'localhost':
-    LOGIN_REDIRECT_URL = f'http://{BASE_URL}/api/accounts/github/login/callback/'
-    LOGOUT_REDIRECT_URL = f'http://{BASE_URL}'
-else:
-    LOGIN_REDIRECT_URL = f'https://{BASE_URL}/api/accounts/github/login/callback/'
-    LOGOUT_REDIRECT_URL = f'https://{BASE_URL}'
 
 SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
 SOCIALACCOUNT_AUTO_SIGNUP = True
@@ -212,13 +206,6 @@ SOCIALACCOUNT_PROVIDERS = {
 # HEADLESS_TOKEN_STRATEGY = "allauth.headless.tokens.sessions.SessionTokenStrategy"
 HEADLESS_TOKEN_STRATEGY = "project.utils.token.JWTTokenStrategy"
 HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
-HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": f"{LOGOUT_REDIRECT_URL}/api/accounts/verify-email/{{key}}",
-    "account_reset_password": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset",
-    "account_reset_password_from_key": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset/key/{{key}}",
-    "account_signup": f"{LOGOUT_REDIRECT_URL}/api/accounts/signup",
-    "socialaccount_login_error": f"{LOGOUT_REDIRECT_URL}/api/accounts/google/login/callback",
-}
 
 # MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
 # MFA_PASSKEY_LOGIN_ENABLED = True
