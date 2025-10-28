@@ -24,7 +24,7 @@ from project.views import authenticateByToken
 from rest_framework_simplejwt.views import TokenRefreshView
 # from .views import GoogleLogin
 from rest_framework import routers
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 # from rest_framework import permissions
 # from drf_yasg.views import get_schema_view
 # from drf_yasg import openapi
@@ -64,11 +64,10 @@ urlpatterns = [
 
     # API文档 - drf-spectacular
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI schema
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),  # Swagger UI
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
 
     # allauth
-    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
