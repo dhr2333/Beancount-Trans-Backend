@@ -21,6 +21,7 @@ from project.apps.file_manager.views import DirectoryViewSet, FileViewSet
 from project.apps.account.views import AccountViewSet, AccountTemplateViewSet
 from project.apps.tags.views import TagViewSet
 from project.views import authenticateByToken
+from rest_framework_simplejwt.views import TokenRefreshView
 # from .views import GoogleLogin
 from rest_framework import routers
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
@@ -67,7 +68,7 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
 
     # allauth
-    path('api/auth/', include('dj_rest_auth.urls')),  # 登录认证（包含JWT token获取、刷新、验证）
+    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 

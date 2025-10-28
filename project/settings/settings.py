@@ -74,7 +74,6 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
 
     # 第三方应用
     'rest_framework',
-    'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'drf_spectacular',
     'allauth',
@@ -85,8 +84,6 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'allauth.socialaccount.providers.dummy',
     "allauth.headless",
     "allauth.usersessions",
-    'dj_rest_auth',
-    'dj_rest_auth.registration',
     'mptt',
     'django_celery_beat',
 
@@ -245,18 +242,13 @@ ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常�
 # JWT 配置（根据环境变量配置）
 JWT_ACCESS_TOKEN_HOURS = int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '1' if not DEBUG else '72'))
 
-# 配置用于 JWT 的 REST_AUTH
-REST_AUTH = {
-    'USE_JWT': True,
-    "JWT_AUTH_HTTPONLY": False,
-    'JWT_AUTH_COOKIE': 'beancount-trans-auth',
-    'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
-    'JWT_AUTH_COOKIE_USE_CSRF': False,
-    'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
-    'JWT_ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
-    'JWT_REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
-    'JWT_ROTATE_REFRESH_TOKENS': False,
-    'JWT_BLACKLIST_AFTER_ROTATION': True,
+# JWT 配置（使用 rest_framework_simplejwt）
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 # CORS Configuration
@@ -366,9 +358,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字
 # REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (  # 默认的身份验证类
-        # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        # 'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (  # 默认的权限类
