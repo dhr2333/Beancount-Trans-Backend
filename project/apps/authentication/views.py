@@ -447,6 +447,26 @@ class UserProfileViewSet(viewsets.GenericViewSet):
         profile = user.profile
         profile_serializer = UserProfileSerializer(profile)
         return Response(profile_serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='change_password')
+    def change_password(self, request):
+        """已登录修改密码（仅当前会话用户）"""
+        from django.contrib.auth.password_validation import validate_password
+        old_password = request.data.get('old_password', '')
+        new_password = request.data.get('new_password', '')
+        if not old_password or not new_password:
+            return Response({'error': '参数不完整'}, status=status.HTTP_400_BAD_REQUEST)
+        user = request.user
+        if not user.check_password(old_password):
+            return Response({'error': '当前密码不正确'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password, user)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+        logger.info(f"用户 {user.username} 修改密码成功")
+        return Response({'message': '密码修改成功'}, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['delete'], url_path='delete_account')
     def delete_account(self, request):
