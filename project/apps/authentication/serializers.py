@@ -294,3 +294,31 @@ class OAuthBindSerializer(serializers.Serializer):
             raise serializers.ValidationError("验证码必须是6位数字")
         return value
 
+
+# ========== 邮箱绑定相关 ==========
+class EmailSendCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        request = self.context.get('request')
+        qs = User.objects.filter(email=value)
+        if request and request.user.is_authenticated:
+            qs = qs.exclude(id=request.user.id)
+        if qs.exists():
+            raise serializers.ValidationError('该邮箱已被其他账户使用')
+        return value
+
+
+class EmailBindSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    code = serializers.CharField(required=True, min_length=6, max_length=6)
+
+    def validate_email(self, value):
+        request = self.context.get('request')
+        qs = User.objects.filter(email=value)
+        if request and request.user.is_authenticated:
+            qs = qs.exclude(id=request.user.id)
+        if qs.exists():
+            raise serializers.ValidationError('该邮箱已被其他账户使用')
+        return value
+

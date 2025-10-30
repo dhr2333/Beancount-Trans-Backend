@@ -23,6 +23,8 @@ from project.apps.authentication.serializers import (
     TOTPDisableSerializer,
     SMS2FAEnableSerializer,
     TwoFactorVerifySerializer,
+    EmailSendCodeSerializer,
+    EmailBindSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -262,6 +264,48 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
         }
         
         return Response(data, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'], url_path='send-email-code')
+    def send_email_code(self, request):
+        """发送邮箱绑定验证码"""
+        serializer = EmailSendCodeSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        email = serializer.validated_data['email']
+        try:
+            UserProfile.send_email_code(email)
+            return Response({'message': '验证码已发送'}, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"发送邮箱验证码失败: {email}, {e}")
+            return Response({'error': '发送失败'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='bind-email')
+    def bind_email(self, request):
+        """绑定邮箱（需验证码）"""
+        serializer = EmailBindSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        email = serializer.validated_data['email']
+        code = serializer.validated_data['code']
+        if not UserProfile.verify_email_code(email, code):
+            return Response({'error': '验证码错误或已过期'}, status=status.HTTP_400_BAD_REQUEST)
+        # 设置用户邮箱
+        user = request.user
+        user.email = email
+        user.save(update_fields=['email'])
+        logger.info(f"用户 {user.username} 绑定邮箱成功: {email}")
+        return Response({'message': '邮箱绑定成功', 'email': email}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['delete'], url_path='unbind-email')
+    def unbind_email(self, request):
+        """解绑邮箱"""
+        user = request.user
+        user.email = ''
+        user.save(update_fields=['email'])
+        logger.info(f"用户 {user.username} 解绑邮箱成功")
+        return Response({'message': '邮箱已解绑'}, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['post'], url_path='bind-phone')
     def bind_phone(self, request):

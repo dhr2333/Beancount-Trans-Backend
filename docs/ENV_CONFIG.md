@@ -260,6 +260,65 @@ A:
 3. 在环境变量中配置 `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET` 等
 
 ### Q: 如何切换存储类型？
+- **邮箱发送（SMTP）**
+
+在需要启用“邮箱验证码绑定”功能时，请配置以下环境变量：
+
+示例 1：QQ 邮箱（SSL 465）
+```
+DEFAULT_FROM_EMAIL=your@qq.com
+EMAIL_BIND_SUBJECT=邮箱绑定验证码
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.qq.com
+EMAIL_PORT=465
+EMAIL_HOST_USER=your@qq.com
+EMAIL_HOST_PASSWORD=your_qq_smtp_auth_code
+EMAIL_USE_TLS=false
+EMAIL_USE_SSL=true
+EMAIL_TIMEOUT=15
+EMAIL_CODE_EXPIRE_SECONDS=300
+EMAIL_CODE_RESEND_INTERVAL=60
+```
+
+示例 2：Gmail（TLS 587）
+```
+DEFAULT_FROM_EMAIL=your@gmail.com
+EMAIL_BIND_SUBJECT=邮箱绑定验证码
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=your@gmail.com
+EMAIL_HOST_PASSWORD=your_app_password
+EMAIL_USE_TLS=true
+EMAIL_USE_SSL=false
+EMAIL_TIMEOUT=15
+EMAIL_CODE_EXPIRE_SECONDS=300
+EMAIL_CODE_RESEND_INTERVAL=60
+```
+
+示例 3：阿里云企业邮箱（SSL 465）
+```
+DEFAULT_FROM_EMAIL=noreply@yourdomain.com
+EMAIL_BIND_SUBJECT=邮箱绑定验证码
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.mxhichina.com
+EMAIL_PORT=465
+EMAIL_HOST_USER=noreply@yourdomain.com
+EMAIL_HOST_PASSWORD=your_smtp_password
+EMAIL_USE_TLS=false
+EMAIL_USE_SSL=true
+EMAIL_TIMEOUT=15
+EMAIL_CODE_EXPIRE_SECONDS=300
+EMAIL_CODE_RESEND_INTERVAL=60
+```
+
+说明：
+- 开发环境若不配置 `EMAIL_BACKEND`，系统默认使用 `django.core.mail.backends.console.EmailBackend`（邮件打印到控制台）。
+- 生产环境建议使用 SSL（465）或 TLS（587）：
+  - SSL: `EMAIL_USE_SSL=true`, `EMAIL_USE_TLS=false`, `EMAIL_PORT=465`
+  - TLS: `EMAIL_USE_SSL=false`, `EMAIL_USE_TLS=true`, `EMAIL_PORT=587`
+- 请确保 `DEFAULT_FROM_EMAIL` 与 SMTP 服务商允许的发信地址一致。
+
 A: 修改 `STORAGE_TYPE` 环境变量：
 - `STORAGE_TYPE=minio` - 使用 MinIO（默认）
 - `STORAGE_TYPE=oss` - 使用阿里云 OSS

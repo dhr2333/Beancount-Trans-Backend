@@ -354,6 +354,27 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目�
 # Default auto field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字段类型，AutoField or BigAutoField
 
+# ========== Email Settings ==========
+# 默认发件邮箱地址（必配）
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@example.com')
+
+# 邮件验证码配置
+EMAIL_BIND_SUBJECT = os.environ.get('EMAIL_BIND_SUBJECT', '邮箱绑定验证码')
+EMAIL_CODE_EXPIRE_SECONDS = int(os.environ.get('EMAIL_CODE_EXPIRE_SECONDS', '300'))  # 5分钟
+EMAIL_CODE_RESEND_INTERVAL = int(os.environ.get('EMAIL_CODE_RESEND_INTERVAL', '60'))  # 60秒
+
+# 邮件后端：开发默认使用控制台（打印到控制台），生产使用SMTP
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend')
+
+# SMTP 配置（当 EMAIL_BACKEND 为 SMTP 时生效）
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '465'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'true').lower() == 'true'
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '15'))
+
 # REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (  # 默认的身份验证类
