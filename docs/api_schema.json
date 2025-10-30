@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Beancount-Trans API
-  version: 1.0.0
+  version: 5.2.0
   description: Beancount交易记录转换和管理系统的API文档
 paths:
   /api/account/:

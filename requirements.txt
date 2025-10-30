@@ -35,6 +35,7 @@ pytest-html==4.1.1
 pytest-xdist==3.6.1
 python3-openid==3.2.0
 qrcode==8.0
+django-otp>=1.2.0
 requests-oauthlib==2.0.0
 spacy==3.8.6
 torch==2.7.0
@@ -43,3 +44,7 @@ uWSGI==2.0.28
 wheel==0.46.1
 xlrd==2.0.1
 python-dotenv==1.0.0
+django-phonenumber-field>=7.2.0
+phonenumbers>=8.13.0
+aliyun-python-sdk-core>=2.15.0
+aliyun-python-sdk-dysmsapi>=2.1.0

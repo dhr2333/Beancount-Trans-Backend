@@ -88,6 +88,10 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django_celery_beat',
 
     # 本地应用
+    'phonenumber_field',
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+    'project.apps.authentication',
     'project.apps.account',
     'project.apps.fava_instances',
     'project.apps.file_manager',
@@ -110,6 +114,7 @@ MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图�
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
+    'project.apps.authentication.middleware.PhoneNumberRequiredMiddleware',  # 检查手机号绑定
     'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
     'allauth.account.middleware.AccountMiddleware',
@@ -141,8 +146,8 @@ SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 # 根据 BASE_URL 动态生成重定向 URL
 BASE_URL = os.environ.get('BASE_URL', 'localhost')
 
-SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
-SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_ADAPTER = 'project.apps.authentication.adapters.CustomSocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP = False  # 禁用OAuth自动注册，强制手机号绑定流程
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
 SOCIALACCOUNT_STORE_TOKENS = True
@@ -212,6 +217,13 @@ HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
 
 # Authentication Backends
 AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持多种身份验证方式
+    # Phone number authentication backends (优先级最高)
+    'project.apps.authentication.backends.PhonePasswordBackend',
+    'project.apps.authentication.backends.PhoneCodeBackend',
+    
+    # Username/Email authentication backend (要求已绑定手机号)
+    'project.apps.authentication.backends.PhoneNumberRequiredBackend',
+    
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
 
@@ -373,7 +385,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
     'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
-    'VERSION': '1.0.0',
+    'VERSION': '5.2.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
@@ -501,3 +513,17 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Bean文件相关配置
 ASSETS_BASE_PATH = BASE_DIR / 'Assets'
 ASSETS_HOST_PATH = os.environ.get('ASSETS_HOST_PATH', str(ASSETS_BASE_PATH))
+
+# 阿里云短信配置
+ALIYUN_SMS_ACCESS_KEY_ID = os.environ.get('ALIYUN_SMS_ACCESS_KEY_ID', '')
+ALIYUN_SMS_ACCESS_KEY_SECRET = os.environ.get('ALIYUN_SMS_ACCESS_KEY_SECRET', '')
+ALIYUN_SMS_SIGN_NAME = os.environ.get('ALIYUN_SMS_SIGN_NAME', '')
+ALIYUN_SMS_TEMPLATE_CODE = os.environ.get('ALIYUN_SMS_TEMPLATE_CODE', '')
+
+# 短信验证码配置
+SMS_CODE_EXPIRE_SECONDS = 300  # 5分钟
+SMS_CODE_RESEND_INTERVAL = 60  # 1分钟
+
+# Phonenumber Field
+PHONENUMBER_DEFAULT_REGION = 'CN'
+PHONENUMBER_DB_FORMAT = 'E164'

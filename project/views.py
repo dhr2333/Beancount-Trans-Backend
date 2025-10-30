@@ -29,6 +29,26 @@ def authenticateByToken(request):
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
 
+        # 检查用户是否已绑定手机号
+        try:
+            profile = user.profile
+            phone_verified = profile.is_phone_verified()
+        except AttributeError:
+            # 用户没有profile，创建它
+            from project.apps.authentication.models import UserProfile
+            profile = UserProfile.objects.create(user=user)
+            phone_verified = False
+
+        # 如果未绑定手机号，返回需要绑定的响应
+        if not phone_verified:
+            return JsonResponse({
+                'error': '请先绑定手机号',
+                'code': 'PHONE_NUMBER_REQUIRED',
+                'message': '您需要绑定手机号才能继续使用系统',
+                'redirect_url': '/api/auth/bindings/bind-phone/',
+                'requires_phone_binding': True
+            }, status=403)
+
         # 生成 JWT 令牌
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
@@ -36,8 +56,10 @@ def authenticateByToken(request):
         # 构建响应数据
         data = {
             'access': access,
+            'refresh': str(refresh),
             'username': user.username,
-            'is_new_user': is_new_user
+            'is_new_user': is_new_user,
+            'phone_verified': phone_verified
         }
         return JsonResponse(data)
     else:

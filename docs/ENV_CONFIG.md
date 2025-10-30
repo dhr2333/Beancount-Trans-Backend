@@ -114,6 +114,23 @@
 | `GOOGLE_CLIENT_ID` | ❌ | 无 | Google OAuth 客户端 ID |
 | `GOOGLE_CLIENT_SECRET` | ❌ | 无 | Google OAuth 客户端密钥 |
 
+### 阿里云短信服务配置（可选）
+
+用于手机号验证码登录功能。如果不配置，系统将使用模拟模式（开发环境可用）。
+
+| 变量名 | 必需 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `ALIYUN_SMS_ACCESS_KEY_ID` | ❌ | 无 | 阿里云 AccessKey ID |
+| `ALIYUN_SMS_ACCESS_KEY_SECRET` | ❌ | 无 | 阿里云 AccessKey Secret |
+| `ALIYUN_SMS_SIGN_NAME` | ❌ | 无 | 短信签名名称 |
+| `ALIYUN_SMS_TEMPLATE_CODE` | ❌ | 无 | 短信模板代码（如 SMS_123456789） |
+
+**注意**：
+- 生产环境必须配置真实的阿里云短信服务
+- 开发环境可以不配置，系统会自动使用模拟模式
+- 短信模板需要在阿里云控制台预先创建并审核通过
+- 模板参数应包含 `${code}` 用于接收验证码
+
 ## 部署方式
 
 ### 1. 本地开发环境

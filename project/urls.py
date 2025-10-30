@@ -72,6 +72,7 @@ urlpatterns = [
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
 
     # 业务相关的urls
+    path('api/auth/', include('project.apps.authentication.urls')),  # 手机号认证
     path('api/config/', UserConfigAPI.as_view(), name='user-config'),  # 格式化输出配置
     path('api/translate/', include('project.apps.translate.urls')),  # 解析地址
     path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
