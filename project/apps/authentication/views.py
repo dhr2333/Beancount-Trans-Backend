@@ -732,7 +732,7 @@ class UserProfileViewSet(viewsets.GenericViewSet):
             from django.apps import apps
             
             # 删除用户的所有关联数据
-            Account = apps.get_model('account', 'Account')
+            Account = apps.get_model('account_config', 'Account')
             Expense = apps.get_model('maps', 'Expense')
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
