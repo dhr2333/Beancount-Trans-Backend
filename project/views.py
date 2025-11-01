@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework_simplejwt.tokens import RefreshToken
+from allauth.socialaccount.models import SocialLogin
 
 @ensure_csrf_cookie
 def get_csrf_token(request):
@@ -63,5 +64,39 @@ def authenticateByToken(request):
         }
         return JsonResponse(data)
     else:
+        # 检查是否存在待完成的社交登录（例如 GitHub OAuth）
+        serialized = request.session.get('socialaccount_sociallogin')
+        if serialized:
+            sociallogin = None
+            try:
+                sociallogin = SocialLogin.deserialize(serialized)
+            except Exception:
+                sociallogin = None
+
+            provider = None
+            account_extra = {}
+            suggested_username = ''
+            suggested_email = ''
+            uid = None
+
+            if sociallogin:
+                provider = sociallogin.account.provider
+                account_extra = sociallogin.account.extra_data or {}
+                suggested_username = sociallogin.user.username or account_extra.get('login') or ''
+                suggested_email = sociallogin.user.email or account_extra.get('email') or ''
+                uid = sociallogin.account.uid
+
+            return JsonResponse({
+                'requires_phone_registration': True,
+                'code': 'PHONE_REGISTRATION_REQUIRED',
+                'provider': provider,
+                'account': {
+                    'uid': uid,
+                    'username': suggested_username,
+                    'email': suggested_email,
+                    'extra_data': account_extra,
+                }
+            }, status=200)
+
         # 处理未认证情况
         return JsonResponse({'error': 'User not authenticated'}, status=401)

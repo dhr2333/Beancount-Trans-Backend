@@ -121,3 +121,16 @@ class TestPhoneAuthentication:
         
         assert response.status_code == 401
 
+    def test_oauth_context_without_session(self):
+        """测试未检测到社交登录上下文"""
+        response = self.client.get('/api/auth/phone/oauth-context/')
+        assert response.status_code == 404
+
+    def test_oauth_register_without_session(self):
+        """测试在没有社交登录的情况下注册失败"""
+        response = self.client.post('/api/auth/phone/oauth-register/', {
+            'phone_number': '+8613800138099',
+            'code': '123456'
+        })
+        assert response.status_code == 400
+

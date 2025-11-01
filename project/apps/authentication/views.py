@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
+from allauth.socialaccount.models import SocialLogin, SocialAccount, SocialToken, SocialApp
 
 from project.apps.authentication.models import UserProfile
 from project.apps.authentication.serializers import (
@@ -15,6 +16,7 @@ from project.apps.authentication.serializers import (
     PhoneLoginByCodeSerializer,
     PhoneLoginByPasswordSerializer,
     PhoneRegisterSerializer,
+    OAuthPhoneRegisterSerializer,
     PhoneBindingSerializer,
     UserBindingsSerializer,
     UserProfileSerializer,
@@ -37,9 +39,175 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     
     def get_permissions(self):
         """根据不同的 action 设置不同的权限"""
-        if self.action in ['send_code', 'login_by_code', 'login_by_password', 'register']:
+        if self.action in ['send_code', 'login_by_code', 'login_by_password', 'register', 'oauth_context', 'oauth_register']:
             return [AllowAny()]
         return [IsAuthenticated()]
+
+    def _get_sociallogin_from_session(self, request):
+        """从 session 中反序列化获取待绑定的社交登录信息"""
+        serialized = request.session.get('socialaccount_sociallogin')
+        if not serialized:
+            return None
+        try:
+            return SocialLogin.deserialize(serialized)
+        except Exception as exc:
+            logger.error(f"反序列化社交登录信息失败: {exc}")
+            return None
+
+    @staticmethod
+    def _clear_sociallogin_in_session(request):
+        """清理 session 中缓存的社交登录数据"""
+        removed = False
+        if 'socialaccount_sociallogin' in request.session:
+            del request.session['socialaccount_sociallogin']
+            removed = True
+        if 'socialaccount_state' in request.session:
+            del request.session['socialaccount_state']
+            removed = True
+        if removed:
+            request.session.modified = True
+
+    @staticmethod
+    def _generate_available_username(base_username: str) -> str:
+        """根据候选值生成唯一用户名"""
+        base = (base_username or '').strip()
+        if len(base) < 3:
+            base = f"user_{base}" if base else 'user'
+        base = base[:150]
+
+        candidate = base
+        suffix = 1
+        while User.objects.filter(username=candidate).exists():
+            tail = f"_{suffix}"
+            allowed = 150 - len(tail)
+            candidate = f"{base[:allowed]}{tail}"
+            suffix += 1
+        return candidate
+
+    @action(detail=False, methods=['get'], url_path='oauth-context')
+    def oauth_context(self, request):
+        """获取当前会话中待完成的 OAuth 登录信息"""
+        sociallogin = self._get_sociallogin_from_session(request)
+        if not sociallogin:
+            return Response({'error': '未检测到待处理的社交登录，请重新发起 GitHub 登录'}, status=status.HTTP_404_NOT_FOUND)
+
+        account_extra = sociallogin.account.extra_data or {}
+        return Response({
+            'provider': sociallogin.account.provider,
+            'account': {
+                'uid': sociallogin.account.uid,
+                'username': sociallogin.user.username or account_extra.get('login') or '',
+                'email': sociallogin.user.email or account_extra.get('email') or '',
+                'extra_data': account_extra,
+            }
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='oauth-register')
+    def oauth_register(self, request):
+        """处理 GitHub OAuth 首次登录后的手机号注册"""
+        sociallogin = self._get_sociallogin_from_session(request)
+        if not sociallogin:
+            return Response({'error': '未检测到待处理的社交登录，请重新发起 GitHub 登录'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = OAuthPhoneRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        phone_number = serializer.validated_data['phone_number']
+        code = serializer.validated_data['code']
+        username_input = serializer.validated_data.get('username', '').strip()
+        password = serializer.validated_data.get('password', '')
+        email = serializer.validated_data.get('email', '').strip()
+
+        # 验证验证码
+        temp_profile = UserProfile(phone_number=phone_number)
+        if not temp_profile.verify_sms_code(code, phone_number):
+            return Response({'error': '验证码错误或已过期'}, status=status.HTTP_400_BAD_REQUEST)
+
+        account_extra = sociallogin.account.extra_data or {}
+        base_username = username_input or sociallogin.user.username or account_extra.get('login') or ''
+        username = username_input or self._generate_available_username(base_username)
+
+        if email:
+            email = email.strip()
+        else:
+            email = sociallogin.user.email or account_extra.get('email') or ''
+
+        try:
+            with transaction.atomic():
+                user = User(username=username, email=email or '')
+                if password:
+                    user.set_password(password)
+                else:
+                    user.set_unusable_password()
+                user.save()
+
+                profile, _created = UserProfile.objects.get_or_create(user=user)
+                profile.phone_number = phone_number
+                profile.phone_verified = True
+                profile.save()
+
+                # 绑定社交账号
+                social_account, created = SocialAccount.objects.get_or_create(
+                    provider=sociallogin.account.provider,
+                    uid=sociallogin.account.uid,
+                    defaults={
+                        'user': user,
+                        'extra_data': sociallogin.account.extra_data or {}
+                    }
+                )
+                if not created:
+                    if social_account.user_id != user.id:
+                        raise ValueError('SOCIAL_ACCOUNT_ALREADY_BOUND')
+                    social_account.extra_data = sociallogin.account.extra_data or {}
+                    social_account.user = user
+                    social_account.save()
+
+                if created:
+                    social_account.user = user
+                    social_account.save(update_fields=['user'])
+
+                # 保存 OAuth token（如果存在）
+                token = getattr(sociallogin, 'token', None)
+                if token and isinstance(token, SocialToken):
+                    try:
+                        social_app = SocialApp.objects.filter(provider=sociallogin.account.provider).first()
+                        if social_app:
+                            token.account = social_account
+                            token.app = social_app
+                            token.save()
+                    except Exception as token_exc:
+                        logger.warning(f"保存社交访问令牌失败: {token_exc}")
+
+        except ValueError as exc:
+            if str(exc) == 'SOCIAL_ACCOUNT_ALREADY_BOUND':
+                logger.warning(f"社交账号 {sociallogin.account.uid} 已被其他用户绑定")
+                return Response({'error': '该 GitHub 账号已绑定到其他账户，请改用手机号登录或解绑后重试'}, status=status.HTTP_400_BAD_REQUEST)
+            logger.error(f"OAuth 手机号注册失败: {exc}")
+            return Response({'error': '注册失败，请稍后重试或使用手机号登录'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as exc:
+            logger.error(f"OAuth 手机号注册失败: {exc}")
+            return Response({'error': '注册失败，请稍后重试或使用手机号登录'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 清理 session 中的社交登录状态
+        self._clear_sociallogin_in_session(request)
+
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
+        refresh = RefreshToken.for_user(user)
+        logger.info(f"用户 {user.username} 通过 OAuth + 手机号注册成功")
+
+        return Response({
+            'message': '注册成功',
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'phone_number': str(phone_number)
+            }
+        }, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['post'], url_path='send-code')
     def send_code(self, request):
