@@ -8,6 +8,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from allauth.socialaccount.models import SocialLogin, SocialAccount, SocialToken, SocialApp
 
 from project.apps.authentication.models import UserProfile
@@ -354,9 +355,9 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
-        username = serializer.validated_data['username']
-        password = serializer.validated_data['password']
-        email = serializer.validated_data.get('email', '')
+        username = (serializer.validated_data.get('username') or '').strip()
+        password = (serializer.validated_data.get('password') or '').strip()
+        email = (serializer.validated_data.get('email') or '').strip()
         
         try:
             with transaction.atomic():
@@ -367,11 +368,24 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                         'error': '验证码错误或已过期'
                     }, status=status.HTTP_400_BAD_REQUEST)
                 
+                # 若未提供用户名则根据手机号生成一个唯一用户名
+                if not username:
+                    digits = ''.join(filter(str.isdigit, str(phone_number)))
+                    if digits:
+                        base_username = f"user_{digits}"
+                    else:
+                        base_username = f"user_{get_random_string(8)}"
+
+                    candidate = base_username
+                    while User.objects.filter(username=candidate).exists():
+                        candidate = f"{base_username}_{get_random_string(4)}"
+                    username = candidate
+
                 # 创建用户
                 user = User.objects.create_user(
                     username=username,
-                    password=password,
-                    email=email
+                    password=password or None,
+                    email=email or ''
                 )
                 
                 # 更新 UserProfile

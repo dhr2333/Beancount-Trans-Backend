@@ -68,16 +68,16 @@ class PhoneRegisterSerializer(serializers.Serializer):
         help_text='6位数字验证码'
     )
     username = serializers.CharField(
-        required=True,
-        min_length=3,
+        required=False,
+        allow_blank=True,
         max_length=150,
-        help_text='用户名'
+        help_text='用户名（可选）'
     )
     password = serializers.CharField(
-        required=True,
+        required=False,
+        allow_blank=True,
         write_only=True,
-        help_text='密码',
-        validators=[validate_password]
+        help_text='密码（可选）'
     )
     email = serializers.EmailField(
         required=False,
@@ -87,6 +87,11 @@ class PhoneRegisterSerializer(serializers.Serializer):
 
     def validate_username(self, value):
         """验证用户名是否已存在"""
+        value = value.strip()
+        if not value:
+            return ''
+        if len(value) < 3 or len(value) > 150:
+            raise serializers.ValidationError("用户名长度为3-150个字符")
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("用户名已存在")
         return value
@@ -95,6 +100,13 @@ class PhoneRegisterSerializer(serializers.Serializer):
         """验证手机号是否已被注册"""
         if UserProfile.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError("该手机号已被注册")
+        return value
+
+    def validate_password(self, value):
+        value = value.strip()
+        if not value:
+            return ''
+        validate_password(value)
         return value
 
     def validate_code(self, value):
