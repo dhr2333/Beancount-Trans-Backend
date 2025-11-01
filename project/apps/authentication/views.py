@@ -25,6 +25,8 @@ from project.apps.authentication.serializers import (
     TwoFactorVerifySerializer,
     EmailSendCodeSerializer,
     EmailBindSerializer,
+    EmailLoginSendCodeSerializer,
+    EmailLoginSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -231,6 +233,90 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': f'注册失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class EmailAuthViewSet(viewsets.GenericViewSet):
+    """邮箱验证码认证视图集"""
+
+    permission_classes = [AllowAny]
+
+    @action(detail=False, methods=['post'], url_path='send-code')
+    def send_code(self, request):
+        """发送邮箱验证码用于登录"""
+        serializer = EmailLoginSendCodeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        email = serializer.validated_data['email']
+
+        try:
+            UserProfile.send_email_code(email)
+            logger.info(f"邮箱验证码发送成功: {email}")
+            return Response({
+                'message': '验证码已发送',
+                'email': email
+            }, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"发送邮箱验证码失败: {email}, {str(e)}")
+            return Response({'error': '发送验证码失败，请稍后重试'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], url_path='login-by-code')
+    def login_by_code(self, request):
+        """邮箱验证码登录"""
+        serializer = EmailLoginSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        email = serializer.validated_data['email']
+        code = serializer.validated_data['code']
+
+        if not UserProfile.verify_email_code(email, code):
+            return Response({'error': '验证码错误或已过期'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        user = serializer.get_user()
+        if not user:
+            return Response({'error': '该邮箱未注册'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+
+            refresh = RefreshToken.for_user(user)
+
+            logger.info(f"用户 {user.username} 通过邮箱验证码登录成功")
+
+            try:
+                profile = user.profile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(user=user)
+
+            requires_2fa = profile.has_2fa_enabled()
+
+            response_data = {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'phone_number': str(profile.phone_number) if profile.phone_number else None
+                },
+                'requires_2fa': requires_2fa
+            }
+
+            if requires_2fa:
+                response_data['2fa_methods'] = []
+                if profile.totp_enabled:
+                    response_data['2fa_methods'].append('totp')
+                if profile.sms_2fa_enabled:
+                    response_data['2fa_methods'].append('sms')
+
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"邮箱验证码登录失败: {email}, {str(e)}")
+            return Response({'error': '登录失败，请稍后重试'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AccountBindingViewSet(viewsets.GenericViewSet):

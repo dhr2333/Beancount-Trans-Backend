@@ -322,3 +322,38 @@ class EmailBindSerializer(serializers.Serializer):
             raise serializers.ValidationError('该邮箱已被其他账户使用')
         return value
 
+
+class EmailLoginSendCodeSerializer(serializers.Serializer):
+    """邮箱验证码登录发送验证码序列化器"""
+    email = serializers.EmailField(required=True, help_text='邮箱')
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value, is_active=True).exists():
+            raise serializers.ValidationError('该邮箱尚未注册或已被禁用')
+        return value
+
+
+class EmailLoginSerializer(serializers.Serializer):
+    """邮箱验证码登录序列化器"""
+    email = serializers.EmailField(required=True, help_text='邮箱')
+    code = serializers.CharField(required=True, min_length=6, max_length=6, help_text='6位数字验证码')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._user = None
+
+    def validate_email(self, value):
+        user = User.objects.filter(email=value, is_active=True).order_by('id').first()
+        if not user:
+            raise serializers.ValidationError('该邮箱尚未注册或已被禁用')
+        self._user = user
+        return value
+
+    def validate_code(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError('验证码必须是6位数字')
+        return value
+
+    def get_user(self):
+        return self._user
+
