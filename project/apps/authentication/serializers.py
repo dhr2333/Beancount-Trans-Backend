@@ -199,16 +199,6 @@ class SocialAccountSerializer(serializers.Serializer):
     date_joined = serializers.DateTimeField(read_only=True, help_text='绑定时间')
 
 
-class UserBindingsSerializer(serializers.Serializer):
-    """用户绑定信息序列化器"""
-    username = serializers.CharField(read_only=True, help_text='用户名')
-    email = serializers.EmailField(read_only=True, help_text='邮箱')
-    phone_number = PhoneNumberField(read_only=True, help_text='手机号')
-    phone_verified = serializers.BooleanField(read_only=True, help_text='手机号是否已验证')
-    social_accounts = SocialAccountSerializer(many=True, read_only=True, help_text='已绑定的社交账号')
-    has_password = serializers.BooleanField(read_only=True, help_text='是否设置了密码')
-
-
 class UserProfileSerializer(serializers.ModelSerializer):
     """用户完整信息序列化器"""
     username = serializers.CharField(source='user.username', read_only=True)
@@ -284,63 +274,6 @@ class TOTPDisableSerializer(serializers.Serializer):
         min_length=6,
         max_length=6,
         help_text='6位TOTP验证码（用于确认禁用）'
-    )
-    
-    def validate_code(self, value):
-        """验证验证码格式"""
-        if not value.isdigit():
-            raise serializers.ValidationError("验证码必须是6位数字")
-        return value
-
-
-class SMS2FAEnableSerializer(serializers.Serializer):
-    """启用SMS 2FA序列化器"""
-    code = serializers.CharField(
-        required=True,
-        min_length=6,
-        max_length=6,
-        help_text='6位短信验证码'
-    )
-    
-    def validate_code(self, value):
-        """验证验证码格式"""
-        if not value.isdigit():
-            raise serializers.ValidationError("验证码必须是6位数字")
-        return value
-
-
-class TwoFactorVerifySerializer(serializers.Serializer):
-    """2FA验证序列化器"""
-    code = serializers.CharField(
-        required=True,
-        min_length=6,
-        max_length=6,
-        help_text='6位验证码（TOTP）'
-    )
-    method = serializers.ChoiceField(
-        choices=['totp'],
-        required=True,
-        help_text='2FA方式：totp'
-    )
-    
-    def validate_code(self, value):
-        """验证验证码格式"""
-        if not value.isdigit():
-            raise serializers.ValidationError("验证码必须是6位数字")
-        return value
-
-
-class OAuthBindSerializer(serializers.Serializer):
-    """OAuth绑定序列化器"""
-    phone_number = PhoneNumberField(
-        required=True,
-        help_text='手机号'
-    )
-    code = serializers.CharField(
-        required=True,
-        min_length=6,
-        max_length=6,
-        help_text='6位数字验证码'
     )
     
     def validate_code(self, value):

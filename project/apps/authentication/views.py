@@ -19,12 +19,10 @@ from project.apps.authentication.serializers import (
     PhoneRegisterSerializer,
     OAuthPhoneRegisterSerializer,
     PhoneBindingSerializer,
-    UserBindingsSerializer,
     UserProfileSerializer,
     UserUpdateSerializer,
     TOTPEnableSerializer,
     TOTPDisableSerializer,
-    TwoFactorVerifySerializer,
     EmailSendCodeSerializer,
     EmailBindSerializer,
     EmailLoginSendCodeSerializer,
@@ -1079,50 +1077,4 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                 'error': f'禁用TOTP失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    
-    @action(detail=False, methods=['post'], url_path='verify')
-    def verify(self, request):
-        """2FA验证（用于登录后验证）"""
-        serializer = TwoFactorVerifySerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        code = serializer.validated_data['code']
-        method = serializer.validated_data['method']
-        profile = request.user.profile
-        
-        try:
-            if method == 'totp':
-                if not profile.totp_enabled:
-                    return Response({
-                        'error': 'TOTP未启用'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                from django_otp.plugins.otp_totp.models import TOTPDevice
-                if profile.totp_device_id:
-                    device = TOTPDevice.objects.get(id=profile.totp_device_id, user=request.user)
-                    if device.verify_token(code):
-                        return Response({
-                            'message': 'TOTP验证成功'
-                        }, status=status.HTTP_200_OK)
-                    else:
-                        return Response({
-                            'error': '验证码错误'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    return Response({
-                        'error': 'TOTP设备不存在'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            else:
-                return Response({
-                    'error': '不支持的2FA方式'
-                }, status=status.HTTP_400_BAD_REQUEST)
-                
-        except Exception as e:
-            logger.error(f"2FA验证失败: {str(e)}")
-            return Response({
-                'error': f'验证失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
