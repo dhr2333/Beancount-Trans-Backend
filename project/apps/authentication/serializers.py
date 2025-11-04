@@ -53,6 +53,19 @@ class PhoneLoginByPasswordSerializer(serializers.Serializer):
         write_only=True,
         help_text='密码'
     )
+    totp_code = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        min_length=6,
+        max_length=6,
+        help_text='TOTP验证码（可选，如果用户启用了TOTP则必填）'
+    )
+    
+    def validate_totp_code(self, value):
+        """验证TOTP码格式"""
+        if value and not value.isdigit():
+            raise serializers.ValidationError("TOTP验证码必须是6位数字")
+        return value
 
 
 class PhoneRegisterSerializer(serializers.Serializer):
@@ -398,4 +411,30 @@ class EmailLoginSerializer(serializers.Serializer):
 
     def get_user(self):
         return self._user
+
+
+class UsernameLoginByPasswordSerializer(serializers.Serializer):
+    """用户名/邮箱+密码登录序列化器"""
+    username = serializers.CharField(
+        required=True,
+        help_text='用户名或邮箱'
+    )
+    password = serializers.CharField(
+        required=True,
+        write_only=True,
+        help_text='密码'
+    )
+    totp_code = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        min_length=6,
+        max_length=6,
+        help_text='TOTP验证码（可选，如果用户启用了TOTP则必填）'
+    )
+    
+    def validate_totp_code(self, value):
+        """验证TOTP码格式"""
+        if value and not value.isdigit():
+            raise serializers.ValidationError("TOTP验证码必须是6位数字")
+        return value
 

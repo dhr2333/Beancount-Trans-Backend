@@ -30,6 +30,7 @@ from project.apps.authentication.serializers import (
     EmailBindSerializer,
     EmailLoginSendCodeSerializer,
     EmailLoginSerializer,
+    UsernameLoginByPasswordSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -295,18 +296,48 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     
     @action(detail=False, methods=['post'], url_path='login-by-password')
     def login_by_password(self, request):
-        """密码登录"""
+        """密码登录（支持TOTP验证）"""
         serializer = PhoneLoginByPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         phone_number = serializer.validated_data['phone_number']
         password = serializer.validated_data['password']
+        totp_code = serializer.validated_data.get('totp_code', '').strip()
         
         # 使用密码认证后端
         user = authenticate(request, phone=str(phone_number), password=password)
         
         if user:
+            profile = user.profile
+            
+            # 检查用户是否启用了TOTP
+            if profile.totp_enabled:
+                if not totp_code:
+                    return Response({
+                        'error': '该账户已启用TOTP二次验证，请输入TOTP验证码',
+                        'requires_totp': True
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # 验证TOTP码
+                try:
+                    from django_otp.plugins.otp_totp.models import TOTPDevice
+                    if profile.totp_device_id:
+                        device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
+                        if not device.verify_token(totp_code):
+                            return Response({
+                                'error': 'TOTP验证码错误'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        return Response({
+                            'error': 'TOTP设备不存在，请联系管理员'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except Exception as e:
+                    logger.error(f"TOTP验证失败: {str(e)}")
+                    return Response({
+                        'error': 'TOTP验证失败，请稍后重试'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
             # 更新最后登录时间
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
@@ -314,13 +345,9 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             # 生成 JWT token
             refresh = RefreshToken.for_user(user)
             
-            logger.info(f"用户 {user.username} 通过密码登录成功")
+            logger.info(f"用户 {user.username} 通过手机号密码登录成功")
             
-            # 检查是否需要2FA验证
-            profile = user.profile
-            requires_2fa = profile.has_2fa_enabled()
-            
-            response_data = {
+            return Response({
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
                 'user': {
@@ -328,19 +355,8 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     'username': user.username,
                     'email': user.email,
                     'phone_number': str(phone_number)
-                },
-                'requires_2fa': requires_2fa
-            }
-            
-            if requires_2fa:
-                # 如果启用了2FA，返回需要验证的提示
-                response_data['2fa_methods'] = []
-                if profile.totp_enabled:
-                    response_data['2fa_methods'].append('totp')
-                if profile.sms_2fa_enabled:
-                    response_data['2fa_methods'].append('sms')
-            
-            return Response(response_data, status=status.HTTP_200_OK)
+                }
+            }, status=status.HTTP_200_OK)
         else:
             return Response({
                 'error': '手机号或密码错误'
@@ -415,6 +431,82 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': f'注册失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UsernameAuthViewSet(viewsets.GenericViewSet):
+    """用户名/邮箱+密码认证视图集"""
+    permission_classes = [AllowAny]
+    
+    @action(detail=False, methods=['post'], url_path='login-by-password')
+    def login_by_password(self, request):
+        """用户名/邮箱+密码登录（支持TOTP验证）"""
+        serializer = UsernameLoginByPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        username = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+        totp_code = serializer.validated_data.get('totp_code', '').strip()
+        
+        # 使用用户名/邮箱+密码认证后端
+        user = authenticate(request, username=username, password=password)
+        
+        if user:
+            try:
+                profile = user.profile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(user=user)
+            
+            # 检查用户是否启用了TOTP
+            if profile.totp_enabled:
+                if not totp_code:
+                    return Response({
+                        'error': '该账户已启用TOTP二次验证，请输入TOTP验证码',
+                        'requires_totp': True
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # 验证TOTP码
+                try:
+                    from django_otp.plugins.otp_totp.models import TOTPDevice
+                    if profile.totp_device_id:
+                        device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
+                        if not device.verify_token(totp_code):
+                            return Response({
+                                'error': 'TOTP验证码错误'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        return Response({
+                            'error': 'TOTP设备不存在，请联系管理员'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except Exception as e:
+                    logger.error(f"TOTP验证失败: {str(e)}")
+                    return Response({
+                        'error': 'TOTP验证失败，请稍后重试'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # 更新最后登录时间
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+            
+            # 生成 JWT token
+            refresh = RefreshToken.for_user(user)
+            
+            logger.info(f"用户 {user.username} 通过用户名/邮箱密码登录成功")
+            
+            return Response({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'phone_number': str(profile.phone_number) if profile.phone_number else None
+                }
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'error': '用户名/邮箱或密码错误'
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class EmailAuthViewSet(viewsets.GenericViewSet):
