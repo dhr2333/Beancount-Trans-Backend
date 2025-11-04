@@ -2111,7 +2111,7 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/token/refresh/:
+  /api/auth/token/refresh/:
     post:
       operationId: token_refresh_create
       description: |-

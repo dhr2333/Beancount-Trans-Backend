@@ -22,7 +22,7 @@ class PhoneNumberRequiredMiddleware:
         '/api/auth/bindings/',  # 绑定相关接口
         # '/api/auth/profile/me/',  # 移除排除，让中间件检查手机号绑定
         '/api/auth/profile/update_me/',
-        '/api/token/refresh/',
+        '/api/auth/token/refresh/',
         '/api/_allauth/',  # allauth相关接口
         '/admin/',
     ]

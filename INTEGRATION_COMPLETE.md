@@ -117,7 +117,7 @@
 - `/api/auth/phone/*` - 手机号认证相关
 - `/api/auth/bindings/*` - 账号绑定相关
 - `/api/auth/profile/me/` - 用户信息查询（路由守卫需要）
-- `/api/token/refresh/` - Token刷新
+- `/api/auth/token/refresh/` - Token刷新
 - `/api/_allauth/*` - Allauth相关接口
 - `/admin/` - 管理后台
 
