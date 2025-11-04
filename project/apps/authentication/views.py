@@ -24,7 +24,6 @@ from project.apps.authentication.serializers import (
     UserUpdateSerializer,
     TOTPEnableSerializer,
     TOTPDisableSerializer,
-    SMS2FAEnableSerializer,
     TwoFactorVerifySerializer,
     EmailSendCodeSerializer,
     EmailBindSerializer,
@@ -285,8 +284,6 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                 response_data['2fa_methods'] = []
                 if profile.totp_enabled:
                     response_data['2fa_methods'].append('totp')
-                if profile.sms_2fa_enabled:
-                    response_data['2fa_methods'].append('sms')
             
             return Response(response_data, status=status.HTTP_200_OK)
         else:
@@ -584,8 +581,6 @@ class EmailAuthViewSet(viewsets.GenericViewSet):
                 response_data['2fa_methods'] = []
                 if profile.totp_enabled:
                     response_data['2fa_methods'].append('totp')
-                if profile.sms_2fa_enabled:
-                    response_data['2fa_methods'].append('sms')
 
             return Response(response_data, status=status.HTTP_200_OK)
         except Exception as e:
@@ -905,7 +900,6 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
         profile = request.user.profile
         return Response({
             'totp_enabled': profile.totp_enabled,
-            'sms_2fa_enabled': profile.sms_2fa_enabled,
             'has_2fa': profile.has_2fa_enabled()
         }, status=status.HTTP_200_OK)
     
@@ -1085,103 +1079,6 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                 'error': f'禁用TOTP失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    @action(detail=False, methods=['post'], url_path='sms/enable')
-    def sms_2fa_enable(self, request):
-        """启用SMS 2FA"""
-        serializer = SMS2FAEnableSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        code = serializer.validated_data['code']
-        profile = request.user.profile
-        
-        if not profile.is_phone_verified():
-            return Response({
-                'error': '请先绑定并验证手机号'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            # 验证短信验证码
-            if not profile.verify_sms_code(code, profile.phone_number):
-                return Response({
-                    'error': '验证码错误或已过期'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 启用SMS 2FA
-            profile.sms_2fa_enabled = True
-            profile.save()
-            
-            logger.info(f"用户 {request.user.username} 启用SMS 2FA成功")
-            return Response({
-                'message': 'SMS 2FA启用成功'
-            }, status=status.HTTP_200_OK)
-                
-        except Exception as e:
-            logger.error(f"启用SMS 2FA失败: {str(e)}")
-            return Response({
-                'error': f'启用SMS 2FA失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=False, methods=['post'], url_path='sms/disable')
-    def sms_2fa_disable(self, request):
-        """禁用SMS 2FA"""
-        profile = request.user.profile
-        
-        if not profile.sms_2fa_enabled:
-            return Response({
-                'error': 'SMS 2FA未启用'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            # 发送验证码用于确认
-            if profile.phone_number:
-                profile.send_sms_code(profile.phone_number)
-                return Response({
-                    'message': '验证码已发送，请使用验证码确认禁用',
-                    'requires_code': True
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'error': '未绑定手机号'
-                }, status=status.HTTP_400_BAD_REQUEST)
-                
-        except Exception as e:
-            logger.error(f"发送禁用确认码失败: {str(e)}")
-            return Response({
-                'error': f'发送验证码失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    @action(detail=False, methods=['post'], url_path='sms/disable/confirm')
-    def sms_2fa_disable_confirm(self, request):
-        """确认禁用SMS 2FA"""
-        serializer = SMS2FAEnableSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        code = serializer.validated_data['code']
-        profile = request.user.profile
-        
-        try:
-            # 验证短信验证码
-            if not profile.verify_sms_code(code, profile.phone_number):
-                return Response({
-                    'error': '验证码错误或已过期'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # 禁用SMS 2FA
-            profile.sms_2fa_enabled = False
-            profile.save()
-            
-            logger.info(f"用户 {request.user.username} 禁用SMS 2FA成功")
-            return Response({
-                'message': 'SMS 2FA禁用成功'
-            }, status=status.HTTP_200_OK)
-                
-        except Exception as e:
-            logger.error(f"禁用SMS 2FA失败: {str(e)}")
-            return Response({
-                'error': f'禁用SMS 2FA失败: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['post'], url_path='verify')
     def verify(self, request):
@@ -1215,27 +1112,6 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                 else:
                     return Response({
                         'error': 'TOTP设备不存在'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            elif method == 'sms':
-                if not profile.sms_2fa_enabled:
-                    return Response({
-                        'error': 'SMS 2FA未启用'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                if not profile.phone_number:
-                    return Response({
-                        'error': '未绑定手机号'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # 发送验证码并验证
-                if profile.verify_sms_code(code, profile.phone_number):
-                    return Response({
-                        'message': 'SMS验证成功'
-                    }, status=status.HTTP_200_OK)
-                else:
-                    return Response({
-                        'error': '验证码错误或已过期'
                     }, status=status.HTTP_400_BAD_REQUEST)
             
             else:

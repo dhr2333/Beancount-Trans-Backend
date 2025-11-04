@@ -58,7 +58,7 @@ class UserProfile(BaseModel):
     
     def has_2fa_enabled(self):
         """检查是否启用了任何2FA方式"""
-        return self.totp_enabled or self.sms_2fa_enabled
+        return self.totp_enabled
     
     def is_phone_verified(self):
         """检查手机号是否已验证"""

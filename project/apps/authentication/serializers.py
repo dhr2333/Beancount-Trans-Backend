@@ -315,12 +315,12 @@ class TwoFactorVerifySerializer(serializers.Serializer):
         required=True,
         min_length=6,
         max_length=6,
-        help_text='6位验证码（TOTP或SMS）'
+        help_text='6位验证码（TOTP）'
     )
     method = serializers.ChoiceField(
-        choices=['totp', 'sms'],
+        choices=['totp'],
         required=True,
-        help_text='2FA方式：totp或sms'
+        help_text='2FA方式：totp'
     )
     
     def validate_code(self, value):
