@@ -177,6 +177,20 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     except Exception as token_exc:
                         logger.warning(f"保存社交访问令牌失败: {token_exc}")
 
+                # 应用初始化数据（官方账户模板和映射模板）
+                try:
+                    from project.apps.account.signals import apply_official_account_templates
+                    from project.apps.maps.signals import apply_official_templates
+                    
+                    apply_official_account_templates(user)
+                    logger.info(f"为用户 {user.username} 应用官方账户模板成功")
+                    
+                    apply_official_templates(user)
+                    logger.info(f"为用户 {user.username} 应用官方映射模板成功")
+                except Exception as init_error:
+                    logger.warning(f"为用户 {user.username} 应用初始化数据时出错: {str(init_error)}")
+                    # 不阻断注册流程，只记录警告
+
         except ValueError as exc:
             if str(exc) == 'SOCIAL_ACCOUNT_ALREADY_BOUND':
                 logger.warning(f"社交账号 {sociallogin.account.uid} 已被其他用户绑定")
@@ -404,6 +418,20 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                 profile.phone_number = phone_number
                 profile.phone_verified = True
                 profile.save()
+                
+                # 应用初始化数据（官方账户模板和映射模板）
+                try:
+                    from project.apps.account.signals import apply_official_account_templates
+                    from project.apps.maps.signals import apply_official_templates
+                    
+                    apply_official_account_templates(user)
+                    logger.info(f"为用户 {username} 应用官方账户模板成功")
+                    
+                    apply_official_templates(user)
+                    logger.info(f"为用户 {username} 应用官方映射模板成功")
+                except Exception as init_error:
+                    logger.warning(f"为用户 {username} 应用初始化数据时出错: {str(init_error)}")
+                    # 不阻断注册流程，只记录警告
                 
                 # 生成 JWT token
                 refresh = RefreshToken.for_user(user)
