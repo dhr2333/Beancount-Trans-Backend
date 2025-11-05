@@ -57,6 +57,5 @@ class Command(BaseCommand):
 
         # 显示访问URL
         self.stdout.write('\nAPI文档访问地址:')
-        self.stdout.write(f'  Swagger UI: http://localhost:8000/api/docs/')
         self.stdout.write(f'  ReDoc: http://localhost:8000/api/redoc/')
         self.stdout.write(f'  OpenAPI Schema: http://localhost:8000/api/schema/')

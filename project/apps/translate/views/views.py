@@ -73,12 +73,7 @@ class BillAnalyzeView(APIView):
 
 class UserConfigAPI(APIView):
     """用户个人配置接口"""
-    def get_permissions(self):
-        """动态权限控制"""
-        if self.request.method == 'GET':  # GET请求允许匿名访问
-            return [AllowAny()]
-        else:  # PUT等写操作需要认证和所有权验证
-            return [IsAuthenticated(), IsOwnerOrAdminReadWriteOnly()]
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsOwnerOrAdminReadWriteOnly]
 
     def get(self, request):

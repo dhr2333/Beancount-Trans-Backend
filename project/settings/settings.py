@@ -74,7 +74,6 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
 
     # 第三方应用
     'rest_framework',
-    'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'drf_spectacular',
     'allauth',
@@ -85,12 +84,14 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'allauth.socialaccount.providers.dummy',
     "allauth.headless",
     "allauth.usersessions",
-    'dj_rest_auth',
-    'dj_rest_auth.registration',
     'mptt',
     'django_celery_beat',
 
     # 本地应用
+    'phonenumber_field',
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+    'project.apps.authentication',
     'project.apps.account',
     'project.apps.fava_instances',
     'project.apps.file_manager',
@@ -113,6 +114,7 @@ MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图�
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
+    'project.apps.authentication.middleware.PhoneNumberRequiredMiddleware',  # 检查手机号绑定
     'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
     'allauth.account.middleware.AccountMiddleware',
@@ -143,15 +145,9 @@ SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 
 # 根据 BASE_URL 动态生成重定向 URL
 BASE_URL = os.environ.get('BASE_URL', 'localhost')
-if BASE_URL == 'localhost':
-    LOGIN_REDIRECT_URL = f'http://{BASE_URL}/api/accounts/github/login/callback/'
-    LOGOUT_REDIRECT_URL = f'http://{BASE_URL}'
-else:
-    LOGIN_REDIRECT_URL = f'https://{BASE_URL}/api/accounts/github/login/callback/'
-    LOGOUT_REDIRECT_URL = f'https://{BASE_URL}'
 
-SOCIALACCOUNT_ADAPTER = 'allauth.socialaccount.adapter.DefaultSocialAccountAdapter'
-SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_ADAPTER = 'project.apps.authentication.adapters.CustomSocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP = False  # 禁用OAuth自动注册，强制手机号绑定流程
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
 SOCIALACCOUNT_STORE_TOKENS = True
@@ -215,19 +211,19 @@ SOCIALACCOUNT_PROVIDERS = {
 # HEADLESS_TOKEN_STRATEGY = "allauth.headless.tokens.sessions.SessionTokenStrategy"
 HEADLESS_TOKEN_STRATEGY = "project.utils.token.JWTTokenStrategy"
 HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
-HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": f"{LOGOUT_REDIRECT_URL}/api/accounts/verify-email/{{key}}",
-    "account_reset_password": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset",
-    "account_reset_password_from_key": f"{LOGOUT_REDIRECT_URL}/api/accounts/password/reset/key/{{key}}",
-    "account_signup": f"{LOGOUT_REDIRECT_URL}/api/accounts/signup",
-    "socialaccount_login_error": f"{LOGOUT_REDIRECT_URL}/api/accounts/google/login/callback",
-}
 
 # MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
 # MFA_PASSKEY_LOGIN_ENABLED = True
 
 # Authentication Backends
 AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持多种身份验证方式
+    # Phone number authentication backends (优先级最高)
+    'project.apps.authentication.backends.PhonePasswordBackend',
+    'project.apps.authentication.backends.PhoneCodeBackend',
+    
+    # Username/Email authentication backend (要求已绑定手机号)
+    'project.apps.authentication.backends.PhoneNumberRequiredBackend',
+    
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
 
@@ -245,18 +241,13 @@ ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常�
 # JWT 配置（根据环境变量配置）
 JWT_ACCESS_TOKEN_HOURS = int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '1' if not DEBUG else '72'))
 
-# 配置用于 JWT 的 REST_AUTH
-REST_AUTH = {
-    'USE_JWT': True,
-    "JWT_AUTH_HTTPONLY": False,
-    'JWT_AUTH_COOKIE': 'beancount-trans-auth',
-    'JWT_AUTH_REFRESH_COOKIE': 'beancount-trans-refresh-token',
-    'JWT_AUTH_COOKIE_USE_CSRF': False,
-    'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
-    'JWT_ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
-    'JWT_REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
-    'JWT_ROTATE_REFRESH_TOKENS': False,
-    'JWT_BLACKLIST_AFTER_ROTATION': True,
+# JWT 配置（使用 rest_framework_simplejwt）
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 # CORS Configuration
@@ -363,12 +354,31 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目�
 # Default auto field
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'  # 模型的默认主键字段类型，AutoField or BigAutoField
 
+# ========== Email Settings ==========
+# 默认发件邮箱地址（必配）
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@example.com')
+
+# 邮件验证码配置
+EMAIL_BIND_SUBJECT = os.environ.get('EMAIL_BIND_SUBJECT', '邮箱绑定验证码')
+EMAIL_CODE_EXPIRE_SECONDS = int(os.environ.get('EMAIL_CODE_EXPIRE_SECONDS', '300'))  # 5分钟
+EMAIL_CODE_RESEND_INTERVAL = int(os.environ.get('EMAIL_CODE_RESEND_INTERVAL', '60'))  # 60秒
+
+# 邮件后端：开发默认使用控制台（打印到控制台），生产使用SMTP
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend')
+
+# SMTP 配置（当 EMAIL_BACKEND 为 SMTP 时生效）
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '465'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'false').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'true').lower() == 'true'
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '15'))
+
 # REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (  # 默认的身份验证类
-        # 'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        # 'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (  # 默认的权限类
@@ -396,15 +406,10 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
     'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
-    'VERSION': '1.0.0',
+    'VERSION': '5.3.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
-    'SWAGGER_UI_SETTINGS': {
-        'deepLinking': True,
-        'persistAuthorization': True,
-        'displayOperationId': True,
-    },
     'REDOC_UI_SETTINGS': {
         'hideDownloadButton': False,
         'hideHostname': False,
@@ -529,3 +534,17 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Bean文件相关配置
 ASSETS_BASE_PATH = BASE_DIR / 'Assets'
 ASSETS_HOST_PATH = os.environ.get('ASSETS_HOST_PATH', str(ASSETS_BASE_PATH))
+
+# 阿里云短信配置
+ALIYUN_SMS_ACCESS_KEY_ID = os.environ.get('ALIYUN_SMS_ACCESS_KEY_ID', '')
+ALIYUN_SMS_ACCESS_KEY_SECRET = os.environ.get('ALIYUN_SMS_ACCESS_KEY_SECRET', '')
+ALIYUN_SMS_SIGN_NAME = os.environ.get('ALIYUN_SMS_SIGN_NAME', '')
+ALIYUN_SMS_TEMPLATE_CODE = os.environ.get('ALIYUN_SMS_TEMPLATE_CODE', '')
+
+# 短信验证码配置
+SMS_CODE_EXPIRE_SECONDS = 300  # 5分钟
+SMS_CODE_RESEND_INTERVAL = 60  # 1分钟
+
+# Phonenumber Field
+PHONENUMBER_DEFAULT_REGION = 'CN'
+PHONENUMBER_DB_FORMAT = 'E164'

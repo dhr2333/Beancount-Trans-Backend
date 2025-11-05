@@ -27,7 +27,7 @@ class JWTTokenStrategy(AbstractTokenStrategy):
         refresh_token = self.create_refresh_token(request)
 
         # 从settings获取token生命周期
-        access_token_lifetime = getattr(settings, 'REST_AUTH', {}).get('JWT_ACCESS_TOKEN_LIFETIME', datetime.timedelta(hours=1))
+        access_token_lifetime = getattr(settings, 'SIMPLE_JWT', {}).get('ACCESS_TOKEN_LIFETIME', datetime.timedelta(hours=1))
         expires_in = int(access_token_lifetime.total_seconds())
 
         return {
