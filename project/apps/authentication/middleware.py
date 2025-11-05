@@ -2,6 +2,7 @@ import logging
 from django.http import JsonResponse
 from django.urls import resolve
 from django.urls.exceptions import Resolver404
+from project.apps.authentication.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,16 @@ class PhoneNumberRequiredMiddleware:
                             'redirect_url': '/api/auth/bindings/bind-phone/'
                         }, status=403)
                 except AttributeError:
-                    # 用户没有profile，创建它
-                    from project.apps.authentication.models import UserProfile
+                    # 用户没有profile，创建它（理论上不应该发生，因为信号会自动创建）
+                    UserProfile.objects.create(user=request.user)
+                    return JsonResponse({
+                        'error': '请先绑定手机号',
+                        'code': 'PHONE_NUMBER_REQUIRED',
+                        'message': '您需要绑定手机号才能继续使用系统',
+                        'redirect_url': '/api/auth/bindings/bind-phone/'
+                    }, status=403)
+                except UserProfile.DoesNotExist:
+                    # 用户没有profile，创建它（Django OneToOneField访问不存在对象时抛出此异常）
                     UserProfile.objects.create(user=request.user)
                     return JsonResponse({
                         'error': '请先绑定手机号',

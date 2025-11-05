@@ -62,7 +62,7 @@ class UserProfile(BaseModel):
     
     def is_phone_verified(self):
         """检查手机号是否已验证"""
-        return self.phone_number and self.phone_verified
+        return bool(self.phone_number and self.phone_verified)
 
     @staticmethod
     def generate_sms_code():

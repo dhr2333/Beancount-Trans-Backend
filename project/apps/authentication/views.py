@@ -332,10 +332,15 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                 try:
                     from django_otp.plugins.otp_totp.models import TOTPDevice
                     if profile.totp_device_id:
-                        device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
-                        if not device.verify_token(totp_code):
+                        try:
+                            device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
+                            if not device.verify_token(totp_code):
+                                return Response({
+                                    'error': 'TOTP验证码错误'
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                        except TOTPDevice.DoesNotExist:
                             return Response({
-                                'error': 'TOTP验证码错误'
+                                'error': 'TOTP设备不存在'
                             }, status=status.HTTP_400_BAD_REQUEST)
                     else:
                         return Response({
@@ -492,10 +497,15 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
                 try:
                     from django_otp.plugins.otp_totp.models import TOTPDevice
                     if profile.totp_device_id:
-                        device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
-                        if not device.verify_token(totp_code):
+                        try:
+                            device = TOTPDevice.objects.get(id=profile.totp_device_id, user=user)
+                            if not device.verify_token(totp_code):
+                                return Response({
+                                    'error': 'TOTP验证码错误'
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                        except TOTPDevice.DoesNotExist:
                             return Response({
-                                'error': 'TOTP验证码错误'
+                                'error': 'TOTP设备不存在'
                             }, status=status.HTTP_400_BAD_REQUEST)
                     else:
                         return Response({

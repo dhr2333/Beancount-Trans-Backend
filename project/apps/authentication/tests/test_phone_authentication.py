@@ -134,3 +134,199 @@ class TestPhoneAuthentication:
         })
         assert response.status_code == 400
 
+    def test_register_without_username_generation(self):
+        """测试注册时自动生成用户名"""
+        phone_number = '+8613800138010'
+        profile = UserProfile(phone_number=phone_number)
+        profile.store_sms_code('123456', phone_number)
+        
+        response = self.client.post('/api/auth/phone/register/', {
+            'phone_number': phone_number,
+            'code': '123456',
+            'password': 'TestPass123!',
+            'email': 'test@example.com'
+            # 不提供用户名
+        })
+        
+        assert response.status_code == 201
+        assert 'access' in response.data
+        assert 'user' in response.data
+        assert response.data['user']['username'].startswith('user_')
+
+    def test_register_duplicate_username(self):
+        """测试注册时用户名冲突处理"""
+        phone_number = '+8613800138011'
+        profile = UserProfile(phone_number=phone_number)
+        profile.store_sms_code('123456', phone_number)
+        
+        # 先创建一个用户
+        User.objects.create_user(username='testuser5', password='TestPass123!')
+        
+        # 尝试使用相同用户名注册
+        response = self.client.post('/api/auth/phone/register/', {
+            'phone_number': phone_number,
+            'code': '123456',
+            'username': 'testuser5',
+            'password': 'TestPass123!'
+        })
+        
+        assert response.status_code == 400
+        assert '用户名已存在' in str(response.data)
+
+    def test_register_without_password(self):
+        """测试注册时不设置密码"""
+        phone_number = '+8613800138012'
+        profile = UserProfile(phone_number=phone_number)
+        profile.store_sms_code('123456', phone_number)
+        
+        response = self.client.post('/api/auth/phone/register/', {
+            'phone_number': phone_number,
+            'code': '123456',
+            'username': 'testuser6',
+            'email': 'test@example.com'
+            # 不提供密码
+        })
+        
+        assert response.status_code == 201
+        user = User.objects.get(username='testuser6')
+        assert not user.has_usable_password()
+
+    def test_login_by_code_requires_2fa(self):
+        """测试验证码登录时返回2FA状态"""
+        user = User.objects.create_user(username='testuser7', password='TestPass123!')
+        profile = user.profile
+        profile.phone_number = '+8613800138013'
+        profile.phone_verified = True
+        profile.totp_enabled = True
+        profile.save()
+        
+        profile.store_sms_code('654321', profile.phone_number)
+        
+        response = self.client.post('/api/auth/phone/login-by-code/', {
+            'phone_number': '+8613800138013',
+            'code': '654321'
+        })
+        
+        assert response.status_code == 200
+        assert 'requires_2fa' in response.data
+        assert response.data['requires_2fa'] is True
+
+    def test_login_by_password_with_totp(self):
+        """测试密码登录时TOTP验证成功"""
+        from unittest.mock import patch, MagicMock
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        
+        user = User.objects.create_user(username='testuser8', password='TestPass123!')
+        profile = user.profile
+        profile.phone_number = '+8613800138014'
+        profile.totp_enabled = True
+        
+        # 创建TOTP设备
+        device = TOTPDevice.objects.create(
+            user=user,
+            name='default',
+            confirmed=True,
+            key='JBSWY3DPEHPK3PXP'
+        )
+        profile.totp_device_id = device.id
+        profile.save()
+        
+        # Mock TOTP验证 - 需要mock objects.get()
+        with patch('django_otp.plugins.otp_totp.models.TOTPDevice.objects.get') as mock_get:
+            mock_device = MagicMock()
+            mock_device.verify_token.return_value = True
+            mock_device.id = device.id
+            mock_device.user = user
+            mock_get.return_value = mock_device
+            
+            response = self.client.post('/api/auth/phone/login-by-password/', {
+                'phone_number': '+8613800138014',
+                'password': 'TestPass123!',
+                'totp_code': '123456'
+            })
+            
+            assert response.status_code == 200
+            assert 'access' in response.data
+
+    def test_login_by_password_with_totp_missing(self):
+        """测试密码登录时缺少TOTP码"""
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        
+        user = User.objects.create_user(username='testuser9', password='TestPass123!')
+        profile = user.profile
+        profile.phone_number = '+8613800138015'
+        profile.totp_enabled = True
+        
+        device = TOTPDevice.objects.create(
+            user=user,
+            name='default',
+            confirmed=True,
+            key='JBSWY3DPEHPK3PXP'
+        )
+        profile.totp_device_id = device.id
+        profile.save()
+        
+        response = self.client.post('/api/auth/phone/login-by-password/', {
+            'phone_number': '+8613800138015',
+            'password': 'TestPass123!'
+            # 不提供totp_code
+        })
+        
+        assert response.status_code == 400
+        assert 'TOTP二次验证' in response.data['error']
+        assert response.data['requires_totp'] is True
+
+    def test_login_by_password_with_totp_wrong(self):
+        """测试密码登录时TOTP验证码错误"""
+        from unittest.mock import patch, MagicMock
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        
+        user = User.objects.create_user(username='testuser10', password='TestPass123!')
+        profile = user.profile
+        profile.phone_number = '+8613800138016'
+        profile.totp_enabled = True
+        
+        device = TOTPDevice.objects.create(
+            user=user,
+            name='default',
+            confirmed=True,
+            key='JBSWY3DPEHPK3PXP'
+        )
+        profile.totp_device_id = device.id
+        profile.save()
+        
+        # Mock TOTP验证失败
+        with patch('django_otp.plugins.otp_totp.models.TOTPDevice.objects.get') as mock_get:
+            mock_device = MagicMock()
+            mock_device.verify_token.return_value = False
+            mock_device.id = device.id
+            mock_device.user = user
+            mock_get.return_value = mock_device
+            
+            response = self.client.post('/api/auth/phone/login-by-password/', {
+                'phone_number': '+8613800138016',
+                'password': 'TestPass123!',
+                'totp_code': '123456'
+            })
+            
+            assert response.status_code == 400
+            assert 'TOTP验证码错误' in response.data['error']
+
+    def test_login_by_password_with_totp_device_not_found(self):
+        """测试密码登录时TOTP设备不存在"""
+        user = User.objects.create_user(username='testuser11', password='TestPass123!')
+        profile = user.profile
+        profile.phone_number = '+8613800138017'
+        profile.totp_enabled = True
+        profile.totp_device_id = 99999  # 不存在的设备ID
+        profile.save()
+        
+        response = self.client.post('/api/auth/phone/login-by-password/', {
+            'phone_number': '+8613800138017',
+            'password': 'TestPass123!',
+            'totp_code': '123456'
+        })
+        
+        assert response.status_code == 400
+        assert 'TOTP设备不存在' in response.data['error']
+
