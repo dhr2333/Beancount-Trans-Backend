@@ -345,9 +345,10 @@ USE_TZ = True  # 时区
 # Static files (CSS, JavaScript, Images)
 STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')  # 使用 python manage.py collectstatic 命令时，所有静态文件将被复制到此目录
 STATIC_URL = 'static/'  # 静态文件URL前缀
-STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件时会包含这些目录
-    os.path.join(BASE_DIR, 'static'),
-]
+STATICFILES_DIRS = []
+if os.path.exists(os.path.join(BASE_DIR, 'static')):
+    STATICFILES_DIRS.append(os.path.join(BASE_DIR, 'static'))
+
 MEDIA_URL = 'media/'  # 访问媒体文件的 URL 前缀，通常用于用户上传的文件
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目录
 
