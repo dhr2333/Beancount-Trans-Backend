@@ -114,7 +114,7 @@ MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图�
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
-    'project.apps.authentication.middleware.PhoneNumberRequiredMiddleware',  # 检查手机号绑定
+    # 'project.apps.authentication.middleware.PhoneNumberRequiredMiddleware',  # 已移除：中间件影响面太广，会在OAuth流程中拦截请求。改为在视图层面使用PhoneNumberVerifiedPermission进行精确控制
     'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
     'allauth.account.middleware.AccountMiddleware',
