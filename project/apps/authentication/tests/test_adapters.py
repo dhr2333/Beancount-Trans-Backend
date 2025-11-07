@@ -17,14 +17,14 @@ class TestCustomSocialAccountAdapter:
         self.factory = RequestFactory()
         self.adapter = CustomSocialAccountAdapter()
     
-    def test_is_open_for_signup_returns_false(self):
-        """测试禁用OAuth自动注册"""
+    def test_is_open_for_signup_returns_true(self):
+        """测试允许OAuth自动注册"""
         request = self.factory.get('/')
         sociallogin = Mock()
         
         result = self.adapter.is_open_for_signup(request, sociallogin)
         
-        assert result is False
+        assert result is True
     
     def test_pre_social_login_existing_user_with_phone(self):
         """测试已存在用户且已绑定手机号"""
