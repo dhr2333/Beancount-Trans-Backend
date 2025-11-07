@@ -147,7 +147,7 @@ SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 BASE_URL = os.environ.get('BASE_URL', 'localhost')
 
 SOCIALACCOUNT_ADAPTER = 'project.apps.authentication.adapters.CustomSocialAccountAdapter'
-SOCIALACCOUNT_AUTO_SIGNUP = False  # 禁用OAuth自动注册，强制手机号绑定流程
+SOCIALACCOUNT_AUTO_SIGNUP = True  # 允许OAuth自动注册，登录后再提示绑定手机号
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
 SOCIALACCOUNT_STORE_TOKENS = True
