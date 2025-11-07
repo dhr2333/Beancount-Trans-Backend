@@ -59,7 +59,7 @@ pipeline {
                                 -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} .
                         """
 
-                        if (env.BRANCH_NAME == 'main') {
+                        if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME.startsWith('fix/')) {
                             sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
                         }
 
@@ -211,7 +211,10 @@ pipeline {
 
         stage('部署到服务器') {
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    expression { env.BRANCH_NAME.startsWith('fix/') }
+                }
             }
             steps {
                 script {
@@ -233,14 +236,15 @@ pipeline {
         success {
             script {
                 echo '✅ 构建成功'
-                def message = env.BRANCH_NAME == 'main' ?
+                def isDeployBranch = env.BRANCH_NAME == 'main' || env.BRANCH_NAME.startsWith('fix/')
+                def message = isDeployBranch ?
                     "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}% | 已部署到生产环境" :
                     "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}%"
                 updateGitHubStatus('success', message)
 
                 echo "📊 测试覆盖率: ${env.COVERAGE_PERCENT}%"
 
-                if (env.BRANCH_NAME == 'main') {
+                if (isDeployBranch) {
                     echo "🚀 已部署到生产环境"
                 }
 
