@@ -15,6 +15,7 @@ class PhoneNumberRequiredMiddleware:
     
     # 排除的URL路径（不需要手机号绑定）
     EXCLUDED_PATHS = [
+        # 认证相关接口
         '/api/auth/phone/send-code/',
         '/api/auth/phone/login-by-code/',
         '/api/auth/phone/login-by-password/',
@@ -25,7 +26,16 @@ class PhoneNumberRequiredMiddleware:
         '/api/auth/profile/update_me/',
         '/api/auth/token/refresh/',
         '/api/_allauth/',  # allauth相关接口
+        # Django Admin
         '/admin/',
+        # API文档
+        '/api/redoc/',
+        '/api/schema/',
+        # 静态文件和媒体文件
+        '/static/',
+        '/media/',
+        # 其他系统路径
+        '/favicon.ico',
     ]
     
     def __init__(self, get_response):
@@ -40,31 +50,39 @@ class PhoneNumberRequiredMiddleware:
                     # 检查用户是否已绑定手机号
                     profile = request.user.profile
                     if not profile.is_phone_verified():
-                        # 返回需要绑定手机号的响应
+                        # 对于API请求，返回JSON响应
+                        if request.path.startswith('/api/'):
+                            return JsonResponse({
+                                'error': '请先绑定手机号',
+                                'code': 'PHONE_NUMBER_REQUIRED',
+                                'message': '您需要绑定手机号才能继续使用系统',
+                                'redirect_url': '/api/auth/bindings/bind-phone/'
+                            }, status=403)
+                        # 对于非API请求（如HTML页面），允许继续，让Django处理
+                        # 这样可以避免阻断admin等页面的访问
+                        pass
+                except AttributeError:
+                    # 用户没有profile，创建它（理论上不应该发生，因为信号会自动创建）
+                    UserProfile.objects.create(user=request.user)
+                    # 对于API请求，返回JSON响应
+                    if request.path.startswith('/api/'):
                         return JsonResponse({
                             'error': '请先绑定手机号',
                             'code': 'PHONE_NUMBER_REQUIRED',
                             'message': '您需要绑定手机号才能继续使用系统',
                             'redirect_url': '/api/auth/bindings/bind-phone/'
                         }, status=403)
-                except AttributeError:
-                    # 用户没有profile，创建它（理论上不应该发生，因为信号会自动创建）
-                    UserProfile.objects.create(user=request.user)
-                    return JsonResponse({
-                        'error': '请先绑定手机号',
-                        'code': 'PHONE_NUMBER_REQUIRED',
-                        'message': '您需要绑定手机号才能继续使用系统',
-                        'redirect_url': '/api/auth/bindings/bind-phone/'
-                    }, status=403)
                 except UserProfile.DoesNotExist:
                     # 用户没有profile，创建它（Django OneToOneField访问不存在对象时抛出此异常）
                     UserProfile.objects.create(user=request.user)
-                    return JsonResponse({
-                        'error': '请先绑定手机号',
-                        'code': 'PHONE_NUMBER_REQUIRED',
-                        'message': '您需要绑定手机号才能继续使用系统',
-                        'redirect_url': '/api/auth/bindings/bind-phone/'
-                    }, status=403)
+                    # 对于API请求，返回JSON响应
+                    if request.path.startswith('/api/'):
+                        return JsonResponse({
+                            'error': '请先绑定手机号',
+                            'code': 'PHONE_NUMBER_REQUIRED',
+                            'message': '您需要绑定手机号才能继续使用系统',
+                            'redirect_url': '/api/auth/bindings/bind-phone/'
+                        }, status=403)
                 except Exception as e:
                     logger.error(f"中间件检查手机号绑定时出错: {str(e)}")
                     # 发生错误时允许继续（避免完全阻断系统）
