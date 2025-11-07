@@ -3,6 +3,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -35,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 class PhoneAuthViewSet(viewsets.GenericViewSet):
     """手机号认证视图集"""
+    # 只使用JWT认证，不使用Session认证，避免CSRF检查
+    authentication_classes = [JWTAuthentication]
     
     def get_permissions(self):
         """根据不同的 action 设置不同的权限"""
@@ -463,6 +466,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
 
 class UsernameAuthViewSet(viewsets.GenericViewSet):
     """用户名/邮箱+密码认证视图集"""
+    authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [AllowAny]
     
     @action(detail=False, methods=['post'], url_path='login-by-password')
@@ -544,7 +548,7 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
 
 class EmailAuthViewSet(viewsets.GenericViewSet):
     """邮箱验证码认证视图集"""
-
+    authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [AllowAny]
 
     @action(detail=False, methods=['post'], url_path='send-code')
@@ -626,6 +630,7 @@ class EmailAuthViewSet(viewsets.GenericViewSet):
 
 class AccountBindingViewSet(viewsets.GenericViewSet):
     """账号绑定管理视图集"""
+    authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
     
     def list(self, request):
@@ -801,6 +806,7 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
 
 class UserProfileViewSet(viewsets.GenericViewSet):
     """用户信息管理视图集"""
+    authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'])
@@ -925,6 +931,7 @@ class UserProfileViewSet(viewsets.GenericViewSet):
 
 class TwoFactorAuthViewSet(viewsets.GenericViewSet):
     """双因素认证视图集"""
+    authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['get'], url_path='status')
