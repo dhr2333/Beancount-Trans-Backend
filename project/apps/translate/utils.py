@@ -15,7 +15,7 @@ BILL_CCB_DEBIT = "CCB_Debit"
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
 INCOME_OTHER = "Income:Other"
-OPENBALANCE = "Equity:OpenBalance"
+OPENBALANCE = "Equity:OpenBalance"  #TODO，取消硬编码
 
 TIME_BREAKFAST_START = time(6)
 TIME_BREAKFAST_END = time(10)
@@ -34,7 +34,9 @@ transaction_status = {
     "wechatpay": ["支付成功", "已存入零钱", "已转账", "对方已收钱", "已到账", "已全额退款", "对方已退还", "提现已到账",
                   "充值完成", "充值成功", "已收钱"],
     "alipay": ["交易成功", "交易关闭", "退款成功", "支付成功", "代付成功", "还款成功", "还款失败", "已关闭", "解冻成功",
-               "信用服务使用成功", "等待付款", "放款成功", "芝麻免押下单成功", "缴费中", "等待确认收货"]
+               "信用服务使用成功", "等待付款", "放款成功", "芝麻免押下单成功", "缴费中", "等待确认收货", "代付关闭",
+               "冻结成功", "提现失败，已退回余额",
+               ]
 }
 
 
