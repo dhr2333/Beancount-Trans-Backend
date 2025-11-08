@@ -59,7 +59,7 @@ pipeline {
                                 -t ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} .
                         """
 
-                        if (env.BRANCH_NAME == 'main') {
+                        if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME.startsWith('fix/')) {
                             sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:latest"
                         }
 
@@ -211,7 +211,10 @@ pipeline {
 
         stage('部署到服务器') {
             when {
-                branch 'main'
+                anyOf {
+                    branch 'main'
+                    expression { env.BRANCH_NAME.startsWith('fix/') }
+                }
             }
             steps {
                 script {
@@ -233,15 +236,37 @@ pipeline {
         success {
             script {
                 echo '✅ 构建成功'
-                def message = env.BRANCH_NAME == 'main' ?
+                def isDeployBranch = env.BRANCH_NAME == 'main' || env.BRANCH_NAME.startsWith('fix/')
+                def message = isDeployBranch ?
                     "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}% | 已部署到生产环境" :
                     "测试通过 ✓ | 覆盖率: ${env.COVERAGE_PERCENT}%"
                 updateGitHubStatus('success', message)
 
                 echo "📊 测试覆盖率: ${env.COVERAGE_PERCENT}%"
 
-                if (env.BRANCH_NAME == 'main') {
+                if (isDeployBranch) {
                     echo "🚀 已部署到生产环境"
+                }
+
+                echo '🧹 清理旧的Docker镜像（保留最近3个）...'
+                try {
+                    sh """
+                        # 获取所有git-*标签的镜像，按创建时间排序，删除第4个及以后的镜像
+                        docker images ${env.REGISTRY}/${env.IMAGE_NAME} --format "{{.ID}} {{.Tag}} {{.CreatedAt}}" | \
+                        grep " git-" | \
+                        sort -k3 -r | \
+                        tail -n +4 | \
+                        awk '{print \$2}' | \
+                        while read tag; do
+                            if [ ! -z "\$tag" ]; then
+                                echo "删除旧镜像: \${tag}"
+                                docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:\${tag} || true
+                            fi
+                        done
+                    """
+                    echo "✅ 镜像清理完成"
+                } catch (Exception e) {
+                    echo "⚠️ 清理旧镜像时出现警告: ${e.message}"
                 }
             }
         }
@@ -255,20 +280,7 @@ pipeline {
 
         always {
             script {
-                echo '🧹 清理旧镜像和临时文件...'
-
-                // 清理上一次构建的镜像（保留当前构建的镜像）
-                try {
-                    // 获取上一次构建号
-                    def previousBuildNumber = env.BUILD_NUMBER.toInteger() - 1
-                    if (previousBuildNumber > 0) {
-                        def previousImageTag = "git-${previousBuildNumber}"
-                        echo "清理上一次构建的镜像: ${env.REGISTRY}/${env.IMAGE_NAME}:${previousImageTag}"
-                        sh "docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:${previousImageTag} || true"
-                    }
-                } catch (Exception e) {
-                    echo "清理旧镜像失败: ${e.message}"
-                }
+                echo '🧹 清理临时文件...'
 
                 // 清理旧的测试报告（保留最近3个构建的报告）
                 try {

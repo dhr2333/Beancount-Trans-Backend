@@ -12,8 +12,7 @@
    - 禁用OAuth自动注册（`is_open_for_signup` 返回 False）
    - 添加手机号绑定检查逻辑
 
-3. **创建中间件和权限类**
-   - `PhoneNumberRequiredMiddleware`：强制检查已认证用户的手机号绑定
+3. **创建权限类**
    - `PhoneNumberVerifiedPermission`：API端点级别的权限检查
 
 4. **更新认证后端**

@@ -114,7 +114,6 @@ MIDDLEWARE = [  # 处理请求和响应的组件，允许在请求到达视图�
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',  # 提供对跨站请求伪造（CSRF）攻击的保护，在用户表单提交时添加CSRF令牌
     'django.contrib.auth.middleware.AuthenticationMiddleware',  # 处理用户身份验证和管理
-    'project.apps.authentication.middleware.PhoneNumberRequiredMiddleware',  # 检查手机号绑定
     'django.contrib.messages.middleware.MessageMiddleware',  # 处理临时消息存储，允许在不同的请求之间传递消息（如成功、错误提示等）
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 防止点击劫持攻击，通过设置 HTTP 头来控制页面是否可以在 <iframe> 中嵌入
     'allauth.account.middleware.AccountMiddleware',
@@ -147,7 +146,7 @@ SITE_ID = 1  # 多站点配置，根据请求的域名加载不同的内容
 BASE_URL = os.environ.get('BASE_URL', 'localhost')
 
 SOCIALACCOUNT_ADAPTER = 'project.apps.authentication.adapters.CustomSocialAccountAdapter'
-SOCIALACCOUNT_AUTO_SIGNUP = False  # 禁用OAuth自动注册，强制手机号绑定流程
+SOCIALACCOUNT_AUTO_SIGNUP = True  # 允许OAuth自动注册，登录后再提示绑定手机号
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
 SOCIALACCOUNT_STORE_TOKENS = True
@@ -345,9 +344,10 @@ USE_TZ = True  # 时区
 # Static files (CSS, JavaScript, Images)
 STATIC_ROOT = os.path.join(BASE_DIR, 'collectstatic')  # 使用 python manage.py collectstatic 命令时，所有静态文件将被复制到此目录
 STATIC_URL = 'static/'  # 静态文件URL前缀
-STATICFILES_DIRS = [  # 指定额外的静态文件目录，收集静态文件时会包含这些目录
-    os.path.join(BASE_DIR, 'static'),
-]
+STATICFILES_DIRS = []
+if os.path.exists(os.path.join(BASE_DIR, 'static')):
+    STATICFILES_DIRS.append(os.path.join(BASE_DIR, 'static'))
+
 MEDIA_URL = 'media/'  # 访问媒体文件的 URL 前缀，通常用于用户上传的文件
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # 用户上传文件的存储目录
 

@@ -70,6 +70,7 @@ urlpatterns = [
     path("api/_allauth/", include("allauth.headless.urls")),
     path('api/_allauth/browser/v1/auth/github/token', authenticateByToken, name='authenticateByGithubToken'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path("api/accounts/", include("allauth.urls")),  # 提供 GitHub OAuth 登录回调
 
     # 业务相关的urls
     path('api/auth/', include('project.apps.authentication.urls')),  # 用户认证

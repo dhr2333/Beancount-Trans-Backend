@@ -129,36 +129,6 @@ class PhoneRegisterSerializer(serializers.Serializer):
         return value
 
 
-class OAuthPhoneRegisterSerializer(serializers.Serializer):
-    """OAuth 首次登录手机号注册序列化器"""
-    phone_number = PhoneNumberField(required=True, help_text='手机号')
-    code = serializers.CharField(required=True, min_length=6, max_length=6, help_text='6位数字验证码')
-    username = serializers.CharField(required=False, allow_blank=True, min_length=3, max_length=150, help_text='用户名（可选）')
-    password = serializers.CharField(required=False, allow_blank=True, write_only=True, help_text='密码（可选）')
-    email = serializers.EmailField(required=False, allow_blank=True, help_text='邮箱（可选）')
-
-    def validate_phone_number(self, value):
-        if UserProfile.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError("该手机号已被注册")
-        return value
-
-    def validate_code(self, value):
-        if not value.isdigit():
-            raise serializers.ValidationError("验证码必须是6位数字")
-        return value
-
-    def validate_username(self, value):
-        value = value.strip()
-        if value and User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("用户名已存在")
-        return value
-
-    def validate_password(self, value):
-        if value:
-            validate_password(value)
-        return value
-
-
 class PhoneBindingSerializer(serializers.Serializer):
     """绑定手机号序列化器"""
     phone_number = PhoneNumberField(
