@@ -117,12 +117,12 @@ def alipay_get_balance_account(self, data, assets, ownerid):
                     return extract_account_string(expend_instance.assets)
                 return ASSETS_OTHER
             else:
-                expend = ASSETS_OTHER
+                account = ASSETS_OTHER
     elif self.type == "余额宝-转出到银行卡":
         account = assets["ALIFUND"]
     elif self.type == "充值-普通充值":
         account = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
-    elif self.type == "提现-实时提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
+    elif self.type == "提现-实时提现" or self.type == "提现-快速提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
         account = assets["ALIPAY"]
     elif "亲情卡" in data['payment_method']:
         account = OPENBALANCE
@@ -162,7 +162,7 @@ def alipay_get_balance_expense(self, data, assets, ownerid):
         expend = ASSETS_OTHER
     elif self.type == "充值-普通充值":
         expend = assets["ALIPAY"]  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
-    elif self.type == "提现-实时提现":
+    elif self.type == "提现-实时提现" or self.type == "提现-快速提现":
         result = data['counterparty'] + "储蓄卡"  # 例如"宁波银行储蓄卡"
         for full in self.full_list:
             if result in full:

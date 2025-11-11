@@ -476,15 +476,20 @@ def get_shouzhi(data): #TODO
                 return high, loss
             elif (re.match(pattern["花呗自动还款"], data['commodity'])) or (re.match(pattern["花呗主动还款"], data['commodity'])):
                     return high, loss
+            elif data['commodity'] == "余额宝-自动转入" or data['commodity'] == "余额宝-单次转入" or data['commodity'] == "转账收款到余额宝":
+                return high, loss
             elif "放款成功" in  data['transaction_status']:
                 return loss, high
             elif "还款成功" in  data['transaction_status']:
                 return high, loss
             elif ("买入" in data['commodity']) or ("公司" in data['counterparty']):  #TODO  # 目前没找到更合理的规律
                 return high,loss
-        if data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
+            else:
+                return loss, high
+        elif data['bill_identifier'] == BILL_WECHAT and data['transaction_category'] == "信用卡还款":
             return high, loss
-        return loss, high
+        else:
+            return loss, high
     else:
         return None, None
 
