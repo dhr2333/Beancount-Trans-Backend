@@ -1,0 +1,27 @@
+{
+  "name": "beancount-trans-backend",
+  "version": "5.4.0",
+  "description": "Semantic-release configuration for Beancount-Trans backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "semantic-release": "TS_NODE_PROJECT=tsconfig.release.json NODE_OPTIONS='--loader ts-node/esm' semantic-release --config release.config.ts"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@google/semantic-release-replace-plugin": "^1.2.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@types/semantic-release": "^20.0.0",
+    "conventional-changelog-conventionalcommits": "^9.1.0",
+    "semantic-release": "^24.2.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}
+
