@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS 25.1.0'
+    }
+
     options {
         timeout(time: 1440, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '3'))
@@ -20,6 +24,15 @@ pipeline {
     }
 
     stages {
+        stage('Node 环境信息') {
+            steps {
+                sh '''
+                    node --version || true
+                    npm --version || true
+                '''
+            }
+        }
+
         stage('初始化') {
             steps {
                 script {
@@ -205,6 +218,24 @@ pipeline {
                     echo "🧹 清理workspace中的临时报告文件..."
                     sh "rm -rf ${WORKSPACE}/reports/htmlcov 2>/dev/null || true"
                     sh "rm -f ${WORKSPACE}/reports/pytest-report.html 2>/dev/null || true"
+                }
+            }
+        }
+
+        stage('语义化发布') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    echo "📝 运行 semantic-release，生成后端版本与发布记录..."
+                    withCredentials([string(credentialsId: '1b709f07-d907-4000-8a8a-2adafa6fc658', variable: 'GITHUB_TOKEN')]) {
+                        sh '''
+                            npm install
+                            npm ci
+                            npm run semantic-release
+                        '''
+                    }
                 }
             }
         }
