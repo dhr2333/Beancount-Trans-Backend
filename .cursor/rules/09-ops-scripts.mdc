@@ -1,0 +1,13 @@
+---
+globs: bin/**
+description: 运维层 - bin 脚本编写规范
+---
+
+# 运维层：`bin/` 脚本编写规范
+
+- **登记与分层**：所有新脚本必须放在 `bin/` 并在 [`bin/README.md`](mdc:bin/README.md) 中追加用途、使用方法、关键配置。
+- **Shebang 与权限**：shell 脚本使用 `#!/bin/bash`，Python 脚本使用 `#!/usr/bin/env python`；创建后 `chmod +x` 并在 `Dockerfile-Backend` 中确保 `RUN chmod +x`。示例见 `celery_worker_start.sh`、`check_system_status.py`。
+- **项目初始化**：Python 脚本需添加项目根路径到 `sys.path`、调用 `django.setup()` 并默认使用 `project.settings.develop`，模板在 [`bin/README.md`](mdc:bin/README.md) “Python 脚本编写规范” 章节。
+- **环境一致性**：脚本运行前确保 `pipenv run` 或容器 `python` 注入必要环境变量，禁止在脚本中硬编码机密。涉及 Celery/Redis/MySQL 的命令应复用 `.env` 配置。
+- **日志输出**：CLI 脚本应提供清晰的 `✓/✗` 状态或 `echo` 信息，失败时返回非零退出码，参考 `check_system_status.py`。
+- **部署流程**：常用部署指令（docker 启停、Celery 启动、备份）已有脚本，新增功能前先确认是否可复用现有脚本或在 README 中追加参数。

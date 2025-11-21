@@ -1,0 +1,13 @@
+---
+globs: project/**/*.py
+description: 应用层 - Celery 与异步任务规范
+---
+
+# 应用层：Celery 与异步任务规范
+
+- **统一入口**：所有异步任务通过 [`project/celery.py`](mdc:project/celery.py) 注册，`DJANGO_SETTINGS_MODULE` 默认指向 `project.settings.test` 以保证任务在测试环境可重用。
+- **任务声明**：使用 `@shared_task(bind=True)`，利用 `self.request.id` 记录任务 ID（见 [`parse_single_file_task`](mdc:project/apps/translate/tasks.py)）。任务必须捕获异常并返回结构化结果 `{'status': 'failed', ...}`，同时写入日志。
+- **状态追踪**：长耗时任务需要在 Redis 中维护状态，键命名与 `task_status:{task_id}` / `task_group:{group_id}` 保持一致；失败时必须更新 `ParseFile` 或相关模型的状态字段，避免卡在 `processing`。
+- **存储访问**：下载/上传文件时通过 `get_storage_client()` 获取统一后端，禁止在任务中直接访问 MinIO/S3 SDK；参考 [`project/utils/storage_factory.py`](mdc:project/utils/storage_factory.py)。
+- **配置透传**：任务参数中的布尔/枚举应与前端请求保持一致，必要时在任务入口处设置默认值（`args['write'] = True`）。不要在任务内部硬编码用户信息，需通过 `user_id` 查询最新配置。
+- **GroupResult 管理**：多文件解析等场景必须将 `group_id`、`task_ids`、`created_at` 等元数据存入缓存，供 [`TaskGroupStatusView`](mdc:project/apps/translate/views/views.py) 读取；任务完成后可按需更新 `task_group` 缓存。

@@ -1,0 +1,16 @@
+---
+globs: project/apps/**/*.py
+description: 应用层 - DRF 视图与权限规范
+---
+
+# 应用层：DRF 视图与权限规范
+
+- **首选 APIView / ViewSet**：单入口接口使用 `APIView`（如 [`BillAnalyzeView`](mdc:project/apps/translate/views/views.py)），批量 CRUD 使用 `ModelViewSet`。根据需求选择合适的基类或配置：
+  - **需要匿名只读访问的资源**（如 Account, Tag）：使用 `ModelViewSet`，配置 `AnonymousReadOnlyPermission` 和 `AnonymousUserFilterBackend`，在 `get_queryset()` 中处理匿名用户访问 id=1 用户数据的逻辑
+  - **不需要匿名访问的资源**（如 Directory, File）：使用 `ModelViewSet`，配置 `IsOwnerOrAdminReadWriteOnly` 和 `CurrentUserFilterBackend`
+  - **模板类资源**（如 Template, AccountTemplate）：使用 `ModelViewSet`，配置 `TemplatePermission`，在 `get_queryset()` 中处理官方/公开/私有模板的访问逻辑
+- **权限与过滤**：默认启用 `JWTAuthentication`；对需要匿名预览的数据使用 `AnonymousReadOnlyPermission` 与 `AnonymousUserFilterBackend`（参见 [`project/apps/common/filters.py`](mdc:project/apps/common/filters.py)）。禁止绕过这些过滤器直接在查询中硬编码 `owner_id`；如果 ViewSet 同时配置了 `AnonymousUserFilterBackend` 和自定义 `get_queryset()`，注意避免重复的用户过滤逻辑。
+- **序列化与校验**：所有请求必须通过对应 `Serializer` 校验并显式 `serializer.is_valid(raise_exception=True)`，与 [`AnalyzeSerializer`](mdc:project/apps/translate/views/views.py) 的用法保持一致；批量创建需检测 `list` 载荷并调用 `many=True`。
+- **响应与错误**：统一返回 `Response`，状态码使用 `rest_framework.status`，业务异常抓取后返还用户友好信息；通用异常让 [`custom_exception_handler`](mdc:project/utils/exceptions.py) 处理，避免在视图里吞掉并返回 200。
+- **缓存与任务状态**：在需要跨请求同步状态的接口（如多文件解析、任务查询）使用 Redis `cache`，键格式 `task_group:{id}`、`task_status:{task_id}`，参考 `MultiBillAnalyzeView` 与 `TaskGroupStatusView`。
+- **API 文档**：新增端点后同步更新 `docs/api_schema.json` 或 OpenAPI 描述，并确保路由注册于 `project/urls.py` 或对应 App 的 `urls.py`。
