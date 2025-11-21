@@ -1,0 +1,13 @@
+---
+globs: tests.py,project/**/*.py
+description: 质量层 - 测试与覆盖率规范
+---
+
+# 质量层：测试与覆盖率规范
+
+- **测试框架**：统一使用 `pytest` + `pytest-django`，配置位于 [`pyproject.toml`](mdc:pyproject.toml)。运行 `pytest` 时会自动加载 `project.settings.test`、启用 `--reuse-db`、`--cov=project` 等参数。
+- **测试路径**：优先在各 App 的 `tests/` 目录或 `tests.py` 中创建用例，命名遵循 `test_*.py`；参考 [`project/apps/authentication/tests`](mdc:project/apps/authentication/tests/test_phone_authentication.py)。
+- **模拟外部依赖**：对短信、存储、第三方 API 等需使用 mock/fixture，避免真实请求；例如 `authentication` 测试中模拟阿里云短信服务。
+- **数据准备**：使用 Django fixtures、`pytest` fixture 或工厂创建测试数据，不要依赖线下 `Assets/` 目录；必要时可加载 `project/apps/translate/fixtures/*.json`。
+- **断言响应**：对 DRF 视图使用 `APIClient`，断言状态码 + payload 结构；对模型方法/服务层直接调用并校验数据库状态。
+- **CI 期望**：提交前确保 `pytest` 通过且覆盖率报告 (`reports/htmlcov`, `reports/coverage.xml`) 更新。新增模块必须附带基础测试或解释为何无法测试。

@@ -1,0 +1,13 @@
+---
+globs: project/**/*.py
+description: 质量层 - 错误与异常处理
+---
+
+# 质量层：错误与异常处理规范
+
+- **统一异常处理**：在 DRF 中启用 [`custom_exception_handler`](mdc:project/utils/exceptions.py)，视图内部只需捕获可预期业务异常（如 `UnsupportedFileTypeError`、`DecryptionError`），其余交由全局处理。
+- **返回语义化信息**：接口异常响应必须使用 `Response({'error': 'message'}, status=...)`（参考 [`BillAnalyzeView`](mdc:project/apps/translate/views/views.py)），不要裸返回字符串或 200 状态。
+- **数据库/外部服务异常**：捕获具体异常后写日志并抛出 `ValidationError`/`APIException`；模型层应避免吞掉错误，参见 `Account._update_children_account_names()` 的日志做法。
+- **任务失败链路**：Celery 任务失败时需要：1) 更新 `ParseFile` 状态；2) 缓存 `task_status` 为 `failed`；3) 将错误内容写入日志（见 [`project/apps/translate/tasks.py`](mdc:project/apps/translate/tasks.py)）。
+- **错误码与状态**：HTTP 状态码遵循语义（400 参数错误、401/403 权限、404 资源缺失、415 类型不支持、500 内部错误、507 数据库异常），确保 `status` 常量来源于 `rest_framework.status`。
+- **日志记录**：使用 `logger = logging.getLogger(__name__)`，日志内容包含资源标识和异常信息，便于排查；禁止 `print` 或未命名 logger。

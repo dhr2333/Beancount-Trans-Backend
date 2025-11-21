@@ -1,0 +1,13 @@
+---
+globs: project/utils/**/*.py,project/apps/file_manager/**/*.py
+description: 基础设施层 - 存储与文件管理规范
+---
+
+# 基础设施层：存储与文件管理规范
+
+- **统一工厂**：所有文件读写都必须经由 [`get_storage_client()`](mdc:project/utils/storage_factory.py) 创建的后端，禁止在业务代码中直接实例化 Minio/S3/Oss 客户端。
+- **多后端支持**：根据 `settings.STORAGE_TYPE` 自动选择 `MinIOBackend`、`OSSBackend`、`S3Backend` 或 `LocalStorageBackend`。新增后端时实现 [`StorageBackend`](mdc:project/utils/storage_factory.py) 抽象方法，并在工厂中注册。
+- **配置来源**：后端配置读取 `settings.MINIO_CONFIG`/`OSS_CONFIG`/`S3_CONFIG` 等字典，配置项定义在 [`project/settings/settings.py`](mdc:project/settings/settings.py) 与 [`docs/ENV_CONFIG.md`](mdc:docs/ENV_CONFIG.md)。新增环境变量时务必同步这两个文件。
+- **容错与日志**：失败操作需返回 `False/None` 并写日志，参考 [`project/utils/minio.py`](mdc:project/utils/minio.py) 中的错误处理；业务层收到失败值后必须给出明确提示或回滚。
+- **文件模型关联**：与用户上传文件相关的数据结构位于 `project/apps/file_manager/`，引用存储对象时使用模型提供的 `storage_name`、`content_type` 等字段，避免拼接物理路径。
+- **备份与迁移**：若需要批量操作/备份，复用 `bin/backup.sh` 和 `uploads/` 目录策略，不要在应用层写绝对路径；脚本规范详见 [`bin/README.md`](mdc:bin/README.md)。

@@ -1,0 +1,13 @@
+---
+description: 基础设施层 - 环境变量与配置
+alwaysApply: true
+---
+
+# 基础设施层：环境变量与配置
+
+- **集中管理**：所有配置项必须通过环境变量或 `.env` 文件注入，由 [`project/settings/settings.py`](mdc:project/settings/settings.py) 读取。新增变量时同步更新 [`docs/ENV_CONFIG.md`](mdc:docs/ENV_CONFIG.md) 及示例文件（`.env.example` / `docker-compose.example.yaml` 如适用）。
+- **工具函数**：布尔和列表类型应复用 `env_to_bool`、`env_to_list`，避免在其他模块手写解析逻辑。
+- **安全默认值**：生产默认 `DEBUG=False`、`ALLOWED_HOSTS` 不能为空、`SECRET_KEY` 必填。如果配置依赖未提供（如 `CORS_ALLOWED_ORIGINS` 在生产环境），需抛出 `ValueError`，与现有实现保持一致。
+- **多环境设置**：`DJANGO_SETTINGS_MODULE` 仅指向统一的 `project.settings.settings`，具体差异靠环境变量切换；不要再创建新的 settings 文件。
+- **外部服务**：数据库、Redis、存储、邮件、OAuth、短信等全部通过前缀变量（`TRANS_POSTGRESQL_*`、`TRANS_REDIS_*`、`MINIO_*`、`ALIYUN_SMS_*`）配置，业务代码只能读取 `settings` 中的结构化配置，不得直接访问 `os.environ`。
+- **Celery/脚本**：`bin/` 内脚本必须在运行前设置好 `DJANGO_SETTINGS_MODULE` 和必要环境，示例参见 [`bin/check_system_status.py`](mdc:bin/check_system_status.py)。

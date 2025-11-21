@@ -1,0 +1,13 @@
+---
+globs: project/apps/**/*.py
+description: 基础层 - Django 模型与数据约定
+---
+
+# 基础层：Django 模型与数据约定
+
+- **统一继承 `BaseModel`**：所有业务模型都应继承 [`project/models.py`](mdc:project/models.py) 中的 `BaseModel` 以获得一致的 `created/modified` 字段与 `save` 行为（自动更新时间）。
+- **字段语义完整**：为每个字段提供 `help_text` 与 `verbose_name`，并在 `Meta` 中声明 `ordering`、`unique_together` 或 `constraints`；示例见 [`project/apps/account/models.py`](mdc:project/apps/account/models.py) 的 `Account` 与 `AccountTemplate`。
+- **自定义逻辑放入模型方法**：数据库一致性、级联操作（如账号层级的自动创建、同步映射、批量迁移）应封装在模型方法或 `save()/clean()` 中，而不是散落在视图；参照 `Account.save()`、`_create_parent_account()`、`delete_with_migration()` 的实现。
+- **避免循环依赖**：跨 App 引用模型时使用 `apps.get_model` 或字符串引用，并限制在方法内导入；例如 `Account._sync_mappings_enable_status()` 的做法。
+- **业务状态检查**：危险操作必须显式校验（如 `delete_with_migration` 中的 `has_children()`、目标账户启用状态）。新增方法时保持相同的防御式编程。
+- **日志与异常**：模型层捕获异常时使用 `logging.getLogger(__name__)` 并抛出 `ValidationError` 或自定义异常，避免静默失败；参考 `Account._update_children_account_names()`。
