@@ -6,21 +6,18 @@ class GitRepositorySerializer(serializers.ModelSerializer):
     """Git 仓库序列化器"""
     
     ssh_clone_url = serializers.ReadOnlyField()
-    https_clone_url = serializers.ReadOnlyField()
     deploy_key_download_url = serializers.SerializerMethodField()
     
     class Meta:
         model = GitRepository
         fields = [
-            'id', 'repo_url', 'ssh_clone_url', 'https_clone_url', 
-            'repo_name', 'created_with_template', 'last_sync_at', 
-            'sync_status', 'sync_error', 'deploy_key_download_url',
-            'created', 'modified'
+            'id', 'ssh_clone_url', 'repo_name', 'created_with_template', 
+            'last_sync_at', 'sync_status', 'sync_error', 
+            'deploy_key_download_url', 'created', 'modified'
         ]
         read_only_fields = [
-            'id', 'repo_url', 'ssh_clone_url', 'https_clone_url',
-            'repo_name', 'last_sync_at', 'sync_status', 'sync_error',
-            'created', 'modified'
+            'id', 'ssh_clone_url', 'repo_name', 'last_sync_at', 
+            'sync_status', 'sync_error', 'created', 'modified'
         ]
     
     def get_deploy_key_download_url(self, obj):

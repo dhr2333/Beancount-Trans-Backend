@@ -21,9 +21,6 @@ class GitRepository(BaseModel):
         related_name='git_repo',
         help_text="仓库所有者"
     )
-    repo_url = models.URLField(
-        help_text="Gitea 仓库 HTTPS URL，如 https://gitea.dhr2333.cn/beancount-trans/{user_id}-beancount.git"
-    )
     repo_name = models.CharField(
         max_length=200, 
         help_text="仓库名称，如 {user_id}-beancount"
@@ -82,9 +79,5 @@ class GitRepository(BaseModel):
     @property
     def ssh_clone_url(self):
         """获取 SSH clone 地址"""
-        return f"git@gitea.dhr2333.cn:beancount-trans/{self.repo_name}.git"
-    
-    @property
-    def https_clone_url(self):
-        """获取 HTTPS clone 地址"""
-        return self.repo_url
+        # return f"git@gitea.dhr2333.cn:beancount-trans/{self.repo_name}.git"
+        return f"ssh://git@gitea.dhr2333.cn:30022/beancount-trans/{self.repo_name}.git"

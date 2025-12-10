@@ -101,7 +101,6 @@ class PlatformGitService:
             # 5. 创建数据库记录
             git_repo = GitRepository.objects.create(
                 owner=user,
-                repo_url=repo_data['clone_url'],
                 repo_name=repo_name,
                 gitea_repo_id=repo_data['id'],
                 created_with_template=use_template,
