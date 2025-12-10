@@ -286,7 +286,7 @@ class PlatformGitService:
         try:
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for file_path in trans_path.rglob('*.bean'):
-                    arcname = str(file_path.relative_to(trans_path))
+                    arcname = os.path.join('trans', str(file_path.relative_to(trans_path)))
                     zipf.write(file_path, arcname)
             
             logger.info(f"Created trans/ archive for user {user.username}: {zip_path}")

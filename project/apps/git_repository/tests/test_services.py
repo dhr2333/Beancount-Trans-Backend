@@ -184,7 +184,8 @@ class TestPlatformGitService:
         
         # 模拟 trans 目录存在
         with patch('pathlib.Path.exists', return_value=True), \
-             patch('pathlib.Path.rglob', return_value=[]):
+             patch('pathlib.Path.rglob', return_value=[]), \
+             patch('os.path.join', return_value='trans/test.bean'):
             
             zip_path = self.service.create_trans_download_archive(self.user)
         
