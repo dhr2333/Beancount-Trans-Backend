@@ -63,8 +63,10 @@ class PlatformGitService:
         if hasattr(user, 'git_repo'):
             raise GitServiceException("用户已有 Git 仓库")
         
-        repo_name = f"{user.id}-beancount"
-        
+        # 使用 UUID 保留 6 位作为仓库名称
+        import uuid
+        repo_id = uuid.uuid4().hex[:6]
+        repo_name = f"{repo_id}-assets"
         try:
             # 1. 创建 Gitea 仓库
             logger.info(f"Creating Gitea repository for user {user.username}: {repo_name}")
