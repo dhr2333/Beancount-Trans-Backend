@@ -203,10 +203,16 @@ class FileWritingStep(Step):
             original_filename = context['uploaded_file'].name
             bean_file_path = BeanFileManager.get_bean_file_path(username, original_filename)
 
-            if os.path.exists(bean_file_path):
-                BeanFileManager.ensure_user_assets_dir(username)
+            # 确保trans目录存在
+            BeanFileManager.ensure_trans_directory(username)
 
-                with open(bean_file_path, 'w', encoding='utf-8') as f:
-                    f.write(formatted_data)
+            # 写入文件到trans目录
+            with open(bean_file_path, 'w', encoding='utf-8') as f:
+                f.write(formatted_data)
+
+            # 追加到trans/main.bean（追加方案）
+            base_name = os.path.splitext(original_filename)[0]
+            bean_filename = f"{base_name}.bean"
+            BeanFileManager.update_trans_main_bean_include(username, bean_filename, action='add')
 
         return context

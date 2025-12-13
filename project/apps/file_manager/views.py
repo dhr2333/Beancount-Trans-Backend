@@ -112,20 +112,20 @@ class DirectoryViewSet(ModelViewSet):
             self._delete_directory_files(child)
 
     def _delete_bean_files_for_directory(self, username, directory):
-        """递归删除目录下所有文件对应的.bean文件并更新main.bean"""
+        """递归删除目录下所有文件对应的.bean文件并更新trans/main.bean"""
         # 处理当前目录下的文件
         for file in directory.files.all():
             base_name = os.path.splitext(file.name)[0]
             bean_filename = f"{base_name}.bean"
 
-            # 从main.bean中移除include语句
-            BeanFileManager.update_main_bean_include(
+            # 从trans/main.bean中移除include语句
+            BeanFileManager.update_trans_main_bean_include(
                 username,
                 bean_filename,
                 action='remove'
             )
 
-            # 删除.bean文件
+            # 删除.bean文件（从trans目录）
             BeanFileManager.delete_bean_file(username, bean_filename)
 
         # 递归处理子目录
@@ -254,14 +254,14 @@ class FileViewSet(ModelViewSet):
         base_name = os.path.splitext(file_obj.name)[0]
         bean_filename = f"{base_name}.bean"
 
-        # 从main.bean中移除include语句
-        BeanFileManager.update_main_bean_include(
+        # 从trans/main.bean中移除include语句
+        BeanFileManager.update_trans_main_bean_include(
             request.user.username,
             bean_filename,
             action='remove'
         )
 
-        # 删除.bean文件
+        # 删除.bean文件（从trans目录）
         BeanFileManager.delete_bean_file(
             request.user.username,
             bean_filename
