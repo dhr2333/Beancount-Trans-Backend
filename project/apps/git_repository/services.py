@@ -126,6 +126,15 @@ class PlatformGitService:
                 self.gitea_client.delete_repository(repo_name)
             except:
                 pass
+            
+            # 清理数据库记录（如果已创建）
+            if 'git_repo' in locals():
+                try:
+                    git_repo.delete()
+                    logger.info(f"Cleaned up database record for {repo_name}")
+                except:
+                    pass
+            
             raise GitServiceException(f"创建仓库失败: {e}")
     
     def sync_repository(self, user: User) -> Dict[str, Any]:
@@ -329,11 +338,46 @@ class PlatformGitService:
         return private_pem, public_openssh
     
     def _initialize_repository_with_template(self, git_repo: GitRepository):
-        """使用 Beancount-Trans-Assets 模板初始化仓库"""
-        # TODO: 实现模板初始化逻辑
-        # 这里需要将 Beancount-Trans-Assets 的内容推送到新创建的仓库
-        logger.info(f"Template initialization for {git_repo.repo_name} - TODO: implement")
-        pass
+        """使用 Beancount-Trans-Assets 模板初始化仓库
+        
+        流程：
+        1. 从 GitHub 获取模板仓库内容
+        2. 为用户定制模板内容
+        3. 推送内容到用户仓库
+        4. 同步到本地用户目录
+        """
+        from .template_service import GitHubTemplateService, TemplateServiceException
+        
+        try:
+            logger.info(f"开始为仓库 {git_repo.repo_name} 初始化模板内容")
+            
+            # 1. 获取模板内容
+            template_service = GitHubTemplateService()
+            template_dir = template_service.fetch_template_content()
+            
+            try:
+                # 2. 为用户定制模板内容
+                template_service.customize_template_for_user(template_dir, git_repo.owner)
+                
+                # 3. 推送内容到用户仓库
+                self._push_template_to_repository(git_repo, template_dir)
+                
+                # 4. 同步到本地用户目录（保留现有 trans/ 目录）
+                self._sync_template_to_local(git_repo, template_dir)
+                
+                logger.info(f"成功为仓库 {git_repo.repo_name} 初始化模板内容")
+                
+            finally:
+                # 清理临时目录
+                import shutil
+                shutil.rmtree(template_dir, ignore_errors=True)
+                
+        except TemplateServiceException as e:
+            logger.error(f"模板初始化失败: {e}")
+            raise GitServiceException(f"模板初始化失败: {e}")
+        except Exception as e:
+            logger.error(f"模板初始化过程中发生未知错误: {e}")
+            raise GitServiceException(f"模板初始化失败: {e}")
     
     def _clone_repository(self, git_repo: GitRepository, target_path: Path):
         """克隆仓库到本地"""
@@ -593,3 +637,155 @@ class PlatformGitService:
         BeanFileManager.update_main_bean_include(username, None, 'add')
         
         logger.info(f"Rebuilt standard main.bean for user {username}")
+    
+    def _push_template_to_repository(self, git_repo: GitRepository, template_dir: Path):
+        """将模板内容推送到 Gitea 仓库
+        
+        Args:
+            git_repo: Git 仓库对象
+            template_dir: 模板内容目录
+        """
+        # 创建临时工作目录
+        temp_work_dir = tempfile.mkdtemp(prefix='git_work_')
+        
+        try:
+            # 准备 SSH 密钥
+            ssh_key_file = self._prepare_ssh_key(git_repo)
+            
+            try:
+                # 设置 Git 环境变量
+                env = os.environ.copy()
+                env['GIT_SSH_COMMAND'] = f'ssh -i {ssh_key_file} -o StrictHostKeyChecking=no'
+                
+                # 克隆空仓库
+                clone_url = git_repo.ssh_clone_url
+                subprocess.run([
+                    'git', 'clone', clone_url, temp_work_dir
+                ], env=env, capture_output=True, text=True, check=True)
+                
+                # 复制模板文件到工作目录
+                self._copy_template_files(template_dir, Path(temp_work_dir))
+                
+                # 切换到工作目录
+                original_cwd = os.getcwd()
+                os.chdir(temp_work_dir)
+                
+                try:
+                    # 配置 Git 用户信息
+                    subprocess.run(['git', 'config', 'user.name', 'Beancount-Trans Platform'], check=True)
+                    subprocess.run(['git', 'config', 'user.email', 'platform@beancount-trans.local'], check=True)
+                    
+                    # 添加所有文件
+                    subprocess.run(['git', 'add', '.'], check=True)
+                    
+                    # 创建初始提交
+                    commit_message = """feat: 基于 Beancount-Trans-Assets 模板初始化仓库
+
+- 添加标准账户结构
+- 添加年度账本模板  
+- 配置 Fava 显示选项
+- 设置 Git 忽略规则"""
+                    
+                    subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+                    
+                    # 推送到远程仓库
+                    subprocess.run(['git', 'push', 'origin', 'main'], env=env, check=True)
+                    
+                    logger.info(f"成功推送模板内容到仓库 {git_repo.repo_name}")
+                    
+                finally:
+                    os.chdir(original_cwd)
+                    
+            finally:
+                # 清理 SSH 密钥文件
+                if os.path.exists(ssh_key_file):
+                    os.remove(ssh_key_file)
+                    
+        finally:
+            # 清理临时工作目录
+            shutil.rmtree(temp_work_dir, ignore_errors=True)
+    
+    def _copy_template_files(self, template_dir: Path, work_dir: Path):
+        """复制模板文件到工作目录
+        
+        Args:
+            template_dir: 模板目录
+            work_dir: Git 工作目录
+        """
+        for item in template_dir.iterdir():
+            if item.is_file():
+                shutil.copy2(item, work_dir / item.name)
+            elif item.is_dir():
+                shutil.copytree(item, work_dir / item.name)
+        
+        logger.debug(f"复制模板文件到工作目录: {work_dir}")
+    
+    def _sync_template_to_local(self, git_repo: GitRepository, template_dir: Path):
+        """同步模板内容到本地用户目录（保留现有 trans/ 目录）
+        
+        Args:
+            git_repo: Git 仓库对象
+            template_dir: 模板目录
+        """
+        user_assets_path = self.assets_base_path / git_repo.owner.username
+        
+        # 确保用户目录存在
+        user_assets_path.mkdir(parents=True, exist_ok=True)
+        
+        # 备份现有的 trans/ 目录
+        trans_path = user_assets_path / 'trans'
+        trans_backup = None
+        if trans_path.exists():
+            trans_backup = self._backup_trans_directory(trans_path)
+            logger.info(f"备份现有 trans/ 目录")
+        
+        try:
+            # 复制模板文件到用户目录（跳过 trans/ 目录）
+            for item in template_dir.iterdir():
+                target_path = user_assets_path / item.name
+                
+                # 跳过 trans/ 目录，保留现有内容
+                if item.name == 'trans':
+                    continue
+                
+                if item.is_file():
+                    shutil.copy2(item, target_path)
+                elif item.is_dir():
+                    if target_path.exists():
+                        shutil.rmtree(target_path)
+                    shutil.copytree(item, target_path)
+            
+            # 恢复 trans/ 目录
+            if trans_backup:
+                self._restore_trans_directory(trans_backup, trans_path)
+                logger.info(f"恢复 trans/ 目录")
+            else:
+                # 如果没有现有的 trans/ 目录，创建基本结构
+                self._ensure_trans_directory_structure(git_repo.owner.username)
+            
+            logger.info(f"成功同步模板内容到本地用户目录: {user_assets_path}")
+            
+        except Exception as e:
+            # 如果同步失败，尝试恢复 trans/ 目录
+            if trans_backup and trans_path.exists():
+                try:
+                    self._restore_trans_directory(trans_backup, trans_path)
+                except:
+                    pass
+            raise
+        finally:
+            # 清理备份
+            if trans_backup and Path(trans_backup).exists():
+                shutil.rmtree(trans_backup, ignore_errors=True)
+    
+    def _ensure_trans_directory_structure(self, username: str):
+        """确保 trans/ 目录结构存在
+        
+        Args:
+            username: 用户名
+        """
+        from project.utils.file import BeanFileManager
+        
+        # 使用现有的 BeanFileManager 方法确保 trans/ 目录结构
+        BeanFileManager.ensure_trans_directory(username)
+        BeanFileManager.update_main_bean_include(username, None, 'add')

@@ -107,6 +107,7 @@
 |---------|------|--------|------|
 | `GITHUB_CLIENT_ID` | ❌ | 无 | GitHub OAuth 客户端 ID |
 | `GITHUB_CLIENT_SECRET` | ❌ | 无 | GitHub OAuth 客户端密钥 |
+| `GITHUB_TOKEN` | ❌ | 无 | GitHub Personal Access Token，用于模板仓库访问（提高 API 限额） |
 
 #### Google OAuth
 | 变量名 | 必需 | 默认值 | 说明 |
