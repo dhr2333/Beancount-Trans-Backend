@@ -372,11 +372,8 @@ class BeanFileManager:
     @staticmethod
     def update_main_bean_include(username, bean_filename, action='add'):
         """
-        更新main.bean文件的include语句（已废弃：不再直接追加单个解析文件）
-        现在只用于确保main.bean包含 include "trans/main.bean"
+        创建适用于 Beancount-Trans 标准的 main.bean 文件
         :param username: 用户名
-        :param bean_filename: .bean文件名（已废弃，保留参数以兼容旧代码）
-        :param action: 'add' 或 'remove'（已废弃，保留参数以兼容旧代码）
         """
         main_bean_path = BeanFileManager.get_main_bean_path(username)
 

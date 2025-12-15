@@ -164,26 +164,34 @@ class PlatformGitService:
         user_assets_path = self.assets_base_path / user.username
         
         try:
-            # 1. 确保用户目录存在
-            user_assets_path.mkdir(parents=True, exist_ok=True)
-            
-            # 2. 备份 trans/ 目录
+            # 1. 备份 trans/ 目录（如果存在）
             trans_backup = None
             trans_path = user_assets_path / 'trans'
             if trans_path.exists():
                 trans_backup = self._backup_trans_directory(trans_path)
                 logger.info(f"Backed up trans/ directory for user {user.username}")
             
-            # 3. 检查是否为初次克隆
+            # 2. 检查是否为初次克隆
             git_path = user_assets_path / '.git'
             if not git_path.exists():
+                # 初次克隆 - 确保父目录存在，但不创建目标目录
+                user_assets_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 如果目标目录存在但没有 .git，需要先删除
+                if user_assets_path.exists():
+                    import shutil
+                    shutil.rmtree(user_assets_path)
+                
                 # 初次克隆
                 self._clone_repository(git_repo, user_assets_path)
             else:
+                # 更新现有仓库 - 确保目录存在
+                user_assets_path.mkdir(parents=True, exist_ok=True)
+                
                 # 更新现有仓库
                 self._pull_repository(git_repo, user_assets_path)
             
-            # 4. 恢复 trans/ 目录
+            # 3. 恢复 trans/ 目录（如果有备份）
             if trans_backup:
                 self._restore_trans_directory(trans_backup, user_assets_path / 'trans')
                 logger.info(f"Restored trans/ directory for user {user.username}")
@@ -562,6 +570,8 @@ class PlatformGitService:
     def _cleanup_git_files_and_restore_structure(self, user_assets_path: Path) -> list:
         """清理 Git 文件并恢复原始目录结构
         
+        删除用户目录除了 trans/ 外的全部内容，然后重建标准的 main.bean 文件
+        
         Args:
             user_assets_path: 用户 Assets 目录路径
             
@@ -571,57 +581,56 @@ class PlatformGitService:
         cleaned_files = []
         
         try:
-            # 1. 备份 trans/ 目录
-            trans_path = user_assets_path / 'trans'
-            trans_backup = None
-            if trans_path.exists():
-                trans_backup = self._backup_trans_directory(trans_path)
-                logger.info(f"Backed up trans/ directory for cleanup")
+            # 1. 备份 trans/ 目录（如果存在）
+            # trans_path = user_assets_path / 'trans'
+            # trans_backup = None
+            # if trans_path.exists():
+            #     trans_backup = self._backup_trans_directory(trans_path)
+            #     logger.info(f"Backed up trans/ directory for cleanup")
             
-            # 2. 删除 .git 目录
-            git_path = user_assets_path / '.git'
-            if git_path.exists():
-                shutil.rmtree(git_path)
-                cleaned_files.append('.git 目录')
+            # 2. 删除除 trans/ 外的所有内容
+            if user_assets_path.exists():
+                for item in user_assets_path.iterdir():
+                    if item.name != 'trans':
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                            cleaned_files.append(f'{item.name}/ 目录')
+                        else:
+                            item.unlink()
+                            cleaned_files.append(item.name)
             
-            # 3. 删除 Git 相关文件
-            git_files = ['.gitignore', 'README.md', '.gitattributes']
-            for git_file in git_files:
-                file_path = user_assets_path / git_file
-                if file_path.exists():
-                    file_path.unlink()
-                    cleaned_files.append(git_file)
-            
-            # 4. 恢复 trans/ 目录
-            if trans_backup:
-                # 确保 trans 目录存在
-                trans_path.mkdir(exist_ok=True)
+            # 3. 恢复 trans/ 目录（如果有备份）
+            # if trans_backup:
+            #     # 确保 trans 目录存在
+            #     trans_path.mkdir(exist_ok=True)
                 
-                # 恢复备份的文件
-                backup_trans = Path(trans_backup) / 'trans'
-                if backup_trans.exists():
-                    for item in backup_trans.iterdir():
-                        if item.is_file() and item.suffix == '.bean':
-                            shutil.copy2(item, trans_path / item.name)
+            #     # 恢复备份的所有文件（不仅限于 .bean 文件）
+            #     backup_trans = Path(trans_backup) / 'trans'
+            #     if backup_trans.exists():
+            #         for item in backup_trans.iterdir():
+            #             if item.is_file():
+            #                 shutil.copy2(item, trans_path / item.name)
+            #             elif item.is_dir():
+            #                 shutil.copytree(item, trans_path / item.name, dirs_exist_ok=True)
                 
-                # 清理备份
-                shutil.rmtree(trans_backup)
-                cleaned_files.append('恢复 trans/ 目录')
+            #     # 清理备份
+            #     shutil.rmtree(trans_backup)
+            #     cleaned_files.append('恢复 trans/ 目录')
             
-            # 5. 重建标准的 main.bean 文件
+            # 4. 重建标准的 main.bean 文件
             self._rebuild_standard_main_bean(user_assets_path)
-            cleaned_files.append('重建 main.bean')
+            cleaned_files.append('重建标准 main.bean')
             
             return cleaned_files
             
         except Exception as e:
             logger.error(f"Failed to cleanup git files: {e}")
             # 如果有备份，尝试清理
-            if 'trans_backup' in locals() and trans_backup and Path(trans_backup).exists():
-                try:
-                    shutil.rmtree(trans_backup)
-                except:
-                    pass
+            # if 'trans_backup' in locals() and trans_backup and Path(trans_backup).exists():
+            #     try:
+            #         shutil.rmtree(trans_backup)
+            #     except:
+            #         pass
             raise
     
     def _rebuild_standard_main_bean(self, user_assets_path: Path):
