@@ -461,3 +461,135 @@ class PlatformGitService:
                     "; Trans directory - No parsed files yet\n",
                     encoding='utf-8'
                 )
+    
+    def delete_user_repository(self, user: User) -> Dict[str, Any]:
+        """删除用户 Git 仓库和相关资源
+        
+        流程：
+        1. 删除 Gitea 远程仓库
+        2. 清理本地 Assets 目录中的 Git 文件
+        3. 恢复原始目录结构
+        4. 删除数据库记录
+        
+        Args:
+            user: 用户对象
+            
+        Returns:
+            删除结果信息
+        """
+        try:
+            git_repo = user.git_repo
+        except GitRepository.DoesNotExist:
+            raise GitServiceException("用户未启用 Git 功能")
+        
+        cleaned_files = []
+        
+        try:
+            # 1. 删除 Gitea 远程仓库
+            logger.info(f"Deleting Gitea repository for user {user.username}: {git_repo.repo_name}")
+            try:
+                self.gitea_client.delete_repository(git_repo.repo_name)
+                cleaned_files.append(f"远程仓库: {git_repo.repo_name}")
+            except GiteaAPIException as e:
+                logger.warning(f"Failed to delete remote repository {git_repo.repo_name}: {e}")
+                # 继续执行，不阻断流程
+            
+            # 2. 清理本地 Git 文件和恢复目录结构
+            user_assets_path = self.assets_base_path / user.username
+            if user_assets_path.exists():
+                cleaned_files.extend(self._cleanup_git_files_and_restore_structure(user_assets_path))
+            
+            # 3. 删除数据库记录
+            repo_name = git_repo.repo_name
+            git_repo.delete()
+            cleaned_files.append(f"数据库记录: {repo_name}")
+            
+            logger.info(f"Successfully deleted Git repository for user {user.username}")
+            
+            return {
+                'message': 'Git 仓库已成功删除',
+                'cleaned_files': cleaned_files
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to delete repository for user {user.username}: {e}")
+            raise GitServiceException(f"删除仓库失败: {e}")
+    
+    def _cleanup_git_files_and_restore_structure(self, user_assets_path: Path) -> list:
+        """清理 Git 文件并恢复原始目录结构
+        
+        Args:
+            user_assets_path: 用户 Assets 目录路径
+            
+        Returns:
+            已清理的文件列表
+        """
+        cleaned_files = []
+        
+        try:
+            # 1. 备份 trans/ 目录
+            trans_path = user_assets_path / 'trans'
+            trans_backup = None
+            if trans_path.exists():
+                trans_backup = self._backup_trans_directory(trans_path)
+                logger.info(f"Backed up trans/ directory for cleanup")
+            
+            # 2. 删除 .git 目录
+            git_path = user_assets_path / '.git'
+            if git_path.exists():
+                shutil.rmtree(git_path)
+                cleaned_files.append('.git 目录')
+            
+            # 3. 删除 Git 相关文件
+            git_files = ['.gitignore', 'README.md', '.gitattributes']
+            for git_file in git_files:
+                file_path = user_assets_path / git_file
+                if file_path.exists():
+                    file_path.unlink()
+                    cleaned_files.append(git_file)
+            
+            # 4. 恢复 trans/ 目录
+            if trans_backup:
+                # 确保 trans 目录存在
+                trans_path.mkdir(exist_ok=True)
+                
+                # 恢复备份的文件
+                backup_trans = Path(trans_backup) / 'trans'
+                if backup_trans.exists():
+                    for item in backup_trans.iterdir():
+                        if item.is_file() and item.suffix == '.bean':
+                            shutil.copy2(item, trans_path / item.name)
+                
+                # 清理备份
+                shutil.rmtree(trans_backup)
+                cleaned_files.append('恢复 trans/ 目录')
+            
+            # 5. 重建标准的 main.bean 文件
+            self._rebuild_standard_main_bean(user_assets_path)
+            cleaned_files.append('重建 main.bean')
+            
+            return cleaned_files
+            
+        except Exception as e:
+            logger.error(f"Failed to cleanup git files: {e}")
+            # 如果有备份，尝试清理
+            if 'trans_backup' in locals() and trans_backup and Path(trans_backup).exists():
+                try:
+                    shutil.rmtree(trans_backup)
+                except:
+                    pass
+            raise
+    
+    def _rebuild_standard_main_bean(self, user_assets_path: Path):
+        """重建标准的 main.bean 文件（未启用 Git 前的格式）
+        
+        Args:
+            user_assets_path: 用户 Assets 目录路径
+        """
+        from project.utils.file import BeanFileManager
+        
+        # 使用 BeanFileManager 的标准方法重建 main.bean
+        username = user_assets_path.name
+        BeanFileManager.update_main_bean_include(username, None, 'add')
+        
+        logger.info(f"Rebuilt standard main.bean for user {username}")

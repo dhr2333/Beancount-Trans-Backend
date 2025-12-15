@@ -16,7 +16,8 @@ from .models import GitRepository
 from .serializers import (
     GitRepositorySerializer, CreateRepositorySerializer,
     SyncStatusSerializer, SyncResponseSerializer,
-    WebhookPayloadSerializer, DeployKeyResponseSerializer
+    WebhookPayloadSerializer, DeployKeyResponseSerializer,
+    DeleteRepositoryResponseSerializer
 )
 from .services import PlatformGitService, GitServiceException
 
@@ -137,6 +138,37 @@ class GitRepositoryViewSet(ViewSet):
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             
             return response
+            
+        except GitRepository.DoesNotExist:
+            return Response(
+                {'error': '用户未启用 Git 功能'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except GitServiceException as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @extend_schema(
+        summary="删除用户 Git 仓库",
+        responses={
+            200: DeleteRepositoryResponseSerializer,
+            404: OpenApiResponse(description="用户未启用 Git 功能"),
+            500: OpenApiResponse(description="删除失败")
+        }
+    )
+    @action(detail=False, methods=['DELETE'], url_path='delete')
+    def delete_repository(self, request: Request) -> Response:
+        """删除用户 Git 仓库并清理相关资源"""
+        try:
+            git_repo = request.user.git_repo
+            
+            git_service = self.get_git_service()
+            result = git_service.delete_user_repository(request.user)
+            
+            serializer = DeleteRepositoryResponseSerializer(result)
+            return Response(serializer.data, status=status.HTTP_200_OK)
             
         except GitRepository.DoesNotExist:
             return Response(

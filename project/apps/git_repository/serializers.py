@@ -97,3 +97,13 @@ class DeployKeyResponseSerializer(serializers.Serializer):
         help_text="密钥ID"
     )
 
+
+class DeleteRepositoryResponseSerializer(serializers.Serializer):
+    """删除仓库响应序列化器"""
+    
+    message = serializers.CharField(help_text="删除结果消息")
+    cleaned_files = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="已清理的文件列表"
+    )
+

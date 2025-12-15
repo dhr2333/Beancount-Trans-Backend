@@ -23,7 +23,7 @@ class GitRepository(BaseModel):
     )
     repo_name = models.CharField(
         max_length=200, 
-        help_text="仓库名称，如 {user_id}-beancount"
+        help_text="仓库名称，如 {uuid}-assets"
     )
     gitea_repo_id = models.IntegerField(
         help_text="Gitea 仓库 ID，用于 API 调用"
