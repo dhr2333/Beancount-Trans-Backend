@@ -18,15 +18,14 @@ class TestGitRepositoryModel:
         
         repo = GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'
         )
         
         assert repo.owner == user
-        assert repo.repo_name == '1-beancount'
+        assert repo.repo_name == 'abc123-assets'  # 修正期望值与实际创建的一致
         assert repo.sync_status == 'pending'  # 默认状态
         assert repo.created_with_template is True  # 默认值
     
@@ -37,8 +36,7 @@ class TestGitRepositoryModel:
         # 创建第一个仓库
         GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'
@@ -48,8 +46,7 @@ class TestGitRepositoryModel:
         with pytest.raises(IntegrityError):
             GitRepository.objects.create(
                 owner=user,
-                repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount-2.git',
-                repo_name='1-beancount-2',
+                repo_name='def456-assets',
                 gitea_repo_id=124,
                 deploy_key_private='private_key_content_2',
                 deploy_key_public='public_key_content_2'
@@ -61,14 +58,13 @@ class TestGitRepositoryModel:
         
         repo = GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'
         )
         
-        assert str(repo) == 'testuser - 1-beancount'
+        assert str(repo) == 'testuser - abc123-assets'
     
     def test_ssh_clone_url_property(self):
         """测试 SSH clone URL 属性"""
@@ -76,31 +72,16 @@ class TestGitRepositoryModel:
         
         repo = GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'
         )
         
-        expected_ssh_url = 'git@gitea.dhr2333.cn:beancount-trans/1-beancount.git'
+        expected_ssh_url = 'ssh://git@gitea.dhr2333.cn:30022/beancount-trans/abc123-assets.git'
         assert repo.ssh_clone_url == expected_ssh_url
     
-    def test_https_clone_url_property(self):
-        """测试 HTTPS clone URL 属性"""
-        user = User.objects.create_user(username='testuser', password='testpass')
-        
-        repo_url = 'https://gitea.dhr2333.cn/beancount-trans/1-beancount.git'
-        repo = GitRepository.objects.create(
-            owner=user,
-            repo_url=repo_url,
-            repo_name='1-beancount',
-            gitea_repo_id=123,
-            deploy_key_private='private_key_content',
-            deploy_key_public='public_key_content'
-        )
-        
-        assert repo.https_clone_url == repo_url
+    # HTTPS clone URL 属性已移除，因为 repo_url 字段不再存在
     
     def test_sync_status_choices(self):
         """测试同步状态选择"""
@@ -112,8 +93,7 @@ class TestGitRepositoryModel:
         for status in valid_statuses:
             repo = GitRepository.objects.create(
                 owner=user,
-                repo_url=f'https://gitea.dhr2333.cn/beancount-trans/{user.id}-{status}.git',
-                repo_name=f'{user.id}-{status}',
+                repo_name=f'test{len(status)}-assets',
                 gitea_repo_id=123 + len(status),
                 deploy_key_private='private_key_content',
                 deploy_key_public='public_key_content',
@@ -131,8 +111,7 @@ class TestGitRepositoryModel:
         
         repo = GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'
@@ -141,7 +120,9 @@ class TestGitRepositoryModel:
         # 验证 created 和 modified 字段存在
         assert repo.created is not None
         assert repo.modified is not None
-        assert repo.created == repo.modified  # 创建时两者相等
+        # 允许微秒级的时间差异（在快速执行的测试环境中可能存在）
+        time_diff = abs((repo.created - repo.modified).total_seconds())
+        assert time_diff < 1  # 允许1秒内的差异
     
     def test_optional_fields(self):
         """测试可选字段"""
@@ -149,8 +130,7 @@ class TestGitRepositoryModel:
         
         repo = GitRepository.objects.create(
             owner=user,
-            repo_url='https://gitea.dhr2333.cn/beancount-trans/1-beancount.git',
-            repo_name='1-beancount',
+            repo_name='abc123-assets',
             gitea_repo_id=123,
             deploy_key_private='private_key_content',
             deploy_key_public='public_key_content'

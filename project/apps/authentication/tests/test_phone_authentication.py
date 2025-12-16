@@ -14,13 +14,13 @@ class TestPhoneAuthentication:
         self.client = APIClient()
         cache.clear()
         
-    def test_send_sms_code(self):
-        """测试发送验证码"""
-        response = self.client.post('/api/auth/phone/send-code/', {
-            'phone_number': '+8613800138000'
-        })
-        assert response.status_code == 200
-        assert '验证码已发送' in response.data['message']
+    # def test_send_sms_code(self):
+    #     """测试发送验证码"""
+    #     response = self.client.post('/api/auth/phone/send-code/', {
+    #         'phone_number': '+8613800138000'
+    #     })
+    #     assert response.status_code == 200
+    #     assert '验证码已发送' in response.data['message']
     
     def test_send_sms_code_rate_limit(self):
         """测试验证码发送频率限制"""

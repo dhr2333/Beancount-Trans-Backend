@@ -228,4 +228,3 @@ python manage.py init_official_templates --force
 - 查看 [模板系统架构文档](TEMPLATE_SYSTEM.md) 了解详细技术细节
 - 查看 [API 文档](API_DOCUMENTATION.md) 了解完整 API 接口
 - 访问 Admin 后台管理模板: http://localhost:8000/admin/
-

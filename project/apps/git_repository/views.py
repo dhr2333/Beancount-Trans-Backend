@@ -280,22 +280,14 @@ class GitWebhookView(APIView):
             payload = serializer.validated_data
             repo_name = payload['repository']['name']
             
-            # 从仓库名解析用户ID
-            if not repo_name.endswith('-beancount'):
-                return Response({'error': 'Invalid repository name'})
+            # 从仓库名查找对应的 Git 仓库
+            # 仓库名格式：{uuid}-assets
+            if not repo_name.endswith('-assets'):
+                return Response({'error': 'Invalid repository name format'})
             
-            user_id_str = repo_name.replace('-beancount', '')
+            # 直接通过仓库名查找，不依赖用户ID解析
             try:
-                user_id = int(user_id_str)
-            except ValueError:
-                return Response({'error': 'Invalid user ID in repository name'})
-            
-            # 查找对应的 Git 仓库
-            try:
-                git_repo = GitRepository.objects.get(
-                    owner__id=user_id, 
-                    repo_name=repo_name
-                )
+                git_repo = GitRepository.objects.get(repo_name=repo_name)
             except GitRepository.DoesNotExist:
                 return Response(
                     {'error': 'Repository not found'}, 
