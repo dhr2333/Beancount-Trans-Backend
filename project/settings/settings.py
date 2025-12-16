@@ -156,7 +156,6 @@ SOCIALACCOUNT_LOGIN_ON_GET = False
 # OAuth 配置（使用环境变量）
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', '')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '')
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')  # GitHub Personal Access Token，用于模板仓库访问
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 
@@ -408,7 +407,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
     'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
-    'VERSION': '5.3.0',
+    'VERSION': '5.6.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
@@ -514,7 +513,8 @@ S3_CONFIG = {
 }
 
 # Gitea 配置
-GITEA_BASE_URL = os.environ.get('GITEA_BASE_URL', 'https://gitea.dhr2333.cn')
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')  # GitHub Personal Access Token，用于模板仓库访问防止限流
+GITEA_BASE_URL = os.environ.get('GITEA_BASE_URL', '')
 GITEA_ADMIN_TOKEN = os.environ.get('GITEA_ADMIN_TOKEN', '')  # 必填
 GITEA_ORG_NAME = os.environ.get('GITEA_ORG_NAME', 'beancount-trans')
 GITEA_WEBHOOK_SECRET = os.environ.get('GITEA_WEBHOOK_SECRET', '')  # 必填
