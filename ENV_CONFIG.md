@@ -100,6 +100,23 @@
 |---------|------|--------|------|
 | `ASSETS_HOST_PATH` | ❌ | 项目根目录/Assets | 宿主机上 Assets 目录的绝对路径 |
 
+### Git 仓库管理配置（可选）
+
+用于 Git 仓库托管功能，支持用户创建私有 Git 仓库存储账本文件。
+
+| 变量名 | 必需 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `GITEA_BASE_URL` | ❌ | `https://gitea.dhr2333.cn` | Gitea 服务器地址 |
+| `GITEA_ADMIN_TOKEN` | ❌ | 无 | Gitea 管理员 Token，用于创建仓库和管理 Deploy Key |
+| `GITEA_ORG_NAME` | ❌ | `beancount-trans` | Gitea 组织名称，所有用户仓库都在此组织下 |
+| `GITEA_WEBHOOK_SECRET` | ❌ | 无 | Webhook 签名密钥，用于验证推送事件的真实性 |
+
+**注意**：
+- Git 功能为可选功能，不配置不影响其他功能使用
+- 需要先部署 Gitea 服务并创建管理员账户和组织
+- `GITEA_ADMIN_TOKEN` 需要有创建仓库、管理 Deploy Key 和 Webhook 的权限
+- `GITEA_WEBHOOK_SECRET` 建议使用随机字符串，用于验证 Webhook 请求的安全性
+
 ### OAuth 第三方登录配置（可选）
 
 #### GitHub OAuth
@@ -107,6 +124,7 @@
 |---------|------|--------|------|
 | `GITHUB_CLIENT_ID` | ❌ | 无 | GitHub OAuth 客户端 ID |
 | `GITHUB_CLIENT_SECRET` | ❌ | 无 | GitHub OAuth 客户端密钥 |
+| `GITHUB_TOKEN` | ❌ | 无 | GitHub Personal Access Token，用于模板仓库访问（提高 API 限额） |
 
 #### Google OAuth
 | 变量名 | 必需 | 默认值 | 说明 |

@@ -48,3 +48,5 @@ django-phonenumber-field>=7.2.0
 phonenumbers>=8.13.0
 aliyun-python-sdk-core>=2.15.0
 aliyun-python-sdk-dysmsapi>=2.1.0
+cryptography>=3.4.8
+requests>=2.25.1

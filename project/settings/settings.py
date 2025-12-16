@@ -95,6 +95,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.account',
     'project.apps.fava_instances',
     'project.apps.file_manager',
+    'project.apps.git_repository',
     'project.apps.maps',
     'project.apps.tags',
     'project.apps.translate',
@@ -406,7 +407,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
     'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
-    'VERSION': '5.3.0',
+    'VERSION': '5.6.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
@@ -510,6 +511,16 @@ S3_CONFIG = {
     'USE_SSL': env_to_bool('S3_USE_SSL', True),
     'VERIFY_SSL': env_to_bool('S3_VERIFY_SSL', True)
 }
+
+# Gitea 配置
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')  # GitHub Personal Access Token，用于模板仓库访问防止限流
+GITEA_BASE_URL = os.environ.get('GITEA_BASE_URL', '')
+GITEA_ADMIN_TOKEN = os.environ.get('GITEA_ADMIN_TOKEN', '')  # 必填
+GITEA_ORG_NAME = os.environ.get('GITEA_ORG_NAME', 'beancount-trans')
+GITEA_WEBHOOK_SECRET = os.environ.get('GITEA_WEBHOOK_SECRET', '')  # 必填
+
+# Git 仓库配置
+GIT_REPO_SIZE_LIMIT = int(os.environ.get('GIT_REPO_SIZE_LIMIT', 20 * 1024 * 1024))  # 20MB
 
 # Traefik 配置
 TRAEFIK_NETWORK = os.environ.get('TRAEFIK_NETWORK', 'shared-network')
