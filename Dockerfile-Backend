@@ -63,6 +63,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libexpat1 \
     libpq5 \
+    git \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /root/.local /root/.local
