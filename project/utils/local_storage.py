@@ -31,17 +31,17 @@ class LocalStorageBackend(StorageBackend):
         """上传文件到本地文件系统"""
         try:
             file_path = os.path.join(self.base_path, object_name)
-            
+
             # 确保目录存在
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            
+
             # 写入文件
             with open(file_path, 'wb') as f:
                 shutil.copyfileobj(file_data, f)
-            
+
             logger.info(f"文件上传成功: {object_name}")
             return True
-            
+
         except Exception as e:
             logger.error(f"文件上传失败: {object_name}, 错误: {str(e)}")
             return False
@@ -50,13 +50,13 @@ class LocalStorageBackend(StorageBackend):
         """从本地文件系统下载文件"""
         try:
             file_path = os.path.join(self.base_path, object_name)
-            
+
             if not os.path.exists(file_path):
                 logger.warning(f"文件不存在: {object_name}")
                 return None
-            
+
             return open(file_path, 'rb')
-            
+
         except Exception as e:
             logger.error(f"文件下载失败: {object_name}, 错误: {str(e)}")
             return None
@@ -65,7 +65,7 @@ class LocalStorageBackend(StorageBackend):
         """删除本地文件系统中的文件"""
         try:
             file_path = os.path.join(self.base_path, object_name)
-            
+
             if os.path.exists(file_path):
                 os.remove(file_path)
                 logger.info(f"文件删除成功: {object_name}")
@@ -73,7 +73,7 @@ class LocalStorageBackend(StorageBackend):
             else:
                 logger.warning(f"文件不存在，无法删除: {object_name}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"文件删除失败: {object_name}, 错误: {str(e)}")
             return False
@@ -86,7 +86,7 @@ class LocalStorageBackend(StorageBackend):
     def get_file_url(self, object_name: str, expires: int = 3600) -> str:
         """获取文件访问URL（本地文件系统返回文件路径）"""
         file_path = os.path.join(self.base_path, object_name)
-        
+
         if os.path.exists(file_path):
             # 返回绝对路径
             return os.path.abspath(file_path)

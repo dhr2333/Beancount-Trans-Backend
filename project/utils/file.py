@@ -23,87 +23,6 @@ from django.conf import settings
 
 SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf']
 
-def init_project_file(file_path):
-    file_list = [
-        "00.bean",
-        "01-expenses.bean",
-        "02-expenses.bean",
-        "03-expenses.bean",
-        "04-expenses.bean",
-        "05-expenses.bean",
-        "06-expenses.bean",
-        "07-expenses.bean",
-        "08-expenses.bean",
-        "09-expenses.bean",
-        "10-expenses.bean",
-        "11-expenses.bean",
-        "12-expenses.bean",
-        "budget.bean",
-        "cycle.bean",
-        "event.bean",
-        "income.bean",
-        "note.bean",
-        "price.bean",
-        "query.bean",
-        "securities.bean",
-        "time.bean"
-    ]
-    insert_contents = '''include "01-expenses.bean"
-include "02-expenses.bean"
-include "03-expenses.bean"
-include "04-expenses.bean"
-include "05-expenses.bean"
-include "06-expenses.bean"
-include "07-expenses.bean"
-include "08-expenses.bean"
-include "09-expenses.bean"
-include "10-expenses.bean"
-include "11-expenses.bean"
-include "12-expenses.bean"
-include "budget.bean"
-include "cycle.bean"
-include "event.bean"
-include "income.bean"
-include "note.bean"
-include "price.bean"
-include "query.bean"
-include "securities.bean"
-include "time.bean"'''
-    dir_path = os.path.split(file_path)[0]  # 获取账单的绝对路径，例如 */Beancount-Trans/Beancount-Trans-Assets/2023
-    dir_name = os.path.basename(dir_path)
-    if not os.path.isdir(dir_path):  # 判断年份账单是否存在，若不存在则创建目录
-        # 如果存在模板目录则根据模板目录创建对应文件，模板目录名称为"2022_template",并将保留模板目录中"00.bean"的内容复制到新创建的"00.bean"中
-        if os.path.isdir(os.path.join(os.path.dirname(dir_path), "template")):
-            template_dir = os.path.join(os.path.dirname(dir_path), "template")
-            os.makedirs(dir_path)
-            insert_include = f'\ninclude "{dir_name}/00.bean"'
-            main_file = os.path.dirname(dir_path) + "/main.bean"
-            with open(main_file, 'a') as main:
-                main.write(insert_include)
-            template_00_path = os.path.join(template_dir, "00.bean")
-            with open(template_00_path, 'r') as template_00:
-                template_content = template_00.read()
-            createfile = os.path.join(dir_path, "00.bean")
-            with open(createfile, 'w') as f:
-                f.write(template_content)
-            for file_name in file_list:
-                createfile = os.path.join(dir_path, file_name)
-                open(createfile, 'w').close()
-        else:
-            # 如果没有模板目录则按照硬编码格式创建
-            os.makedirs(dir_path)
-            insert_include = f'\ninclude "{dir_name}/00.bean"'
-            main_file = os.path.dirname(dir_path) + "/main.bean"
-            with open(main_file, 'a') as main:
-                main.write(insert_include)
-            for file_name in file_list:  # 该for循环用于创建按年划分的所有文件
-                createfile = os.path.join(dir_path, file_name)
-                open(createfile, 'w').close()
-                if file_name == "00.bean":  # 00.bean文件会include其他文件来让beancount正确识别
-                    with open(createfile, 'w') as f:
-                        f.write(insert_contents)
-
-
 def create_temporary_file(file_name):
     """Create a temporary file and return its path."""
     try:
@@ -118,20 +37,6 @@ def create_temporary_file(file_name):
     temp.write(content)
     temp.flush()
     return temp, encodeing
-
-
-def write_entry_to_file(content):
-    """将条目写入相应的beancount文件"""
-    try:
-        year = content[0:4]
-        month = content[5:7]
-        file_path = os.path.join(os.path.dirname(settings.BASE_DIR), "Beancount-Trans-Assets", year, f"{month}-expenses.bean")
-        init_project_file(file_path)
-        with open(file_path, mode='a') as file:
-            file.write(content)
-    except IOError as e:
-        print(f"Failed to write to file: {e}")
-
 
 def convert_to_csv_bytes(file, password=None) -> bytes:
     """
@@ -271,7 +176,7 @@ class BeanFileManager:
         """确保trans目录和trans/main.bean文件存在"""
         trans_dir = os.path.join(BeanFileManager.get_user_assets_path(username), 'trans')
         os.makedirs(trans_dir, exist_ok=True)
-        
+
         trans_main_path = BeanFileManager.get_trans_main_bean_path(username)
         if not os.path.exists(trans_main_path):
             # 创建空的trans/main.bean文件
@@ -332,7 +237,7 @@ class BeanFileManager:
         """
         # 确保 trans/main.bean 文件存在（因为 main.bean 会包含它）
         BeanFileManager.ensure_trans_directory(username)
-        
+
         main_bean_path = BeanFileManager.get_main_bean_path(username)
 
         # 确保main.bean文件存在
@@ -360,7 +265,7 @@ include "trans/main.bean"
             # 确保main.bean包含 include "trans/main.bean"
             with open(main_bean_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # 检查是否包含 include "trans/main.bean"
             trans_main_pattern = re.compile(r'^\s*include\s*"trans/main\.bean"\s*$', re.MULTILINE)
             if not trans_main_pattern.search(content):
@@ -380,7 +285,7 @@ include "trans/main.bean"
         """
         # 确保trans目录存在
         BeanFileManager.ensure_trans_directory(username)
-        
+
         trans_main_path = BeanFileManager.get_trans_main_bean_path(username)
 
         # 读取现有内容

@@ -8,7 +8,7 @@ class GitRepositoryAdmin(admin.ModelAdmin):
     list_filter = ('sync_status', 'created_with_template', 'created')
     search_fields = ('owner__username', 'repo_name')
     readonly_fields = ('created', 'modified', 'gitea_repo_id', 'deploy_key_id')
-    
+
     fieldsets = (
         ('基本信息', {
             'fields': ('owner', 'repo_name', 'repo_url', 'gitea_repo_id', 'created_with_template')
@@ -25,7 +25,7 @@ class GitRepositoryAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
-    
+
     def has_add_permission(self, request):
         """禁用手动添加，只能通过API创建"""
         return False

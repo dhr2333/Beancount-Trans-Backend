@@ -166,18 +166,18 @@
    # 开发环境配置
    DJANGO_DEBUG=True
    DJANGO_SECRET_KEY=your-development-secret-key
-   
+
    # 数据库配置
    TRANS_POSTGRESQL_HOST=127.0.0.1
    TRANS_POSTGRESQL_PORT=5432
    TRANS_POSTGRESQL_USER=your-username
    TRANS_POSTGRESQL_PASSWORD=your-password
-   
+
    # Redis 配置
    TRANS_REDIS_HOST=127.0.0.1
    TRANS_REDIS_PORT=6379
    TRANS_REDIS_PASSWORD=your-redis-password
-   
+
    # 其他配置...
    ```
 
@@ -243,7 +243,7 @@ environment:
    ```bash
    # 使用 Docker Compose（推荐）
    docker-compose up -d
-   
+
    # 或本地开发
    pip install -r requirements.txt
    python manage.py migrate

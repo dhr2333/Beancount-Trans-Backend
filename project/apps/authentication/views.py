@@ -37,7 +37,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     """手机号认证视图集"""
     # 只使用JWT认证，不使用Session认证，避免CSRF检查
     authentication_classes = [JWTAuthentication]
-    
+
     def get_permissions(self):
         """根据不同的 action 设置不同的权限"""
         if self.action in ['send_code', 'login_by_code', 'login_by_password', 'register']:
@@ -67,20 +67,20 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         serializer = PhoneSendCodeSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         phone_number = serializer.validated_data['phone_number']
-        
+
         try:
             # 创建临时 UserProfile 实例用于发送验证码（不保存到数据库）
             temp_profile = UserProfile(phone_number=phone_number)
             temp_profile.send_sms_code(phone_number)
-            
+
             logger.info(f"验证码发送成功: {phone_number}")
             return Response({
                 'message': '验证码已发送',
                 'phone_number': str(phone_number)
             }, status=status.HTTP_200_OK)
-            
+
         except ValueError as e:
             return Response({
                 'error': str(e)
@@ -90,34 +90,34 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': '发送验证码失败，请稍后重试'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=False, methods=['post'], url_path='login-by-code')
     def login_by_code(self, request):
         """验证码登录"""
         serializer = PhoneLoginByCodeSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
-        
+
         # 使用验证码认证后端
         user = authenticate(request, phone=str(phone_number), code=code)
-        
+
         if user:
             # 更新最后登录时间
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
-            
+
             # 生成 JWT token
             refresh = RefreshToken.for_user(user)
-            
+
             logger.info(f"用户 {user.username} 通过验证码登录成功")
-            
+
             # 检查是否需要2FA验证
             profile = user.profile
             requires_2fa = profile.has_2fa_enabled()
-            
+
             response_data = {
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
@@ -129,36 +129,36 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                 },
                 'requires_2fa': requires_2fa
             }
-            
+
             if requires_2fa:
                 # 如果启用了2FA，返回需要验证的提示
                 response_data['2fa_methods'] = []
                 if profile.totp_enabled:
                     response_data['2fa_methods'].append('totp')
-            
+
             return Response(response_data, status=status.HTTP_200_OK)
         else:
             return Response({
                 'error': '验证码错误或手机号未注册'
             }, status=status.HTTP_401_UNAUTHORIZED)
-    
+
     @action(detail=False, methods=['post'], url_path='login-by-password')
     def login_by_password(self, request):
         """密码登录（支持TOTP验证）"""
         serializer = PhoneLoginByPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         phone_number = serializer.validated_data['phone_number']
         password = serializer.validated_data['password']
         totp_code = serializer.validated_data.get('totp_code', '').strip()
-        
+
         # 使用密码认证后端
         user = authenticate(request, phone=str(phone_number), password=password)
-        
+
         if user:
             profile = user.profile
-            
+
             # 检查用户是否启用了TOTP
             if profile.totp_enabled:
                 if not totp_code:
@@ -166,7 +166,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                         'error': '该账户已启用TOTP二次验证，请输入TOTP验证码',
                         'requires_totp': True
                     }, status=status.HTTP_400_BAD_REQUEST)
-                
+
                 # 验证TOTP码
                 try:
                     from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -190,16 +190,16 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     return Response({
                         'error': 'TOTP验证失败，请稍后重试'
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
             # 更新最后登录时间
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
-            
+
             # 生成 JWT token
             refresh = RefreshToken.for_user(user)
-            
+
             logger.info(f"用户 {user.username} 通过手机号密码登录成功")
-            
+
             return Response({
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
@@ -214,20 +214,20 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': '手机号或密码错误'
             }, status=status.HTTP_401_UNAUTHORIZED)
-    
+
     @action(detail=False, methods=['post'])
     def register(self, request):
         """手机号注册"""
         serializer = PhoneRegisterSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
         username = (serializer.validated_data.get('username') or '').strip()
         password = (serializer.validated_data.get('password') or '').strip()
         email = (serializer.validated_data.get('email') or '').strip()
-        
+
         try:
             with transaction.atomic():
                 # 验证验证码
@@ -236,7 +236,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     return Response({
                         'error': '验证码错误或已过期'
                     }, status=status.HTTP_400_BAD_REQUEST)
-                
+
                 # 若未提供用户名则根据手机号生成一个唯一用户名
                 if not username:
                     digits = ''.join(filter(str.isdigit, str(phone_number)))
@@ -256,30 +256,30 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     password=password or None,
                     email=email or ''
                 )
-                
+
                 # 更新 UserProfile
                 profile = user.profile
                 profile.phone_number = phone_number
                 profile.phone_verified = True
                 profile.save()
-                
+
                 # 应用初始化数据（官方账户模板和映射模板）
                 try:
                     from project.apps.account.signals import apply_official_account_templates
                     from project.apps.maps.signals import apply_official_templates
-                    
+
                     apply_official_account_templates(user)
                     logger.info(f"为用户 {username} 应用官方账户模板成功")
-                    
+
                     apply_official_templates(user)
                     logger.info(f"为用户 {username} 应用官方映射模板成功")
                 except Exception as init_error:
                     logger.warning(f"为用户 {username} 应用初始化数据时出错: {str(init_error)}")
                     # 不阻断注册流程，只记录警告
-                
+
                 # 生成 JWT token
                 refresh = RefreshToken.for_user(user)
-                
+
                 logger.info(f"用户 {username} 注册成功")
                 return Response({
                     'message': '注册成功',
@@ -292,7 +292,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                         'phone_number': str(phone_number)
                     }
                 }, status=status.HTTP_201_CREATED)
-                
+
         except Exception as e:
             logger.error(f"注册失败: {str(e)}")
             return Response({
@@ -304,27 +304,27 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
     """用户名/邮箱+密码认证视图集"""
     authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [AllowAny]
-    
+
     @action(detail=False, methods=['post'], url_path='login-by-password')
     def login_by_password(self, request):
         """用户名/邮箱+密码登录（支持TOTP验证）"""
         serializer = UsernameLoginByPasswordSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         username = serializer.validated_data['username']
         password = serializer.validated_data['password']
         totp_code = serializer.validated_data.get('totp_code', '').strip()
-        
+
         # 使用用户名/邮箱+密码认证后端
         user = authenticate(request, username=username, password=password)
-        
+
         if user:
             try:
                 profile = user.profile
             except UserProfile.DoesNotExist:
                 profile = UserProfile.objects.create(user=user)
-            
+
             # 检查用户是否启用了TOTP
             if profile.totp_enabled:
                 if not totp_code:
@@ -332,7 +332,7 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
                         'error': '该账户已启用TOTP二次验证，请输入TOTP验证码',
                         'requires_totp': True
                     }, status=status.HTTP_400_BAD_REQUEST)
-                
+
                 # 验证TOTP码
                 try:
                     from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -356,16 +356,16 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
                     return Response({
                         'error': 'TOTP验证失败，请稍后重试'
                     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
             # 更新最后登录时间
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
-            
+
             # 生成 JWT token
             refresh = RefreshToken.for_user(user)
-            
+
             logger.info(f"用户 {user.username} 通过用户名/邮箱密码登录成功")
-            
+
             return Response({
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
@@ -468,16 +468,16 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
     """账号绑定管理视图集"""
     authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
-    
+
     def list(self, request):
         """获取当前用户的绑定信息"""
         user = request.user
         profile = user.profile
-        
+
         # 获取社交账号绑定信息
         from allauth.socialaccount.models import SocialAccount
         social_accounts = SocialAccount.objects.filter(user=user)
-        
+
         data = {
             'username': user.username,
             'email': user.email,
@@ -494,9 +494,9 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
             ],
             'has_password': user.has_usable_password()
         }
-        
+
         return Response(data, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['post'], url_path='send-email-code')
     def send_email_code(self, request):
         """发送邮箱绑定验证码"""
@@ -538,17 +538,17 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
         user.save(update_fields=['email'])
         logger.info(f"用户 {user.username} 解绑邮箱成功")
         return Response({'message': '邮箱已解绑'}, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['post'], url_path='bind-phone')
     def bind_phone(self, request):
         """绑定手机号"""
         serializer = PhoneBindingSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
-        
+
         try:
             # 验证验证码
             temp_profile = UserProfile(phone_number=phone_number)
@@ -556,84 +556,84 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
                 return Response({
                     'error': '验证码错误或已过期'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # 更新用户的 profile
             profile = request.user.profile
             profile.phone_number = phone_number
             profile.phone_verified = True
             profile.save()
-            
+
             logger.info(f"用户 {request.user.username} 绑定手机号成功: {phone_number}")
             return Response({
                 'message': '手机号绑定成功',
                 'phone_number': str(phone_number)
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"绑定手机号失败: {str(e)}")
             return Response({
                 'error': f'绑定失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=False, methods=['delete'], url_path='unbind-phone')
     def unbind_phone(self, request):
         """解绑手机号"""
         user = request.user
         profile = user.profile
-        
+
         # 检查是否至少有一种登录方式
         from allauth.socialaccount.models import SocialAccount
         has_social_account = SocialAccount.objects.filter(user=user).exists()
         has_password = user.has_usable_password()
-        
+
         if not has_social_account and not has_password:
             return Response({
                 'error': '无法解绑手机号，请至少保留一种登录方式'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         if not profile.phone_number:
             return Response({
                 'error': '您还未绑定手机号'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 解绑手机号
         phone_number = str(profile.phone_number)
         profile.phone_number = None
         profile.phone_verified = False
         profile.save()
-        
+
         logger.info(f"用户 {user.username} 解绑手机号: {phone_number}")
         return Response({
             'message': '手机号解绑成功'
         }, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['delete'], url_path='unbind-social/(?P<provider>[^/.]+)')
     def unbind_social(self, request, provider=None):
         """解绑社交账号"""
         user = request.user
         profile = user.profile
-        
+
         # 检查是否至少有一种登录方式
         from allauth.socialaccount.models import SocialAccount
         social_accounts = SocialAccount.objects.filter(user=user)
         has_phone = bool(profile.phone_number)
         has_password = user.has_usable_password()
-        
+
         if social_accounts.count() == 1 and not has_phone and not has_password:
             return Response({
                 'error': '无法解绑社交账号，请至少保留一种登录方式'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # 查找要解绑的社交账号
         try:
             social_account = social_accounts.get(provider=provider)
             social_account.delete()
-            
+
             logger.info(f"用户 {user.username} 解绑社交账号: {provider}")
             return Response({
                 'message': f'{provider} 账号解绑成功'
             }, status=status.HTTP_200_OK)
-            
+
         except SocialAccount.DoesNotExist:
             return Response({
                 'error': f'未找到 {provider} 账号绑定'
@@ -644,38 +644,38 @@ class UserProfileViewSet(viewsets.GenericViewSet):
     """用户信息管理视图集"""
     authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
-    
+
     @action(detail=False, methods=['get'])
     def me(self, request):
         """获取当前用户信息"""
         profile = request.user.profile
         serializer = UserProfileSerializer(profile)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['patch'])
     def update_me(self, request):
         """更新当前用户信息"""
         serializer = UserUpdateSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         user = request.user
         old_username = user.username
-        
+
         # 更新用户名
         if 'username' in serializer.validated_data:
             user.username = serializer.validated_data['username']
             user.save(update_fields=['username'])
             logger.info(f"用户 {old_username} (ID: {user.id}) 更新了用户名: {serializer.validated_data['username']}")
-        
+
         # 更新邮箱
         if 'email' in serializer.validated_data:
             user.email = serializer.validated_data['email']
             user.save(update_fields=['email'])
             logger.info(f"用户 {user.username} 更新了邮箱")
-        
+
         logger.info(f"用户 {user.username} 更新了个人信息")
-        
+
         # 返回更新后的信息
         profile = user.profile
         profile_serializer = UserProfileSerializer(profile)
@@ -697,33 +697,33 @@ class UserProfileViewSet(viewsets.GenericViewSet):
         user.save(update_fields=['password'])
         logger.info(f"用户 {user.username} 设置密码成功")
         return Response({'message': '密码设置成功'}, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['delete'], url_path='delete_account')
     def delete_account(self, request):
         """删除账户"""
         user = request.user
-        
+
         try:
             from django.db import transaction
             from django.apps import apps
-            
+
             # 删除用户的所有关联数据
             Account = apps.get_model('account_config', 'Account')
             Expense = apps.get_model('maps', 'Expense')
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             File = apps.get_model('file_manager', 'File')
-            
+
             # 统计要删除的数据
             account_count = Account.objects.filter(owner=user).count()
             expense_count = Expense.objects.filter(owner=user).count()
             assets_count = Assets.objects.filter(owner=user).count()
             income_count = Income.objects.filter(owner=user).count()
             file_count = File.objects.filter(owner=user).count()
-            
+
             logger.warning(f"用户 {user.username} (ID: {user.id}) 请求删除账户，将删除:")
             logger.warning(f"  账户: {account_count}, 映射: {expense_count + assets_count + income_count}, 文件: {file_count}")
-            
+
             # 使用事务确保数据一致性
             with transaction.atomic():
                 # 删除所有关联数据
@@ -732,32 +732,32 @@ class UserProfileViewSet(viewsets.GenericViewSet):
                 Assets.objects.filter(owner=user).delete()
                 Income.objects.filter(owner=user).delete()
                 File.objects.filter(owner=user).delete()
-                
+
                 # 删除社交账号绑定
                 from allauth.socialaccount.models import SocialAccount
                 SocialAccount.objects.filter(user=user).delete()
-                
+
                 # 删除TOTP设备
                 try:
                     from django_otp.plugins.otp_totp.models import TOTPDevice
                     TOTPDevice.objects.filter(user=user).delete()
                 except Exception:
                     pass  # 如果没有安装django-otp则忽略
-                
+
                 # 删除用户profile
                 if hasattr(user, 'profile'):
                     user.profile.delete()
-                
+
                 # 删除用户
                 username = user.username
                 user.delete()
-            
+
             logger.info(f"用户 {username} 的账户已删除")
-            
+
             return Response({
                 'message': '账户已删除'
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"删除账户失败: {str(e)}")
             return Response({
@@ -769,7 +769,7 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
     """双因素认证视图集"""
     authentication_classes = [JWTAuthentication]  # 只使用JWT认证，避免CSRF检查
     permission_classes = [IsAuthenticated]
-    
+
     @action(detail=False, methods=['get'], url_path='status')
     def status(self, request):
         """获取2FA状态"""
@@ -778,7 +778,7 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
             'totp_enabled': profile.totp_enabled,
             'has_2fa': profile.has_2fa_enabled()
         }, status=status.HTTP_200_OK)
-    
+
     @action(detail=False, methods=['get'], url_path='totp/qrcode')
     def totp_qrcode(self, request):
         """生成TOTP二维码"""
@@ -788,15 +788,15 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
             import qrcode
             import io
             import base64
-            
+
             profile = request.user.profile
-            
+
             # 检查是否已启用TOTP
             if profile.totp_enabled and profile.totp_device_id:
                 return Response({
                     'error': 'TOTP已启用，请先禁用'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # 生成或获取TOTP设备
             device, created = TOTPDevice.objects.get_or_create(
                 user=request.user,
@@ -806,16 +806,16 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                     'key': random_hex(16)  # 16字节=128位，转换为Base32是26个字符
                 }
             )
-            
+
             if not created and device.confirmed:
                 # 如果设备已确认，重新生成密钥
                 device.key = random_hex(16)
                 device.confirmed = False
                 device.save()
-            
+
             # 生成配置URL
             config_url = device.config_url
-            
+
             # 从config_url中提取并返回 Base32 secret（权威来源）
             # 格式: otpauth://totp/...?secret=XXXXX&...
             import urllib.parse
@@ -827,63 +827,63 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                 secret_key = secret_key.strip().replace(' ', '')
                 if secret_key.endswith('='):
                     secret_key = secret_key.rstrip('=')
-            
+
             # 生成二维码
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
             qr.add_data(config_url)
             qr.make(fit=True)
-            
+
             img = qr.make_image(fill_color="black", back_color="white")
             buffer = io.BytesIO()
             img.save(buffer, format='PNG')
             img_str = base64.b64encode(buffer.getvalue()).decode()
-            
+
             # 保存设备ID到profile
             profile.totp_device_id = device.id
             profile.save()
-            
+
             return Response({
                 'qr_code': f'data:image/png;base64,{img_str}',
                 'secret': secret_key,
                 'device_id': device.id
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.error(f"生成TOTP二维码失败: {str(e)}")
             return Response({
                 'error': f'生成二维码失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=False, methods=['post'], url_path='totp/enable')
     def totp_enable(self, request):
         """启用TOTP"""
         serializer = TOTPEnableSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         code = serializer.validated_data['code']
         profile = request.user.profile
-        
+
         if not profile.totp_device_id:
             return Response({
                 'error': '请先生成TOTP二维码'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             from django_otp.plugins.otp_totp.models import TOTPDevice
-            
+
             device = TOTPDevice.objects.get(id=profile.totp_device_id, user=request.user)
-            
+
             # 验证TOTP码
             if device.verify_token(code):
                 # 确认设备
                 device.confirmed = True
                 device.save()
-                
+
                 # 启用TOTP
                 profile.totp_enabled = True
                 profile.save()
-                
+
                 logger.info(f"用户 {request.user.username} 启用TOTP成功")
                 return Response({
                     'message': 'TOTP启用成功'
@@ -892,7 +892,7 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
                 return Response({
                     'error': '验证码错误'
                 }, status=status.HTTP_400_BAD_REQUEST)
-                
+
         except TOTPDevice.DoesNotExist:
             return Response({
                 'error': 'TOTP设备不存在'
@@ -902,57 +902,57 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': f'启用TOTP失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     @action(detail=False, methods=['post'], url_path='totp/disable')
     def totp_disable(self, request):
         """禁用TOTP"""
         serializer = TOTPDisableSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         code = serializer.validated_data['code']
         profile = request.user.profile
-        
+
         if not profile.totp_enabled:
             return Response({
                 'error': 'TOTP未启用'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
         try:
             from django_otp.plugins.otp_totp.models import TOTPDevice
-            
+
             device = None
             if profile.totp_device_id:
                 device = TOTPDevice.objects.get(id=profile.totp_device_id, user=request.user)
-                
+
                 # 验证TOTP码
                 if not device.verify_token(code):
                     return Response({
                         'error': '验证码错误'
                     }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             # 禁用TOTP
             device_id = profile.totp_device_id
             profile.totp_enabled = False
             profile.totp_device_id = None
             profile.save()
-            
+
             # 删除设备（可选）
             if device_id and device:
                 try:
                     device.delete()
                 except:
                     pass
-            
+
             logger.info(f"用户 {request.user.username} 禁用TOTP成功")
             return Response({
                 'message': 'TOTP禁用成功'
             }, status=status.HTTP_200_OK)
-                
+
         except Exception as e:
             logger.error(f"禁用TOTP失败: {str(e)}")
             return Response({
                 'error': f'禁用TOTP失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 

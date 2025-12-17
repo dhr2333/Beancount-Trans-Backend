@@ -90,7 +90,7 @@ class Command(BaseCommand):
     def migrate_user(self, user, dry_run=False, backup=False):
         """迁移单个用户的文件"""
         user_assets_path = Path(BeanFileManager.get_user_assets_path(user.username))
-        
+
         if not user_assets_path.exists():
             return 0
 
@@ -153,7 +153,7 @@ class Command(BaseCommand):
 
         new_lines = []
         removed_includes = []
-        
+
         # 构建需要移除的include模式
         patterns_to_remove = []
         for bean_filename in migrated_files:

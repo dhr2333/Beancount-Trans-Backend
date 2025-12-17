@@ -8,7 +8,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_filter = ['phone_verified', 'created']
     search_fields = ['user__username', 'user__email', 'phone_number']
     readonly_fields = ['created', 'modified']
-    
+
     fieldsets = (
         ('用户信息', {
             'fields': ('user',)

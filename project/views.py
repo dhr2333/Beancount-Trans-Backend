@@ -45,7 +45,7 @@ def authenticateByToken(request):
         if not phone_verified:
             phone_binding_required = True
             # warnings.append('请尽快绑定手机号，以便使用短信登录等功能。')
-            
+
 
         data = {
             'access': access,
