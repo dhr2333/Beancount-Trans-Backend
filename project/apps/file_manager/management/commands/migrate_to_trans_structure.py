@@ -98,7 +98,6 @@ class Command(BaseCommand):
         if backup and not dry_run:
             backup_path = user_assets_path.parent / f"{user.username}_backup"
             if backup_path.exists():
-                import shutil
                 shutil.rmtree(backup_path)
             shutil.copytree(user_assets_path, backup_path)
             self.stdout.write(f'  备份到: {backup_path}')
