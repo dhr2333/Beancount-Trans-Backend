@@ -581,14 +581,7 @@ class PlatformGitService:
         cleaned_files = []
 
         try:
-            # 1. 备份 trans/ 目录（如果存在）
-            # trans_path = user_assets_path / 'trans'
-            # trans_backup = None
-            # if trans_path.exists():
-            #     trans_backup = self._backup_trans_directory(trans_path)
-            #     logger.info(f"Backed up trans/ directory for cleanup")
-
-            # 2. 删除除 trans/ 外的所有内容
+            # 1. 删除除 trans/ 外的所有内容
             if user_assets_path.exists():
                 for item in user_assets_path.iterdir():
                     if item.name != 'trans':
@@ -599,25 +592,7 @@ class PlatformGitService:
                             item.unlink()
                             cleaned_files.append(item.name)
 
-            # 3. 恢复 trans/ 目录（如果有备份）
-            # if trans_backup:
-            #     # 确保 trans 目录存在
-            #     trans_path.mkdir(exist_ok=True)
-
-            #     # 恢复备份的所有文件（不仅限于 .bean 文件）
-            #     backup_trans = Path(trans_backup) / 'trans'
-            #     if backup_trans.exists():
-            #         for item in backup_trans.iterdir():
-            #             if item.is_file():
-            #                 shutil.copy2(item, trans_path / item.name)
-            #             elif item.is_dir():
-            #                 shutil.copytree(item, trans_path / item.name, dirs_exist_ok=True)
-
-            #     # 清理备份
-            #     shutil.rmtree(trans_backup)
-            #     cleaned_files.append('恢复 trans/ 目录')
-
-            # 4. 重建标准的 main.bean 文件
+            # 2. 重建标准的 main.bean 文件
             self._rebuild_standard_main_bean(user_assets_path)
             cleaned_files.append('重建标准 main.bean')
 
@@ -625,12 +600,6 @@ class PlatformGitService:
 
         except Exception as e:
             logger.error(f"Failed to cleanup git files: {e}")
-            # 如果有备份，尝试清理
-            # if 'trans_backup' in locals() and trans_backup and Path(trans_backup).exists():
-            #     try:
-            #         shutil.rmtree(trans_backup)
-            #     except:
-            #         pass
             raise
 
     def _rebuild_standard_main_bean(self, user_assets_path: Path):
