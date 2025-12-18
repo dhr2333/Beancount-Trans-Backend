@@ -76,11 +76,11 @@ def create_sample_files_for_new_user(sender, instance, created, **kwargs):
 
             # 创建对应的 .bean 文件
             bean_filename = BeanFileManager.create_bean_file(
-                instance.username,
+                instance,
                 admin_file.name
             )
             BeanFileManager.update_main_bean_include(
-                instance.username,
+                instance,
                 bean_filename,
                 action='add'
             )

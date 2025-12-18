@@ -664,9 +664,28 @@ class UserProfileViewSet(viewsets.GenericViewSet):
 
         # 更新用户名
         if 'username' in serializer.validated_data:
-            user.username = serializer.validated_data['username']
+            new_username = serializer.validated_data['username']
+            
+            # 检查是否启用了 Git
+            has_git = hasattr(user, 'git_repo')
+            
+            from project.utils.file import BeanFileManager
+            
+            if not has_git:
+                # 未开启 Git：需要重命名目录
+                if BeanFileManager.rename_user_directory(old_username, new_username):
+                    # 更新 main.bean 中的用户名引用
+                    BeanFileManager.update_main_bean_username(new_username, new_username)
+                else:
+                    # 重命名失败，返回错误
+                    return Response(
+                        {'error': '无法重命名用户目录，请检查目录权限或联系管理员'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
+            user.username = new_username
             user.save(update_fields=['username'])
-            logger.info(f"用户 {old_username} (ID: {user.id}) 更新了用户名: {serializer.validated_data['username']}")
+            logger.info(f"用户 {old_username} (ID: {user.id}) 更新了用户名: {new_username}")
 
         # 更新邮箱
         if 'email' in serializer.validated_data:

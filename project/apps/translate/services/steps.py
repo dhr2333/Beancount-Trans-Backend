@@ -198,13 +198,25 @@ class FileWritingStep(Step):
     def execute(self,  context: Dict) -> Dict:
         if context['args']['write']:
             username = context['username']
+            
+            # 尝试从 context 获取 user 对象，如果没有则从 username 获取
+            user = context.get('user')
+            if not user:
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                try:
+                    user = User.objects.get(username=username)
+                except User.DoesNotExist:
+                    # 如果找不到用户，回退到使用 username
+                    user = username
+            
             formatted_data = "\n\n".join([entry['formatted'].rstrip('\n') for entry in context['formatted_data']])
 
             original_filename = context['uploaded_file'].name
-            bean_file_path = BeanFileManager.get_bean_file_path(username, original_filename)
+            bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename)
 
             # 确保trans目录存在
-            BeanFileManager.ensure_trans_directory(username)
+            BeanFileManager.ensure_trans_directory(user)
 
             # 写入文件到trans目录
             with open(bean_file_path, 'w', encoding='utf-8') as f:
@@ -213,6 +225,6 @@ class FileWritingStep(Step):
             # 追加到trans/main.bean（追加方案）
             base_name = os.path.splitext(original_filename)[0]
             bean_filename = f"{base_name}.bean"
-            BeanFileManager.update_trans_main_bean_include(username, bean_filename, action='add')
+            BeanFileManager.update_trans_main_bean_include(user, bean_filename, action='add')
 
         return context

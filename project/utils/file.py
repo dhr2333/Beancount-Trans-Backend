@@ -7,6 +7,7 @@ import PyPDF2
 import chardet
 import pandas as pd
 import hashlib
+import logging
 
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.apps.translate.utils import get_card_number
@@ -19,6 +20,8 @@ from project.apps.translate.views.CMB_Credit import cmb_credit_pdf_convert_to_cs
 from project.apps.translate.services.init.strategies.ccb_debit_init_strategy import CCBDebitInitStrategy
 from project.apps.translate.views.CCB_Debit import ccb_debit_string_convert_to_csv
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf']
@@ -165,19 +168,46 @@ def create_text_stream(original_name: str, content: bytes) -> io.StringIO:
 
 class BeanFileManager:
     @staticmethod
-    def ensure_user_assets_dir(username):
+    def get_user_assets_path(user_or_username):
+        """获取用户资产目录路径
+        
+        如果用户启用了 Git，使用 repo_name；否则使用 username
+        
+        Args:
+            user_or_username: User 对象或 username 字符串
+        
+        Returns:
+            用户资产目录路径
+        """
+        # 检查是否为 User 对象
+        if hasattr(user_or_username, 'username'):
+            user = user_or_username
+            # 检查是否有 Git 仓库
+            try:
+                git_repo = user.git_repo
+                return os.path.join(settings.ASSETS_BASE_PATH, git_repo.repo_name)
+            except Exception:
+                # GitRepository.DoesNotExist 或其他异常，使用 username
+                # 这里捕获所有异常，因为 OneToOneField 不存在时会抛出 DoesNotExist
+                return os.path.join(settings.ASSETS_BASE_PATH, user.username)
+        else:
+            # 兼容旧的 username 参数（仅用于非 Git 场景）
+            return os.path.join(settings.ASSETS_BASE_PATH, user_or_username)
+
+    @staticmethod
+    def ensure_user_assets_dir(user_or_username):
         """确保用户资产目录存在（幂等操作）"""
-        user_dir = os.path.join(settings.ASSETS_BASE_PATH, username)
+        user_dir = BeanFileManager.get_user_assets_path(user_or_username)
         os.makedirs(user_dir, exist_ok=True)
         return user_dir
 
     @staticmethod
-    def ensure_trans_directory(username):
+    def ensure_trans_directory(user_or_username):
         """确保trans目录和trans/main.bean文件存在"""
-        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(username), 'trans')
+        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(user_or_username), 'trans')
         os.makedirs(trans_dir, exist_ok=True)
 
-        trans_main_path = BeanFileManager.get_trans_main_bean_path(username)
+        trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
         if not os.path.exists(trans_main_path):
             # 创建空的trans/main.bean文件
             with open(trans_main_path, 'w', encoding='utf-8') as f:
@@ -186,42 +216,37 @@ class BeanFileManager:
         return trans_dir
 
     @staticmethod
-    def get_user_assets_path(username):
-        """获取用户资产目录路径"""
-        return os.path.join(settings.ASSETS_BASE_PATH, username)
-
-    @staticmethod
-    def get_bean_file_path(username, original_filename):
+    def get_bean_file_path(user_or_username, original_filename):
         """获取完整bean文件路径（写入trans/目录）"""
         base_name = os.path.splitext(original_filename)[0]
         trans_dir = os.path.join(
-            BeanFileManager.get_user_assets_path(username),
+            BeanFileManager.get_user_assets_path(user_or_username),
             'trans'
         )
         os.makedirs(trans_dir, exist_ok=True)
         return os.path.join(trans_dir, f"{base_name}.bean")
 
     @staticmethod
-    def get_main_bean_path(username):
+    def get_main_bean_path(user_or_username):
         """获取用户main.bean文件路径"""
-        return os.path.join(BeanFileManager.get_user_assets_path(username), 'main.bean')
+        return os.path.join(BeanFileManager.get_user_assets_path(user_or_username), 'main.bean')
 
     @staticmethod
-    def get_trans_main_bean_path(username):
+    def get_trans_main_bean_path(user_or_username):
         """获取trans/main.bean文件路径"""
-        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(username), 'trans')
+        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(user_or_username), 'trans')
         return os.path.join(trans_dir, 'main.bean')
 
     @staticmethod
-    def create_bean_file(username, filename):
+    def create_bean_file(user_or_username, filename):
         """
         创建对应的.bean文件
-        :param username: 用户名
+        :param user_or_username: User 对象或 username 字符串
         :param filename: 原始文件名（不带路径）
         :return: bean文件名（带.bean后缀）
         """
-        bean_path = BeanFileManager.get_bean_file_path(username, filename)
-        BeanFileManager.ensure_user_assets_dir(username)
+        bean_path = BeanFileManager.get_bean_file_path(user_or_username, filename)
+        BeanFileManager.ensure_user_assets_dir(user_or_username)
 
         if not os.path.exists(bean_path):
             with open(bean_path, 'w', encoding='utf-8') as f:
@@ -230,15 +255,21 @@ class BeanFileManager:
         return os.path.basename(bean_path)
 
     @staticmethod
-    def update_main_bean_include(username, bean_filename, action='add'):
+    def update_main_bean_include(user_or_username, bean_filename, action='add'):
         """
         创建适用于 Beancount-Trans 标准的 main.bean 文件
-        :param username: 用户名
+        :param user_or_username: User 对象或 username 字符串
         """
+        # 获取用户名（用于模板）
+        if hasattr(user_or_username, 'username'):
+            username = user_or_username.username
+        else:
+            username = user_or_username
+        
         # 确保 trans/main.bean 文件存在（因为 main.bean 会包含它）
-        BeanFileManager.ensure_trans_directory(username)
+        BeanFileManager.ensure_trans_directory(user_or_username)
 
-        main_bean_path = BeanFileManager.get_main_bean_path(username)
+        main_bean_path = BeanFileManager.get_main_bean_path(user_or_username)
 
         # 确保main.bean文件存在
         if not os.path.exists(main_bean_path):
@@ -276,17 +307,17 @@ include "trans/main.bean"
                     f.write('include "trans/main.bean"\n')
 
     @staticmethod
-    def update_trans_main_bean_include(username, bean_filename, action='add'):
+    def update_trans_main_bean_include(user_or_username, bean_filename, action='add'):
         """
         更新trans/main.bean文件的include语句（追加方案）
-        :param username: 用户名
+        :param user_or_username: User 对象或 username 字符串
         :param bean_filename: .bean文件名（如 "202505_alipay.bean"）
         :param action: 'add' 或 'remove'
         """
         # 确保trans目录存在
-        BeanFileManager.ensure_trans_directory(username)
+        BeanFileManager.ensure_trans_directory(user_or_username)
 
-        trans_main_path = BeanFileManager.get_trans_main_bean_path(username)
+        trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
 
         # 读取现有内容
         with open(trans_main_path, 'r', encoding='utf-8') as f:
@@ -321,8 +352,64 @@ include "trans/main.bean"
             f.writelines(new_lines)
 
     @staticmethod
-    def delete_bean_file(username, bean_filename):
+    def delete_bean_file(user_or_username, bean_filename):
         """删除对应的.bean文件（从trans目录）"""
-        bean_path = BeanFileManager.get_bean_file_path(username, bean_filename)
+        bean_path = BeanFileManager.get_bean_file_path(user_or_username, bean_filename)
         if os.path.exists(bean_path):
             os.remove(bean_path)
+
+    @staticmethod
+    def update_main_bean_username(user_or_username, new_username):
+        """更新 main.bean 文件中的用户名引用
+        
+        Args:
+            user_or_username: User 对象或 username 字符串
+            new_username: 新用户名
+        """
+        main_bean_path = BeanFileManager.get_main_bean_path(user_or_username)
+        if os.path.exists(main_bean_path):
+            with open(main_bean_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 更新标题中的用户名
+            pattern = re.compile(r'option\s+"title"\s+"([^"]+)"')
+            def replace_title(match):
+                old_title = match.group(1)
+                # 如果标题格式为 "{username}的账本"，则更新用户名
+                if old_title.endswith('的账本'):
+                    return f'option "title" "{new_username}的账本"'
+                return match.group(0)
+            
+            content = pattern.sub(replace_title, content)
+            
+            with open(main_bean_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+    @staticmethod
+    def rename_user_directory(old_username, new_username):
+        """重命名用户目录
+        
+        Args:
+            old_username: 旧用户名
+            new_username: 新用户名
+        
+        Returns:
+            bool: 是否成功重命名
+        """
+        old_path = os.path.join(settings.ASSETS_BASE_PATH, old_username)
+        new_path = os.path.join(settings.ASSETS_BASE_PATH, new_username)
+        
+        if os.path.exists(old_path) and not os.path.exists(new_path):
+            try:
+                os.rename(old_path, new_path)
+                logger.info(f"Renamed user directory from {old_path} to {new_path}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to rename user directory: {e}")
+                return False
+        elif os.path.exists(old_path) and os.path.exists(new_path):
+            logger.warning(f"Both old and new directories exist: {old_path} and {new_path}")
+            return False
+        else:
+            logger.warning(f"Old directory does not exist: {old_path}")
+            return False

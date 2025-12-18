@@ -169,6 +169,20 @@ class GiteaAPIClient:
         """
         return self._make_request('GET', f'/repos/{self.org_name}/{repo_name}')
 
+    def get_repository(self, repo_name: str) -> Dict[str, Any]:
+        """获取仓库信息（别名方法，用于检查仓库是否存在）
+        
+        Args:
+            repo_name: 仓库名称
+        
+        Returns:
+            仓库信息字典
+        
+        Raises:
+            GiteaAPIException: 如果仓库不存在或请求失败
+        """
+        return self.get_repository_info(repo_name)
+
     def get_repository_size(self, repo_name: str) -> int:
         """获取仓库大小（字节）
 

@@ -50,11 +50,12 @@ class PlatformGitService:
         流程：
         1. 检查用户是否已有仓库
         2. 调用 Gitea API 创建仓库
-        3. 生成 SSH 密钥对
-        4. 添加 Deploy Key 到仓库
-        5. 配置 Webhook
-        6. 如果 use_template=True，初始化仓库内容
-        7. 保存仓库信息到数据库
+        3. 用户目录重命名，从 Assets/{username} 重命名到 Assets/{repo_name}
+        4. 生成 SSH 密钥对
+        5. 添加 Deploy Key 到仓库
+        6. 配置 Webhook
+        7. 如果 use_template=True，初始化仓库内容
+        8. 保存仓库信息到数据库
 
         Returns:
             GitRepository 实例
@@ -63,10 +64,32 @@ class PlatformGitService:
         if hasattr(user, 'git_repo'):
             raise GitServiceException("用户已有 Git 仓库")
 
-        # 使用 UUID 保留 6 位作为仓库名称
+        # 生成唯一的仓库名称（检查冲突）
         import uuid
-        repo_id = uuid.uuid4().hex[:6]
-        repo_name = f"{repo_id}-assets"
+        max_attempts = 10  # 最多尝试 10 次
+        repo_name = None
+        
+        for attempt in range(max_attempts):
+            repo_id = uuid.uuid4().hex[:6]
+            candidate_name = f"{repo_id}-assets"
+            
+            # 检查数据库中是否已存在
+            if not GitRepository.objects.filter(repo_name=candidate_name).exists():
+                # 检查 Gitea 上是否已存在
+                try:
+                    # 尝试获取仓库信息，如果不存在会抛出异常
+                    self.gitea_client.get_repository(candidate_name)
+                    # 如果成功获取，说明已存在，继续尝试
+                    logger.warning(f"Repository {candidate_name} already exists in Gitea, retrying...")
+                    continue
+                except GiteaAPIException:
+                    # 仓库不存在，可以使用
+                    repo_name = candidate_name
+                    break
+        
+        if not repo_name:
+            raise GitServiceException("无法生成唯一的仓库名称，请稍后重试")
+        
         try:
             # 1. 创建 Gitea 仓库
             logger.info(f"Creating Gitea repository for user {user.username}: {repo_name}")
@@ -75,6 +98,10 @@ class PlatformGitService:
                 description=f"Beancount account book for {user.username}",
                 private=True
             )
+
+            # 2. 用户目录重命名，从 Assets/{username} 重命名到 Assets/{repo_name}
+            user_assets_path = self.assets_base_path / user.username
+            user_assets_path.rename(self.assets_base_path / repo_name)
 
             # 2. 生成 SSH 密钥对
             private_key, public_key = self._generate_ssh_key_pair()
@@ -161,7 +188,7 @@ class PlatformGitService:
         git_repo.sync_error = ''
         git_repo.save()
 
-        user_assets_path = self.assets_base_path / user.username
+        user_assets_path = self.assets_base_path / git_repo.repo_name
 
         try:
             # 1. 备份 trans/ 目录（如果存在）
@@ -292,7 +319,7 @@ class PlatformGitService:
         except GitRepository.DoesNotExist:
             raise GitServiceException("用户未启用 Git 功能")
 
-        user_assets_path = self.assets_base_path / user.username
+        user_assets_path = self.assets_base_path / git_repo.repo_name
         trans_path = user_assets_path / 'trans'
 
         if not trans_path.exists():
@@ -519,8 +546,8 @@ class PlatformGitService:
 
         流程：
         1. 删除 Gitea 远程仓库
-        2. 清理本地 Assets 目录中的 Git 文件
-        3. 恢复原始目录结构
+        2. 删除用户目录除了 trans/ 外的全部内容，然后重建标准的 main.bean 文件
+        3. 用户目录重命名，从 Assets/{repo_name} 重命名到 Assets/{username}
         4. 删除数据库记录
 
         Args:
@@ -546,12 +573,16 @@ class PlatformGitService:
                 logger.warning(f"Failed to delete remote repository {git_repo.repo_name}: {e}")
                 # 继续执行，不阻断流程
 
-            # 2. 清理本地 Git 文件和恢复目录结构
-            user_assets_path = self.assets_base_path / user.username
+            # 2. 删除用户目录除了 trans/ 外的全部内容，然后重建标准的 main.bean 文件
+            user_assets_path = self.assets_base_path / git_repo.repo_name
             if user_assets_path.exists():
-                cleaned_files.extend(self._cleanup_git_files_and_restore_structure(user_assets_path))
+                cleaned_files.extend(self._cleanup_git_files_and_restore_structure(user_assets_path, user))
 
-            # 3. 删除数据库记录
+            # 3. 用户目录重命名，从 Assets/{repo_name} 重命名到 Assets/{username}
+            user_assets_path.rename(self.assets_base_path / user.username)
+            cleaned_files.append(f"用户目录重命名: {git_repo.repo_name} -> {user.username}")
+
+            # 4. 删除数据库记录
             repo_name = git_repo.repo_name
             git_repo.delete()
             cleaned_files.append(f"数据库记录: {repo_name}")
@@ -567,13 +598,14 @@ class PlatformGitService:
             logger.error(f"Failed to delete repository for user {user.username}: {e}")
             raise GitServiceException(f"删除仓库失败: {e}")
 
-    def _cleanup_git_files_and_restore_structure(self, user_assets_path: Path) -> list:
-        """清理 Git 文件并恢复原始目录结构
+    def _cleanup_git_files_and_restore_structure(self, user_assets_path: Path, user: User) -> list:
+        """清理用户文件并恢复原始目录结构
 
         删除用户目录除了 trans/ 外的全部内容，然后重建标准的 main.bean 文件
 
         Args:
             user_assets_path: 用户 Assets 目录路径
+            user: 用户对象
 
         Returns:
             已清理的文件列表
@@ -593,7 +625,7 @@ class PlatformGitService:
                             cleaned_files.append(item.name)
 
             # 2. 重建标准的 main.bean 文件
-            self._rebuild_standard_main_bean(user_assets_path)
+            self._rebuild_standard_main_bean(user)
             cleaned_files.append('重建标准 main.bean')
 
             return cleaned_files
@@ -602,19 +634,17 @@ class PlatformGitService:
             logger.error(f"Failed to cleanup git files: {e}")
             raise
 
-    def _rebuild_standard_main_bean(self, user_assets_path: Path):
+    def _rebuild_standard_main_bean(self, user: User):
         """重建标准的 main.bean 文件（未启用 Git 前的格式）
 
         Args:
-            user_assets_path: 用户 Assets 目录路径
+            user: 用户对象
         """
         from project.utils.file import BeanFileManager
 
         # 使用 BeanFileManager 的标准方法重建 main.bean
-        username = user_assets_path.name
-        BeanFileManager.update_main_bean_include(username, None, 'add')
-
-        logger.info(f"Rebuilt standard main.bean for user {username}")
+        BeanFileManager.update_main_bean_include(user, None, 'add')
+        logger.info(f"Rebuilt standard main.bean for user {user.username}")
 
     def _push_template_to_repository(self, git_repo: GitRepository, template_dir: Path):
         """将模板内容推送到 Gitea 仓库
@@ -705,7 +735,7 @@ class PlatformGitService:
             git_repo: Git 仓库对象
             template_dir: 模板目录
         """
-        user_assets_path = self.assets_base_path / git_repo.owner.username
+        user_assets_path = self.assets_base_path / git_repo.repo_name
 
         # 确保用户目录存在
         user_assets_path.mkdir(parents=True, exist_ok=True)
@@ -740,6 +770,9 @@ class PlatformGitService:
             else:
                 # 如果没有现有的 trans/ 目录，创建基本结构
                 self._ensure_trans_directory_structure(git_repo.owner.username)
+                # from project.utils.file import BeanFileManager
+                # BeanFileManager.ensure_trans_directory(git_repo.owner)
+                # BeanFileManager.update_main_bean_include(git_repo.owner, None, 'add')
 
             logger.info(f"成功同步模板内容到本地用户目录: {user_assets_path}")
 
