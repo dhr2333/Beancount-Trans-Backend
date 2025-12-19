@@ -129,7 +129,7 @@ class GitRepositoryViewSet(ViewSet):
             key_data = git_service.regenerate_deploy_key(request.user)
 
             # 创建文件响应
-            filename = f"{request.user.username}_deploy_key_new.pem"
+            filename = f"{request.user.username}_deploy_key.pem"
 
             response = HttpResponse(
                 key_data['private_key'],
