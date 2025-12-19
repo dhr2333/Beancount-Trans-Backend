@@ -60,7 +60,7 @@ class PhoneLoginByPasswordSerializer(serializers.Serializer):
         max_length=6,
         help_text='TOTP验证码（可选，如果用户启用了TOTP则必填）'
     )
-    
+
     def validate_totp_code(self, value):
         """验证TOTP码格式"""
         if value and not value.isdigit():
@@ -175,7 +175,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='user.email', read_only=True)
     date_joined = serializers.DateTimeField(source='user.date_joined', read_only=True)
     last_login = serializers.DateTimeField(source='user.last_login', read_only=True)
-    
+
     class Meta:
         model = UserProfile
         fields = [
@@ -203,7 +203,7 @@ class UserUpdateSerializer(serializers.Serializer):
         required=False,
         help_text='邮箱'
     )
-    
+
     def validate_username(self, value):
         """验证用户名是否已被其他用户使用"""
         request = self.context.get('request')
@@ -211,7 +211,7 @@ class UserUpdateSerializer(serializers.Serializer):
             if User.objects.filter(username=value).exclude(id=request.user.id).exists():
                 raise serializers.ValidationError("该用户名已被其他用户使用")
         return value
-    
+
     def validate_email(self, value):
         """验证邮箱是否已被其他用户使用"""
         request = self.context.get('request')
@@ -229,7 +229,7 @@ class TOTPEnableSerializer(serializers.Serializer):
         max_length=6,
         help_text='6位TOTP验证码'
     )
-    
+
     def validate_code(self, value):
         """验证验证码格式"""
         if not value.isdigit():
@@ -245,7 +245,7 @@ class TOTPDisableSerializer(serializers.Serializer):
         max_length=6,
         help_text='6位TOTP验证码（用于确认禁用）'
     )
-    
+
     def validate_code(self, value):
         """验证验证码格式"""
         if not value.isdigit():
@@ -334,7 +334,7 @@ class UsernameLoginByPasswordSerializer(serializers.Serializer):
         max_length=6,
         help_text='TOTP验证码（可选，如果用户启用了TOTP则必填）'
     )
-    
+
     def validate_totp_code(self, value):
         """验证TOTP码格式"""
         if value and not value.isdigit():

@@ -18,7 +18,7 @@ from project.apps.authentication.serializers import (
 @pytest.mark.django_db
 class TestSerializers:
     """序列化器测试"""
-    
+
     def setup_method(self):
         """设置测试环境"""
         self.factory = APIRequestFactory()
@@ -27,21 +27,21 @@ class TestSerializers:
             password='TestPass123!',
             email='test@example.com'
         )
-    
+
     def test_phone_send_code_valid(self):
         """测试手机号格式验证"""
         serializer = PhoneSendCodeSerializer(data={
             'phone_number': '+8613800138120'
         })
         assert serializer.is_valid() is True
-    
+
     def test_phone_send_code_invalid(self):
         """测试无效手机号格式"""
         serializer = PhoneSendCodeSerializer(data={
             'phone_number': '123'  # 无效格式
         })
         assert serializer.is_valid() is False
-    
+
     def test_phone_login_code_valid(self):
         """测试验证码格式验证（6位数字）"""
         serializer = PhoneLoginByCodeSerializer(data={
@@ -49,7 +49,7 @@ class TestSerializers:
             'code': '123456'
         })
         assert serializer.is_valid() is True
-    
+
     def test_phone_login_code_invalid(self):
         """测试无效验证码格式"""
         serializer = PhoneLoginByCodeSerializer(data={
@@ -57,13 +57,13 @@ class TestSerializers:
             'code': '12345'  # 不是6位
         })
         assert serializer.is_valid() is False
-        
+
         serializer2 = PhoneLoginByCodeSerializer(data={
             'phone_number': '+8613800138123',
             'code': 'abcdef'  # 不是数字
         })
         assert serializer2.is_valid() is False
-    
+
     def test_phone_register_duplicate_phone(self):
         """测试手机号已被注册"""
         # 创建已注册的手机号
@@ -73,7 +73,7 @@ class TestSerializers:
         )
         user2.profile.phone_number = '+8613800138124'
         user2.profile.save()
-        
+
         serializer = PhoneRegisterSerializer(data={
             'phone_number': '+8613800138124',
             'code': '123456',
@@ -82,7 +82,7 @@ class TestSerializers:
         })
         assert serializer.is_valid() is False
         assert '已被注册' in str(serializer.errors)
-    
+
     def test_phone_register_duplicate_username(self):
         """测试用户名已存在"""
         # 创建已存在的用户名
@@ -90,7 +90,7 @@ class TestSerializers:
             username='existinguser',
             password='TestPass123!'
         )
-        
+
         serializer = PhoneRegisterSerializer(data={
             'phone_number': '+8613800138125',
             'code': '123456',
@@ -99,7 +99,7 @@ class TestSerializers:
         })
         assert serializer.is_valid() is False
         assert '用户名已存在' in str(serializer.errors)
-    
+
     def test_phone_register_weak_password(self):
         """测试弱密码验证"""
         serializer = PhoneRegisterSerializer(data={
@@ -113,7 +113,7 @@ class TestSerializers:
         # 和NumericPasswordValidator（阻止纯数字密码）
         # 所以'123'应该会被拒绝
         is_valid = serializer.is_valid()
-        
+
         # 如果密码验证器正确配置，应该失败
         # 但为了兼容不同的配置，我们检查验证是否被调用
         if not is_valid:
@@ -123,7 +123,7 @@ class TestSerializers:
             # 如果通过了，可能是密码验证器配置问题
             # 但至少验证了序列化器流程正常
             pass
-    
+
     def test_email_bind_duplicate_email(self):
         """测试邮箱已被占用"""
         # 创建已存在的邮箱
@@ -132,17 +132,17 @@ class TestSerializers:
             password='TestPass123!',
             email='existing@example.com'
         )
-        
+
         request = self.factory.get('/')
         request.user = self.user
-        
+
         serializer = EmailSendCodeSerializer(
             data={'email': 'existing@example.com'},
             context={'request': request}
         )
         assert serializer.is_valid() is False
         assert '已被其他账户使用' in str(serializer.errors)
-    
+
     def test_username_update_duplicate(self):
         """测试用户名更新时冲突"""
         # 创建已存在的用户名
@@ -150,17 +150,17 @@ class TestSerializers:
             username='existinguser',
             password='TestPass123!'
         )
-        
+
         request = self.factory.get('/')
         request.user = self.user
-        
+
         serializer = UserUpdateSerializer(
             data={'username': 'existinguser'},
             context={'request': request}
         )
         assert serializer.is_valid() is False
         assert '已被其他用户使用' in str(serializer.errors)
-    
+
     def test_email_update_duplicate(self):
         """测试邮箱更新时冲突"""
         # 创建已存在的邮箱
@@ -169,35 +169,35 @@ class TestSerializers:
             password='TestPass123!',
             email='existing@example.com'
         )
-        
+
         request = self.factory.get('/')
         request.user = self.user
-        
+
         serializer = UserUpdateSerializer(
             data={'email': 'existing@example.com'},
             context={'request': request}
         )
         assert serializer.is_valid() is False
         assert '已被其他用户使用' in str(serializer.errors)
-    
+
     def test_totp_code_format(self):
         """测试TOTP验证码格式验证"""
         serializer = TOTPEnableSerializer(data={
             'code': '123456'
         })
         assert serializer.is_valid() is True
-        
+
         # 无效格式
         serializer2 = TOTPEnableSerializer(data={
             'code': '12345'  # 不是6位
         })
         assert serializer2.is_valid() is False
-        
+
         serializer3 = TOTPEnableSerializer(data={
             'code': 'abcdef'  # 不是数字
         })
         assert serializer3.is_valid() is False
-    
+
     def test_phone_binding_duplicate_phone(self):
         """测试绑定已被占用的手机号"""
         # 创建已绑定手机号的用户
@@ -207,10 +207,10 @@ class TestSerializers:
         )
         user2.profile.phone_number = '+8613800138127'
         user2.profile.save()
-        
+
         request = self.factory.get('/')
         request.user = self.user
-        
+
         serializer = PhoneBindingSerializer(
             data={
                 'phone_number': '+8613800138127',

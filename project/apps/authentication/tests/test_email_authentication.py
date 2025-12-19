@@ -72,13 +72,13 @@ class TestEmailAuthentication:
         """测试发送验证码频率限制"""
         with patch('django.core.mail.send_mail') as mock_send_mail:
             mock_send_mail.return_value = 1
-            
+
             # 第一次发送应该成功
             response = self.client.post('/api/auth/email/send-code/', {
                 'email': 'email@example.com'
             })
             assert response.status_code == 200
-            
+
             # 立即再次发送应该失败
             response = self.client.post('/api/auth/email/send-code/', {
                 'email': 'email@example.com'
@@ -91,7 +91,7 @@ class TestEmailAuthentication:
         response = self.client.post('/api/auth/email/send-code/', {
             'email': 'invalid-email'
         })
-        
+
         assert response.status_code == 400
 
     def test_login_by_code_expired(self):
@@ -100,24 +100,24 @@ class TestEmailAuthentication:
         # 注意：这里需要模拟时间或者使用较短的过期时间
         code = '123456'
         UserProfile.store_email_code(self.user.email, code)
-        
+
         # 模拟缓存过期（删除验证码）
         from django.core.cache import cache
         cache_key = UserProfile.get_email_code_cache_key(self.user.email)
         cache.delete(cache_key)
-        
+
         response = self.client.post('/api/auth/email/login-by-code/', {
             'email': 'email@example.com',
             'code': code
         })
-        
+
         assert response.status_code == 401
         assert '验证码错误或已过期' in str(response.data)
 
     def test_login_by_code_requires_2fa(self):
         """测试登录时返回2FA状态"""
         from django_otp.plugins.otp_totp.models import TOTPDevice
-        
+
         # 启用TOTP
         self.user.profile.totp_enabled = True
         device = TOTPDevice.objects.create(
@@ -128,15 +128,15 @@ class TestEmailAuthentication:
         )
         self.user.profile.totp_device_id = device.id
         self.user.profile.save()
-        
+
         code = '123456'
         UserProfile.store_email_code(self.user.email, code)
-        
+
         response = self.client.post('/api/auth/email/login-by-code/', {
             'email': 'email@example.com',
             'code': code
         })
-        
+
         assert response.status_code == 200
         assert 'requires_2fa' in response.data
         assert response.data['requires_2fa'] is True
@@ -149,15 +149,15 @@ class TestEmailAuthentication:
             password='TestPass123!',
             email='email@example.com'  # 相同邮箱
         )
-        
+
         code = '123456'
         UserProfile.store_email_code('email@example.com', code)
-        
+
         response = self.client.post('/api/auth/email/login-by-code/', {
             'email': 'email@example.com',
             'code': code
         })
-        
+
         # 应该登录第一个匹配的用户
         assert response.status_code == 200
         assert 'access' in response.data

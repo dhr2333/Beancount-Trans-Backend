@@ -78,7 +78,7 @@ class DirectoryViewSet(ModelViewSet):
         directory = self.get_object()
 
         # 递归删除所有.bean文件并更新main.bean
-        self._delete_bean_files_for_directory(request.user.username, directory)
+        self._delete_bean_files_for_directory(request.user, directory)
 
         # 递归删除所有MinIO文件
         self._delete_directory_files(directory)
@@ -111,7 +111,7 @@ class DirectoryViewSet(ModelViewSet):
         for child in directory.children.all():
             self._delete_directory_files(child)
 
-    def _delete_bean_files_for_directory(self, username, directory):
+    def _delete_bean_files_for_directory(self, user, directory):
         """递归删除目录下所有文件对应的.bean文件并更新trans/main.bean"""
         # 处理当前目录下的文件
         for file in directory.files.all():
@@ -120,17 +120,17 @@ class DirectoryViewSet(ModelViewSet):
 
             # 从trans/main.bean中移除include语句
             BeanFileManager.update_trans_main_bean_include(
-                username,
+                user,
                 bean_filename,
                 action='remove'
             )
 
             # 删除.bean文件（从trans目录）
-            BeanFileManager.delete_bean_file(username, bean_filename)
+            BeanFileManager.delete_bean_file(user, bean_filename)
 
         # 递归处理子目录
         for child in directory.children.all():
-            self._delete_bean_files_for_directory(username, child)
+            self._delete_bean_files_for_directory(user, child)
 
 
 class FileViewSet(ModelViewSet):
@@ -175,11 +175,11 @@ class FileViewSet(ModelViewSet):
             )
 
             bean_filename = BeanFileManager.create_bean_file(
-                request.user.username,
+                request.user,
                 uploaded_file.name
             )
             BeanFileManager.update_main_bean_include(
-                request.user.username,
+                request.user,
                 bean_filename,
                 action='add'
             )
@@ -256,14 +256,14 @@ class FileViewSet(ModelViewSet):
 
         # 从trans/main.bean中移除include语句
         BeanFileManager.update_trans_main_bean_include(
-            request.user.username,
+            request.user,
             bean_filename,
             action='remove'
         )
 
         # 删除.bean文件（从trans目录）
         BeanFileManager.delete_bean_file(
-            request.user.username,
+            request.user,
             bean_filename
         )
 

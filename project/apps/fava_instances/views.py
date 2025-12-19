@@ -46,7 +46,9 @@ class FavaRedirectView(APIView):
         instance.save()
 
         # 准备bean文件路径
-        bean_file = os.path.join(settings.ASSETS_HOST_PATH,user.username)
+        from project.utils.file import BeanFileManager
+        user_assets_path = BeanFileManager.get_user_assets_path(user)
+        bean_file = os.path.join(settings.ASSETS_HOST_PATH, os.path.basename(user_assets_path))
 
         # 启动容器
         try:

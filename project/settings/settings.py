@@ -220,10 +220,10 @@ AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持�
     # Phone number authentication backends (优先级最高)
     'project.apps.authentication.backends.PhonePasswordBackend',
     'project.apps.authentication.backends.PhoneCodeBackend',
-    
+
     # Username/Email authentication backend (要求已绑定手机号)
     'project.apps.authentication.backends.PhoneNumberRequiredBackend',
-    
+
     # Needed to login by username in Django admin, regardless of `allauth`
     'django.contrib.auth.backends.ModelBackend',
 

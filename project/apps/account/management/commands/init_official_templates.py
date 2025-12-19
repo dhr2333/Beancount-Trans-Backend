@@ -985,7 +985,7 @@ class Command(BaseCommand):
 
         for file_config in sample_files:
             local_path = file_config['local_path']
-            
+
             # 检查本地文件是否存在
             if not os.path.exists(local_path):
                 self.stdout.write(self.style.WARNING(f'本地文件不存在: {local_path}，跳过'))
@@ -1006,7 +1006,7 @@ class Command(BaseCommand):
             # 上传到存储
             from io import BytesIO
             file_stream = BytesIO(file_content)
-            
+
             success = storage_client.upload_file(
                 storage_name,
                 file_stream,

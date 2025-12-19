@@ -55,11 +55,11 @@ class UserProfile(BaseModel):
 
     def __str__(self):
         return f"{self.user.username} - {self.phone_number or '未绑定手机号'}"
-    
+
     def has_2fa_enabled(self):
         """检查是否启用了任何2FA方式"""
         return self.totp_enabled
-    
+
     def is_phone_verified(self):
         """检查手机号是否已验证"""
         return bool(self.phone_number and self.phone_verified)
@@ -95,16 +95,16 @@ class UserProfile(BaseModel):
         cache_key = self.get_sms_cache_key(phone_number)
         if not cache_key:
             return False
-        
+
         # 存储验证码，设置过期时间
         expire_seconds = getattr(settings, 'SMS_CODE_EXPIRE_SECONDS', 300)
         cache.set(cache_key, code, expire_seconds)
-        
+
         # 设置重发限制
         resend_interval = getattr(settings, 'SMS_CODE_RESEND_INTERVAL', 60)
         resend_cache_key = self.get_sms_resend_cache_key(phone_number)
         cache.set(resend_cache_key, '1', resend_interval)
-        
+
         logger.info(f"验证码已存储: {cache_key}, 过期时间: {expire_seconds}秒")
         return True
 
@@ -113,50 +113,50 @@ class UserProfile(BaseModel):
         cache_key = self.get_sms_cache_key(phone_number)
         if not cache_key:
             return False
-        
+
         stored_code = cache.get(cache_key)
         if not stored_code:
             logger.warning(f"验证码不存在或已过期: {cache_key}")
             return False
-        
+
         if str(stored_code) == str(code):
             # 验证成功，删除缓存的验证码
             cache.delete(cache_key)
             logger.info(f"验证码验证成功: {cache_key}")
             return True
-        
+
         logger.warning(f"验证码不匹配: {cache_key}")
         return False
 
     def send_sms_code(self, phone_number=None):
         """发送短信验证码"""
         from project.apps.authentication.sms import AliyunSMSService
-        
+
         phone = phone_number or self.phone_number
         if not phone:
             raise ValueError("手机号不能为空")
-        
+
         # 检查是否可以发送
         if not self.can_send_sms(phone):
             resend_interval = getattr(settings, 'SMS_CODE_RESEND_INTERVAL', 60)
             raise ValueError(f"发送过于频繁，请{resend_interval}秒后再试")
-        
+
         # 生成验证码
         code = self.generate_sms_code()
-        
+
         # 存储验证码
         self.store_sms_code(code, phone)
-        
+
         # 发送短信
         sms_service = AliyunSMSService()
         result = sms_service.send_code(str(phone), code)
-        
+
         if not result:
             # 发送失败，清除缓存
             cache_key = self.get_sms_cache_key(phone)
             cache.delete(cache_key)
             raise Exception("短信发送失败")
-        
+
         return True
 
     # ========== 邮箱验证码（用于邮箱绑定） ==========
