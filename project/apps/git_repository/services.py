@@ -204,12 +204,12 @@ class PlatformGitService:
             git_path = user_assets_path / '.git'
             if not git_path.exists():
                 # 初次克隆 - 确保父目录存在，但不创建目标目录
-                # user_assets_path.parent.mkdir(parents=True, exist_ok=True)
+                user_assets_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # 如果目标目录存在但没有 .git，需要先删除
-                # if user_assets_path.exists():
-                #     import shutil
-                #     shutil.rmtree(user_assets_path)
+                if user_assets_path.exists():
+                    import shutil
+                    shutil.rmtree(user_assets_path)
 
                 # 初次克隆
                 self._clone_repository(git_repo, user_assets_path)
