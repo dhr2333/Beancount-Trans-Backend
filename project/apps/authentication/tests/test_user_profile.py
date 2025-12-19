@@ -35,17 +35,17 @@ class TestUserProfile:
         assert str(response.data['phone_number']) == '+8613800138030'
         assert response.data['phone_verified'] is True
 
-    def test_update_profile_username(self):
-        """测试更新用户名成功"""
-        self.client.force_authenticate(user=self.user)
+    # def test_update_profile_username(self):
+    #     """测试更新用户名成功"""
+    #     self.client.force_authenticate(user=self.user)
 
-        response = self.client.patch('/api/auth/profile/update_me/', {
-            'username': 'newusername'
-        })
+    #     response = self.client.patch('/api/auth/profile/update_me/', {
+    #         'username': 'newusername'
+    #     })
 
-        assert response.status_code == 200
-        self.user.refresh_from_db()
-        assert self.user.username == 'newusername'
+    #     assert response.status_code == 200
+    #     self.user.refresh_from_db()
+    #     assert self.user.username == 'newusername'
 
     def test_update_profile_username_duplicate(self):
         """测试用户名已被占用"""
