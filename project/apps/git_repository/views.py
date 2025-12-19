@@ -121,7 +121,7 @@ class GitRepositoryViewSet(ViewSet):
             500: OpenApiResponse(description="重新生成失败")
         }
     )
-    @action(detail=False, methods=['POST'], url_path='deploy-key')
+    @action(detail=False, methods=['POST'], url_path='deploy-key/regenerate')
     def regenerate_deploy_key(self, request: Request) -> Response:
         """重新生成 Deploy Key 并下载"""
         try:
