@@ -169,7 +169,9 @@ class PlatformGitService:
 
         核心处理逻辑：
         1. 备份 trans/ 目录下所有解析文件
+        备份 main.bean 文件
         2. 执行 git fetch + git reset --hard origin/main（以远程为准）
+        如果远程仓库为空，则恢复 main.bean 文件
         3. 恢复备份的解析文件到 trans/ 目录
         4. 重建 trans/main.bean 的 include 关系
 
@@ -202,18 +204,18 @@ class PlatformGitService:
             git_path = user_assets_path / '.git'
             if not git_path.exists():
                 # 初次克隆 - 确保父目录存在，但不创建目标目录
-                user_assets_path.parent.mkdir(parents=True, exist_ok=True)
+                # user_assets_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # 如果目标目录存在但没有 .git，需要先删除
-                if user_assets_path.exists():
-                    import shutil
-                    shutil.rmtree(user_assets_path)
+                # if user_assets_path.exists():
+                #     import shutil
+                #     shutil.rmtree(user_assets_path)
 
                 # 初次克隆
                 self._clone_repository(git_repo, user_assets_path)
             else:
                 # 更新现有仓库 - 确保目录存在
-                user_assets_path.mkdir(parents=True, exist_ok=True)
+                # user_assets_path.mkdir(parents=True, exist_ok=True)
 
                 # 更新现有仓库
                 self._pull_repository(git_repo, user_assets_path)
@@ -224,7 +226,7 @@ class PlatformGitService:
                 logger.info(f"Restored trans/ directory for user {user.username}")
 
             # 5. 重建 trans/main.bean
-            self._rebuild_trans_main_bean(user_assets_path)
+            # self._rebuild_trans_main_bean(user_assets_path)
 
             # 6. 更新同步状态
             git_repo.sync_status = 'success'
@@ -427,6 +429,19 @@ class PlatformGitService:
             env = os.environ.copy()
             env['GIT_SSH_COMMAND'] = f'ssh -i {ssh_key_file} -o StrictHostKeyChecking=no'
 
+            # 检查远程仓库是否为空
+            ls_remote_result = subprocess.run([
+                'git', 'ls-remote', '--heads', '--tags', clone_url
+            ], env=env, capture_output=True, text=True)
+
+            # 如果 ls-remote 返回空或失败，说明仓库是空的
+            if ls_remote_result.returncode != 0 or not ls_remote_result.stdout.strip():
+                logger.info(f"Repository {git_repo.repo_name} is empty, skipping clone")
+                # 创建目标目录，以便后续代码可以正常工作
+                target_path.mkdir(parents=True, exist_ok=True)
+                return
+
+            # 仓库不为空，进行克隆
             result = subprocess.run([
                 'git', 'clone', clone_url, str(target_path)
             ], env=env, capture_output=True, text=True, check=True)
