@@ -117,7 +117,7 @@ class PlatformGitService:
             # 4. 配置 Webhook (如果有配置)
             if settings.GITEA_WEBHOOK_SECRET:
                 try:
-                    webhook_url = f"{settings.BASE_URL}/api/git/webhook/"
+                    webhook_url = f"https://{settings.BASE_URL}/api/git/webhook/"
                     self.gitea_client.create_webhook(
                         repo_name=repo_name,
                         webhook_url=webhook_url
