@@ -380,8 +380,7 @@ class PlatformGitService:
         流程：
         1. 从 GitHub 获取模板仓库内容
         2. 为用户定制模板内容
-        3. 推送内容到用户仓库
-        4. 同步到本地用户目录
+        3. 在用户目录中初始化 git 仓库、提交并推送
         """
         from .template_service import GitHubTemplateService, TemplateServiceException
 
@@ -396,11 +395,8 @@ class PlatformGitService:
                 # 2. 为用户定制模板内容
                 template_service.customize_template_for_user(template_dir, git_repo.owner)
 
-                # 3. 推送内容到用户仓库
-                self._push_template_to_repository(git_repo, template_dir)
-
-                # 4. 同步到本地用户目录（保留现有 trans/ 目录）
-                self._sync_template_to_local(git_repo, template_dir)
+                # 3. 在用户目录中初始化 git 仓库、提交并推送
+                self._init_and_push_template_in_user_directory(git_repo, template_dir)
 
                 logger.info(f"成功为仓库 {git_repo.repo_name} 初始化模板内容")
 
@@ -661,7 +657,126 @@ class PlatformGitService:
         BeanFileManager.update_main_bean_include(user, None, 'add')
         logger.info(f"Rebuilt standard main.bean for user {user.username}")
 
+    def _init_and_push_template_in_user_directory(self, git_repo: GitRepository, template_dir: Path):
+        """在用户目录中初始化 git 仓库、提交并推送模板内容
+
+        流程：
+        1. 确保用户目录存在
+        2. 备份现有的 trans/ 目录（如果存在）
+        3. 在用户目录中初始化 git 仓库（git init）
+        4. 配置 git 用户信息
+        5. 添加 origin 远程仓库
+        6. 复制模板文件到用户目录（跳过 trans/）
+        7. 恢复 trans/ 目录
+        8. 添加所有文件（git add .，由于 .gitignore，trans/ 不会被添加）
+        9. 创建初始提交（git commit）
+        10. 推送到远程（git push origin main）
+
+        Args:
+            git_repo: Git 仓库对象
+            template_dir: 模板内容目录
+        """
+        user_assets_path = self.assets_base_path / git_repo.repo_name
+
+        # 1. 确保用户目录存在
+        user_assets_path.mkdir(parents=True, exist_ok=True)
+
+        # 2. 备份现有的 trans/ 目录（如果存在）
+        trans_path = user_assets_path / 'trans'
+        trans_backup = None
+        if trans_path.exists():
+            trans_backup = self._backup_trans_directory(trans_path)
+            logger.info(f"备份现有 trans/ 目录")
+
+        # 准备 SSH 密钥
+        ssh_key_file = self._prepare_ssh_key(git_repo)
+
+        try:
+            # 设置 Git 环境变量
+            env = os.environ.copy()
+            env['GIT_SSH_COMMAND'] = f'ssh -i {ssh_key_file} -o StrictHostKeyChecking=no'
+
+            # 切换到用户目录
+            original_cwd = os.getcwd()
+            os.chdir(user_assets_path)
+
+            try:
+                # 3. 在用户目录中初始化 git 仓库（如果还没有）
+                git_path = user_assets_path / '.git'
+                if not git_path.exists():
+                    # 直接创建 main 分支
+                    subprocess.run(['git', 'init', '-b', 'main'], check=True, capture_output=True, text=True)
+                    logger.info(f"初始化 git 仓库: {user_assets_path}")
+
+                # 4. 配置 git 用户信息
+                subprocess.run(['git', 'config', 'user.name', 'Beancount-Trans Platform'], check=True)
+                subprocess.run(['git', 'config', 'user.email', 'platform@beancount-trans.local'], check=True)
+
+                # 5. 添加 origin 远程仓库
+                clone_url = git_repo.ssh_clone_url
+                subprocess.run(['git', 'remote', 'add', 'origin', clone_url], 
+                             check=True, capture_output=True, text=True)
+
+                # 6. 复制模板文件到用户目录（跳过 trans/ 目录）
+                for item in template_dir.iterdir():
+                    target_path = user_assets_path / item.name
+
+                    # 跳过 trans/ 目录，保留现有内容
+                    if item.name == 'trans':
+                        continue
+
+                    if item.is_file():
+                        shutil.copy2(item, target_path)
+                    elif item.is_dir():
+                        if target_path.exists():
+                            shutil.rmtree(target_path)
+                        shutil.copytree(item, target_path)
+
+                # 7. 恢复 trans/ 目录
+                if trans_backup:
+                    self._restore_trans_directory(trans_backup, trans_path)
+                    logger.info(f"恢复 trans/ 目录")
+                else:
+                    # 如果没有现有的 trans/ 目录，创建基本结构
+                    self._ensure_trans_directory_structure(git_repo.owner.username)
+
+                # 8. 添加所有文件（由于 .gitignore，trans/ 不会被添加）
+                subprocess.run(['git', 'add', '.'], check=True, capture_output=True, text=True)
+
+                # 9. 创建初始提交
+                commit_message = """feat: 基于 Beancount-Trans-Assets 模板初始化仓库
+
+- 添加标准账户结构
+- 添加年度账本模板  
+- 配置 Fava 显示选项
+- 设置 Git 忽略规则"""
+
+                subprocess.run(['git', 'commit', '-m', commit_message], check=True, capture_output=True, text=True)
+                logger.info(f"创建初始提交")
+
+                # 10. 推送到远程（使用 origin）
+                subprocess.run([
+                    'git', 'push', '-u', 'origin', 'main'
+                ], env=env, check=True, capture_output=True, text=True)
+
+                logger.info(f"成功推送模板内容到仓库 {git_repo.repo_name}")
+
+            finally:
+                os.chdir(original_cwd)
+
+        finally:
+            # 清理 SSH 密钥文件
+            if os.path.exists(ssh_key_file):
+                os.remove(ssh_key_file)
+            # 清理备份
+            if trans_backup and Path(trans_backup).exists():
+                shutil.rmtree(trans_backup, ignore_errors=True)
+
     def _push_template_to_repository(self, git_repo: GitRepository, template_dir: Path):
+        """[已废弃] 将模板内容推送到 Gitea 仓库
+
+        此方法已废弃，请使用 _init_and_push_template_in_user_directory 方法。
+        """
         """将模板内容推送到 Gitea 仓库
 
         Args:
@@ -744,7 +859,9 @@ class PlatformGitService:
         logger.debug(f"复制模板文件到工作目录: {work_dir}")
 
     def _sync_template_to_local(self, git_repo: GitRepository, template_dir: Path):
-        """同步模板内容到本地用户目录（保留现有 trans/ 目录）
+        """[已废弃] 同步模板内容到本地用户目录（保留现有 trans/ 目录）
+
+        此方法已废弃，请使用 _init_and_push_template_in_user_directory 方法。
 
         Args:
             git_repo: Git 仓库对象
