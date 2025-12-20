@@ -20,6 +20,17 @@ def parse_single_file_task(self, file_id, user_id, args):
     task_id = self.request.id
 
     try:
+        # 获取ParseFile对象，检查是否已被取消
+        parse_file = ParseFile.objects.get(file_id=file_id)
+        if parse_file.status == 'cancelled':
+            # 更新Redis状态
+            cache.set(f'task_status:{task_id}', {
+                'status': 'cancelled',
+                'file_id': file_id,
+                'error': None
+            }, timeout=24*3600)
+            return {'status': 'cancelled', 'file_id': file_id}
+
         # 更新Redis状态为processing
         cache.set(f'task_status:{task_id}', {
             'status': 'processing',
@@ -27,8 +38,7 @@ def parse_single_file_task(self, file_id, user_id, args):
             'error': None
         }, timeout=24*3600)
 
-        # 获取ParseFile对象
-        parse_file = ParseFile.objects.get(file_id=file_id)
+        # 更新状态为processing
         parse_file.status = 'processing'
         parse_file.save()
 
@@ -69,18 +79,18 @@ def parse_single_file_task(self, file_id, user_id, args):
         service.analyze_single_file(uploaded_file, args)
 
         # 更新状态
-        parse_file.status = 'success'
+        parse_file.status = 'parsed'
         parse_file.save()
 
-        # 更新状态为success
+        # 更新状态为parsed
         cache.set(f'task_status:{task_id}', {
-            'status': 'success',
+            'status': 'parsed',
             'file_id': file_id,
             'error': None
         }, timeout=24*3600)
 
         return {
-            'status': 'success',
+            'status': 'parsed',
             'file_id': file_id
         }
 

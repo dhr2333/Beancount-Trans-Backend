@@ -359,6 +359,14 @@ include "trans/main.bean"
             os.remove(bean_path)
 
     @staticmethod
+    def clear_bean_file(user_or_username, bean_filename):
+        """清空对应的.bean文件内容（保留文件）"""
+        bean_path = BeanFileManager.get_bean_file_path(user_or_username, bean_filename)
+        if os.path.exists(bean_path):
+            with open(bean_path, 'w', encoding='utf-8') as f:
+                f.write('')  # 清空内容
+
+    @staticmethod
     def update_main_bean_username(user_or_username, new_username):
         """更新 main.bean 文件中的用户名引用
         

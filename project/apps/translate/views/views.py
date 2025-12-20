@@ -3,6 +3,7 @@ import logging
 import uuid
 import json
 import time
+import os
 from celery.result import GroupResult
 from celery import group
 from django.core.cache import cache
@@ -328,7 +329,7 @@ class TaskGroupStatusView(APIView):
                 'status': task_status['status'],
                 'error': task_status.get('error')
             })
-            if task_status['status'] in ['success', 'failed']:
+            if task_status['status'] in ['parsed', 'failed', 'cancelled']:
                 completed_count += 1
 
         # 检查整体状态
@@ -349,3 +350,64 @@ class TaskGroupStatusView(APIView):
             'progress': f'{completed_count}/{len(tasks_status)}',
             'tasks': tasks_status
         })
+
+
+class CancelParseView(APIView):
+    """取消解析接口
+
+    取消指定文件的解析任务
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        file_ids = request.data.get('file_ids', [])
+        if not file_ids:
+            return Response({'error': '缺少文件ID列表'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from project.apps.file_manager.models import File
+        from project.utils.file import BeanFileManager
+
+        cancelled_files = []
+        for file_id in file_ids:
+            try:
+                # 验证文件是否属于当前用户
+                file_obj = File.objects.get(id=file_id, owner=request.user)
+                
+                # 获取或创建 ParseFile 对象
+                parse_file, _ = ParseFile.objects.get_or_create(file_id=file_id)
+                
+                # 检查状态是否可以取消（pending/processing/parsed都可以取消）
+                # parsed 状态取消时清除 .bean 文件内容
+                if parse_file.status not in ['pending', 'processing', 'parsed']:
+                    continue  # 跳过不能取消的状态
+                
+                # 更新状态为 cancelled
+                parse_file.status = 'cancelled'
+                parse_file.save()
+                
+                # 清空对应的 .bean 文件内容
+                base_name = os.path.splitext(file_obj.name)[0]
+                bean_filename = f"{base_name}.bean"
+                BeanFileManager.clear_bean_file(request.user, bean_filename)
+                
+                cancelled_files.append(file_id)
+                
+                # 注意：这里无法直接撤销已提交到 Celery 队列的任务
+                # 任务执行时会检查 ParseFile.status，如果已经是 cancelled 会直接返回
+                # 这样可以实现软取消：标记状态为 cancelled，任务开始执行时发现已取消就不处理
+                        
+            except File.DoesNotExist:
+                logger.warning(f"文件不存在或不属于当前用户: file_id={file_id}, user={request.user.username}")
+                continue
+            except Exception as e:
+                logger.error(f"取消解析失败: file_id={file_id}, error={str(e)}")
+                continue
+
+        if not cancelled_files:
+            return Response({'error': '没有可取消的文件'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'message': f'成功处理 {len(cancelled_files)} 个文件（已取消解析并清除解析结果）',
+            'cancelled_files': cancelled_files
+        }, status=status.HTTP_200_OK)

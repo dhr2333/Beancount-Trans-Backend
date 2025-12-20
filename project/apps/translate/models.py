@@ -93,8 +93,9 @@ class ParseFile(models.Model):
             ('unprocessed', '未解析'),
             ('pending', '待解析'),
             ('processing', '解析中'),
-            ('success', '解析成功'),
-            ('failed', '解析失败')
+            ('parsed', '已解析'),
+            ('failed', '解析失败'),
+            ('cancelled', '取消解析')
         ]
     )
     error_message = models.TextField(null=True, blank=True)

@@ -11,4 +11,5 @@ urlpatterns = [
     path('multi', views.MultiBillAnalyzeView.as_view(), name='multi'),
     path('task_group_status', views.TaskGroupStatusView.as_view(), name='task_group_status'),
     path('reparse', views.ReparseEntryView.as_view(), name='reparse'),
+    path('cancel', views.CancelParseView.as_view(), name='cancel'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
