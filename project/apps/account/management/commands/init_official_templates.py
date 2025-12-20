@@ -1035,7 +1035,8 @@ class Command(BaseCommand):
                 admin_user.username,
                 file_config['name']
             )
-            BeanFileManager.update_main_bean_include(
+            # 上传文件时即向trans/main.bean增加对应文件的include
+            BeanFileManager.update_trans_main_bean_include(
                 admin_user.username,
                 bean_filename,
                 action='add'

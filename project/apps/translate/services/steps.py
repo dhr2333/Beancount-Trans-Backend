@@ -216,15 +216,12 @@ class FileWritingStep(Step):
             bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename)
 
             # 确保trans目录存在
-            BeanFileManager.ensure_trans_directory(user)
+            # BeanFileManager.ensure_trans_directory(user)
 
             # 写入文件到trans目录
             with open(bean_file_path, 'w', encoding='utf-8') as f:
                 f.write(formatted_data)
 
-            # 追加到trans/main.bean（追加方案）
-            base_name = os.path.splitext(original_filename)[0]
-            bean_filename = f"{base_name}.bean"
-            BeanFileManager.update_trans_main_bean_include(user, bean_filename, action='add')
+            # 注意：include语句的添加已在上传文件时完成，解析功能仅处理文件内容的写入
 
         return context
