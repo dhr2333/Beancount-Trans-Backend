@@ -79,7 +79,8 @@ def create_sample_files_for_new_user(sender, instance, created, **kwargs):
                 instance,
                 admin_file.name
             )
-            BeanFileManager.update_main_bean_include(
+            # 上传文件时即向trans/main.bean增加对应文件的include
+            BeanFileManager.update_trans_main_bean_include(
                 instance,
                 bean_filename,
                 action='add'
