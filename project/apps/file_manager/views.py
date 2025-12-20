@@ -145,6 +145,27 @@ class FileViewSet(ModelViewSet):
         directory_id = request.data.get('directory')
         directory = get_object_or_404(Directory, id=directory_id)
         uploaded_file = request.FILES['file']
+        
+        # 检测是否存在同名文件（排除当前目录）
+        existing_files = File.objects.filter(
+            owner=request.user,
+            name=uploaded_file.name
+        ).exclude(directory=directory).select_related('directory')
+        
+        if existing_files.exists():
+            # 构建已存在文件的目录路径信息
+            existing_files_info = [
+                {
+                    'directory_path': file.directory.get_path(),
+                    'directory_id': file.directory.id
+                }
+                for file in existing_files
+            ]
+            return Response({
+                "error": "存在同名文件，为避免解析结果冲突，请重命名文件",
+                "existing_files": existing_files_info
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         file_hash = generate_file_hash(uploaded_file)
         file_extension = os.path.splitext(uploaded_file.name)[1]
         storage_name = f"{file_hash}{file_extension}"
