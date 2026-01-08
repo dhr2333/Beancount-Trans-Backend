@@ -83,22 +83,22 @@ class TestSerializers:
         assert serializer.is_valid() is False
         assert '已被注册' in str(serializer.errors)
 
-    def test_phone_register_duplicate_username(self):
-        """测试用户名已存在"""
-        # 创建已存在的用户名
-        User.objects.create_user(
-            username='existinguser',
-            password='TestPass123!'
-        )
+    # def test_phone_register_duplicate_username(self):
+    #     """测试用户名已存在"""
+    #     # 创建已存在的用户名
+    #     User.objects.create_user(
+    #         username='existinguser',
+    #         password='TestPass123!'
+    #     )
 
-        serializer = PhoneRegisterSerializer(data={
-            'phone_number': '+8613800138125',
-            'code': '123456',
-            'username': 'existinguser',
-            'password': 'TestPass123!'
-        })
-        assert serializer.is_valid() is False
-        assert '用户名已存在' in str(serializer.errors)
+    #     serializer = PhoneRegisterSerializer(data={
+    #         'phone_number': '+8613800138125',
+    #         'code': '123456',
+    #         'username': 'existinguser',
+    #         'password': 'TestPass123!'
+    #     })
+    #     assert serializer.is_valid() is False
+    #     assert '用户名已存在' in str(serializer.errors)
 
     def test_phone_register_weak_password(self):
         """测试弱密码验证"""

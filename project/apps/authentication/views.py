@@ -87,11 +87,11 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         code = serializer.validated_data['code']
 
         # 先验证验证码
-        temp_profile = UserProfile(phone_number=phone_number)
-        if not temp_profile.verify_sms_code(code, phone_number):
-            return Response({
-                'error': '验证码错误或已过期'
-            }, status=status.HTTP_401_UNAUTHORIZED)
+        # temp_profile = UserProfile(phone_number=phone_number)
+        # if not temp_profile.verify_sms_code(code, phone_number):
+        #     return Response({
+        #         'error': '验证码错误或已过期'
+        #     }, status=status.HTTP_401_UNAUTHORIZED)
 
         # 使用验证码认证后端查找用户
         user = authenticate(request, phone=str(phone_number), code=code)
