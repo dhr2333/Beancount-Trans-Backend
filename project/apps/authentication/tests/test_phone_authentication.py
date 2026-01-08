@@ -176,7 +176,7 @@ class TestPhoneAuthentication:
         profile.store_sms_code('123456', phone_number)
 
         # 先创建一个用户，使用可能冲突的用户名
-        User.objects.create_user(username='user_13800138011', password='TestPass123!')
+        User.objects.create_user(username='13800138011', password='TestPass123!')
 
         # 注册时应该自动生成不冲突的用户名
         response = self.client.post('/api/auth/phone/register/', {

@@ -1,6 +1,48 @@
 import re
-from typing import Tuple
+from typing import Tuple, Union
 from django.contrib.auth.models import User
+
+
+def extract_local_phone_number(phone_number) -> str:
+    """从手机号中提取本地号码部分（不含国家代码）
+    
+    PhoneNumberField 对象可能包含国家代码（如 +86），此函数用于提取本地号码部分。
+    例如：+8613800138000 -> 13800138000
+    
+    Args:
+        phone_number: PhoneNumberField 对象或字符串
+        
+    Returns:
+        str: 本地号码部分（不含国家代码）
+    """
+    if not phone_number:
+        return ''
+    
+    # 尝试使用 national_number 属性（phonenumbers 库提供）
+    if hasattr(phone_number, 'national_number'):
+        return str(phone_number.national_number)
+    
+    # 如果无法获取 national_number，手动处理字符串
+    phone_str = str(phone_number)
+    
+    # 去掉 + 号
+    if phone_str.startswith('+'):
+        phone_str = phone_str[1:]
+    
+    # 处理中国手机号：去掉 86 前缀
+    if phone_str.startswith('86'):
+        # 检查是否是有效的中国手机号（11位，以1开头）
+        remaining = phone_str[2:]
+        if len(remaining) == 11 and remaining.startswith('1'):
+            return remaining
+    
+    # 如果已经是11位数字且以1开头，直接返回
+    digits_only = ''.join(filter(str.isdigit, phone_str))
+    if len(digits_only) == 11 and digits_only.startswith('1'):
+        return digits_only
+    
+    # 其他情况：提取所有数字（作为备选方案）
+    return ''.join(filter(str.isdigit, phone_str))
 
 
 def is_valid_username_format(username: str, allow_phone_format: bool = False) -> bool:

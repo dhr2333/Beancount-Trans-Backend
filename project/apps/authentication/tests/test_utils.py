@@ -3,7 +3,8 @@ from django.contrib.auth.models import User
 from project.apps.authentication.utils import (
     is_valid_username_format,
     generate_unique_username,
-    validate_username_format
+    validate_username_format,
+    extract_local_phone_number
 )
 
 
@@ -141,4 +142,45 @@ class TestUsernameUtils:
         is_valid, message = validate_username_format('13800138000', allow_phone_format=True)
         assert is_valid is True
         assert message == ''
+
+    def test_extract_local_phone_number_e164_format(self):
+        """测试从 E164 格式手机号中提取本地号码"""
+        # 测试 +86 开头的中国手机号
+        result = extract_local_phone_number('+8613800138000')
+        assert result == '13800138000'
+        
+        result = extract_local_phone_number('+8613800138001')
+        assert result == '13800138001'
+
+    def test_extract_local_phone_number_without_plus(self):
+        """测试不带 + 号的手机号"""
+        result = extract_local_phone_number('8613800138002')
+        assert result == '13800138002'
+
+    def test_extract_local_phone_number_local_only(self):
+        """测试已经是本地号码的情况"""
+        result = extract_local_phone_number('13800138003')
+        assert result == '13800138003'
+
+    def test_extract_local_phone_number_phone_number_field(self):
+        """测试 PhoneNumberField 对象（如果有 national_number 属性）"""
+        # 创建一个模拟对象
+        class MockPhoneNumber:
+            def __init__(self, national_number):
+                self.national_number = national_number
+        
+        mock_phone = MockPhoneNumber('13800138004')
+        result = extract_local_phone_number(mock_phone)
+        assert result == '13800138004'
+
+    def test_extract_local_phone_number_empty(self):
+        """测试空值"""
+        assert extract_local_phone_number('') == ''
+        assert extract_local_phone_number(None) == ''
+
+    def test_extract_local_phone_number_invalid_format(self):
+        """测试无效格式（应该返回所有数字作为备选）"""
+        # 如果格式不符合预期，应该返回所有数字
+        result = extract_local_phone_number('+1234567890')
+        assert result.isdigit()  # 应该返回数字字符串
 

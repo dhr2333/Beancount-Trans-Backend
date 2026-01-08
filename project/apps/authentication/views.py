@@ -13,7 +13,7 @@ from django.utils.crypto import get_random_string
 from allauth.socialaccount.models import SocialAccount
 
 from project.apps.authentication.models import UserProfile
-from project.apps.authentication.utils import generate_unique_username
+from project.apps.authentication.utils import generate_unique_username, extract_local_phone_number
 from project.apps.authentication.serializers import (
     PhoneSendCodeSerializer,
     PhoneLoginByCodeSerializer,
@@ -100,10 +100,10 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         if not user:
             try:
                 with transaction.atomic():
-                    # 根据手机号生成唯一用户名
-                    digits = ''.join(filter(str.isdigit, str(phone_number)))
-                    if digits:
-                        base_username = digits
+                    # 根据手机号生成唯一用户名（只使用本地号码部分，去掉国家代码）
+                    local_number = extract_local_phone_number(phone_number)
+                    if local_number:
+                        base_username = local_number
                     else:
                         base_username = get_random_string(8)
 
@@ -268,12 +268,12 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                         'error': '验证码错误或已过期'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-                # 根据手机号生成唯一用户名
-                digits = ''.join(filter(str.isdigit, str(phone_number)))
-                if digits:
-                    base_username = f"{digits}"
+                # 根据手机号生成唯一用户名（只使用本地号码部分，去掉国家代码）
+                local_number = extract_local_phone_number(phone_number)
+                if local_number:
+                    base_username = local_number
                 else:
-                    base_username = f"{get_random_string(8)}"
+                    base_username = get_random_string(8)
 
                 username = generate_unique_username(base_username)
 
