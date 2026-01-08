@@ -13,6 +13,7 @@ from django.utils.crypto import get_random_string
 from allauth.socialaccount.models import SocialAccount
 
 from project.apps.authentication.models import UserProfile
+from project.apps.authentication.utils import generate_unique_username
 from project.apps.authentication.serializers import (
     PhoneSendCodeSerializer,
     PhoneLoginByCodeSerializer,
@@ -44,22 +45,6 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             return [AllowAny()]
         return [IsAuthenticated()]
 
-    @staticmethod
-    def _generate_available_username(base_username: str) -> str:
-        """根据候选值生成唯一用户名"""
-        base = (base_username or '').strip()
-        if len(base) < 3:
-            base = f"user_{base}" if base else 'user'
-        base = base[:150]
-
-        candidate = base
-        suffix = 1
-        while User.objects.filter(username=candidate).exists():
-            tail = f"_{suffix}"
-            allowed = 150 - len(tail)
-            candidate = f"{base[:allowed]}{tail}"
-            suffix += 1
-        return candidate
 
     @action(detail=False, methods=['post'], url_path='send-code')
     def send_code(self, request):
@@ -93,7 +78,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'], url_path='login-by-code')
     def login_by_code(self, request):
-        """验证码登录"""
+        """验证码登录（如果用户不存在则自动注册）"""
         serializer = PhoneLoginByCodeSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -101,46 +86,94 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
 
-        # 使用验证码认证后端
+        # 先验证验证码
+        temp_profile = UserProfile(phone_number=phone_number)
+        if not temp_profile.verify_sms_code(code, phone_number):
+            return Response({
+                'error': '验证码错误或已过期'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        # 使用验证码认证后端查找用户
         user = authenticate(request, phone=str(phone_number), code=code)
 
-        if user:
-            # 更新最后登录时间
-            user.last_login = timezone.now()
-            user.save(update_fields=['last_login'])
+        # 如果用户不存在但验证码正确，自动注册
+        if not user:
+            try:
+                with transaction.atomic():
+                    # 根据手机号生成唯一用户名
+                    digits = ''.join(filter(str.isdigit, str(phone_number)))
+                    if digits:
+                        base_username = digits
+                    else:
+                        base_username = get_random_string(8)
 
-            # 生成 JWT token
-            refresh = RefreshToken.for_user(user)
+                    username = generate_unique_username(base_username)
 
-            logger.info(f"用户 {user.username} 通过验证码登录成功")
+                    # 创建用户（不设置密码）
+                    user = User.objects.create_user(
+                        username=username,
+                        password=None,
+                        email=''
+                    )
 
-            # 检查是否需要2FA验证
-            profile = user.profile
-            requires_2fa = profile.has_2fa_enabled()
+                    # 创建 UserProfile
+                    profile = user.profile
+                    profile.phone_number = phone_number
+                    profile.phone_verified = True
+                    profile.save()
 
-            response_data = {
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-                'user': {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                    'phone_number': str(phone_number)
-                },
-                'requires_2fa': requires_2fa
-            }
+                    # 应用初始化数据（官方账户模板和映射模板）
+                    try:
+                        from project.apps.account.signals import apply_official_account_templates
+                        from project.apps.maps.signals import apply_official_templates
 
-            if requires_2fa:
-                # 如果启用了2FA，返回需要验证的提示
-                response_data['2fa_methods'] = []
-                if profile.totp_enabled:
-                    response_data['2fa_methods'].append('totp')
+                        apply_official_account_templates(user)
+                        logger.info(f"为用户 {username} 应用官方账户模板成功")
 
-            return Response(response_data, status=status.HTTP_200_OK)
-        else:
-            return Response({
-                'error': '验证码错误或手机号未注册'
-            }, status=status.HTTP_401_UNAUTHORIZED)
+                        apply_official_templates(user)
+                        logger.info(f"为用户 {username} 应用官方映射模板成功")
+                    except Exception as init_error:
+                        logger.warning(f"为用户 {username} 应用初始化数据时出错: {str(init_error)}")
+
+                    logger.info(f"用户 {username} 通过验证码登录自动注册成功")
+            except Exception as e:
+                logger.error(f"自动注册失败: {str(e)}")
+                return Response({
+                    'error': '注册失败，请稍后重试'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 更新最后登录时间
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
+        # 生成 JWT token
+        refresh = RefreshToken.for_user(user)
+
+        logger.info(f"用户 {user.username} 通过验证码登录成功")
+
+        # 检查是否需要2FA验证
+        profile = user.profile
+        requires_2fa = profile.has_2fa_enabled()
+
+        response_data = {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'phone_number': str(phone_number)
+            },
+            'requires_2fa': requires_2fa
+        }
+
+        if requires_2fa:
+            # 如果启用了2FA，返回需要验证的提示
+            response_data['2fa_methods'] = []
+            if profile.totp_enabled:
+                response_data['2fa_methods'].append('totp')
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='login-by-password')
     def login_by_password(self, request):
@@ -217,15 +250,13 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'])
     def register(self, request):
-        """手机号注册"""
+        """手机号注册（用户名和密码自动生成）"""
         serializer = PhoneRegisterSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         phone_number = serializer.validated_data['phone_number']
         code = serializer.validated_data['code']
-        username = (serializer.validated_data.get('username') or '').strip()
-        password = (serializer.validated_data.get('password') or '').strip()
         email = (serializer.validated_data.get('email') or '').strip()
 
         try:
@@ -237,23 +268,19 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                         'error': '验证码错误或已过期'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-                # 若未提供用户名则根据手机号生成一个唯一用户名
-                if not username:
-                    digits = ''.join(filter(str.isdigit, str(phone_number)))
-                    if digits:
-                        base_username = f"user_{digits}"
-                    else:
-                        base_username = f"user_{get_random_string(8)}"
+                # 根据手机号生成唯一用户名
+                digits = ''.join(filter(str.isdigit, str(phone_number)))
+                if digits:
+                    base_username = f"{digits}"
+                else:
+                    base_username = f"{get_random_string(8)}"
 
-                    candidate = base_username
-                    while User.objects.filter(username=candidate).exists():
-                        candidate = f"{base_username}_{get_random_string(4)}"
-                    username = candidate
+                username = generate_unique_username(base_username)
 
-                # 创建用户
+                # 创建用户（不设置密码）
                 user = User.objects.create_user(
                     username=username,
-                    password=password or None,
+                    password=None,
                     email=email or ''
                 )
 

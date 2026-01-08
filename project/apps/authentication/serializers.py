@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from phonenumber_field.serializerfields import PhoneNumberField
 from project.apps.authentication.models import UserProfile
+from project.apps.authentication.utils import validate_username_format
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class PhoneLoginByPasswordSerializer(serializers.Serializer):
 
 
 class PhoneRegisterSerializer(serializers.Serializer):
-    """手机号注册序列化器"""
+    """手机号注册序列化器（用户名和密码自动生成）"""
     phone_number = PhoneNumberField(
         required=True,
         help_text='手机号'
@@ -80,46 +81,16 @@ class PhoneRegisterSerializer(serializers.Serializer):
         max_length=6,
         help_text='6位数字验证码'
     )
-    username = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        max_length=150,
-        help_text='用户名（可选）'
-    )
-    password = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        write_only=True,
-        help_text='密码（可选）'
-    )
     email = serializers.EmailField(
         required=False,
         allow_blank=True,
         help_text='邮箱（可选）'
     )
 
-    def validate_username(self, value):
-        """验证用户名是否已存在"""
-        value = value.strip()
-        if not value:
-            return ''
-        if len(value) < 3 or len(value) > 150:
-            raise serializers.ValidationError("用户名长度为3-150个字符")
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("用户名已存在")
-        return value
-
     def validate_phone_number(self, value):
         """验证手机号是否已被注册"""
         if UserProfile.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError("该手机号已被注册")
-        return value
-
-    def validate_password(self, value):
-        value = value.strip()
-        if not value:
-            return ''
-        validate_password(value)
         return value
 
     def validate_code(self, value):
@@ -205,7 +176,13 @@ class UserUpdateSerializer(serializers.Serializer):
     )
 
     def validate_username(self, value):
-        """验证用户名是否已被其他用户使用"""
+        """验证用户名是否已被其他用户使用，并检查格式"""
+        # 验证格式
+        is_valid, error_message = validate_username_format(value)
+        if not is_valid:
+            raise serializers.ValidationError(error_message)
+
+        # 验证唯一性
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             if User.objects.filter(username=value).exclude(id=request.user.id).exists():
