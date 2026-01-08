@@ -64,6 +64,64 @@ class TestUserProfile:
         assert response.status_code == 400
         assert '已被其他用户使用' in str(response.data)
 
+    def test_update_profile_username_git_repo_format(self):
+        """测试用户名不能使用 Git 仓库目录名格式"""
+        self.client.force_authenticate(user=self.user)
+
+        # 尝试使用 Git 仓库目录名格式（如 abc123-assets）
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': 'abc123-assets'
+        })
+
+        assert response.status_code == 400
+        assert 'Git 仓库目录名格式' in str(response.data)
+
+    def test_update_profile_username_git_repo_format_variations(self):
+        """测试各种 Git 仓库目录名格式变体都被拒绝"""
+        self.client.force_authenticate(user=self.user)
+
+        invalid_usernames = [
+            'abc123-assets',
+            'ABCDEF-assets',
+            '123456-assets',
+            'abcdef123456-assets',
+            'a1b2c3-assets',
+        ]
+
+        for username in invalid_usernames:
+            response = self.client.patch('/api/auth/profile/update_me/', {
+                'username': username
+            })
+            assert response.status_code == 400
+            assert 'Git 仓库目录名格式' in str(response.data)
+
+    def test_update_profile_username_phone_format(self):
+        """测试用户名不能使用手机号注册格式"""
+        self.client.force_authenticate(user=self.user)
+
+        # 尝试使用手机号注册格式
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': '13800138000'
+        })
+
+        assert response.status_code == 400
+        assert '手机号注册格式' in str(response.data)
+
+    def test_update_profile_username_phone_format_variations(self):
+        """测试各种手机号注册格式变体都被拒绝"""
+        self.client.force_authenticate(user=self.user)
+
+        invalid_usernames = [
+            '13800138000',
+        ]
+
+        for username in invalid_usernames:
+            response = self.client.patch('/api/auth/profile/update_me/', {
+                'username': username
+            })
+            assert response.status_code == 400
+            assert '手机号注册格式' in str(response.data)
+
     def test_update_profile_email(self):
         """测试更新邮箱成功"""
         self.client.force_authenticate(user=self.user)

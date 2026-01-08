@@ -184,3 +184,83 @@ class TestCustomSocialAccountAdapter:
         # 未绑定手机号，应该返回绑定页面URL
         assert url == '/api/auth/bindings/bind-phone/'
 
+    def test_populate_user_username_conflict(self):
+        """测试 OAuth 用户名冲突时自动生成唯一用户名"""
+        # 创建一个已存在的用户
+        User.objects.create_user(
+            username='github_user',
+            password='TestPass123!',
+            email='existing@example.com'
+        )
+
+        request = self.factory.get('/')
+        sociallogin = Mock()
+        sociallogin.account = Mock()
+        sociallogin.account.provider = 'github'
+        sociallogin.account.get_avatar_url = Mock(return_value='')
+        sociallogin.account.get_provider_account = Mock()
+        sociallogin.account.get_provider_account.return_value = Mock()
+        sociallogin.account.get_provider_account.return_value.to_str = Mock(return_value='github_user')
+
+        data = {
+            'username': 'github_user',  # 这个用户名已经存在
+            'email': 'newuser@example.com',
+            'first_name': 'Test',
+            'last_name': 'User'
+        }
+
+        # Mock父类的populate_user方法
+        from unittest.mock import patch
+        from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+
+        with patch.object(DefaultSocialAccountAdapter, 'populate_user') as mock_populate:
+            # 创建一个Mock User对象，模拟父类返回的用户
+            mock_user = Mock()
+            mock_user.username = 'github_user'
+            mock_user.email = 'newuser@example.com'
+            mock_user.first_name = 'Test'
+            mock_user.last_name = 'User'
+            mock_populate.return_value = mock_user
+
+            result = self.adapter.populate_user(request, sociallogin, data)
+
+            # 用户名应该被修改为不冲突的名称
+            assert result.username != 'github_user'
+            assert result.username.startswith('github_user')
+            assert len(result.username) > len('github_user')  # 应该有后缀
+
+    def test_populate_user_git_repo_format_username(self):
+        """测试 OAuth 用户名格式为 Git 仓库目录名时自动修改"""
+        request = self.factory.get('/')
+        sociallogin = Mock()
+        sociallogin.account = Mock()
+        sociallogin.account.provider = 'github'
+        sociallogin.account.get_avatar_url = Mock(return_value='')
+        sociallogin.account.get_provider_account = Mock()
+        sociallogin.account.get_provider_account.return_value = Mock()
+        sociallogin.account.get_provider_account.return_value.to_str = Mock(return_value='abc123-assets')
+
+        data = {
+            'username': 'abc123-assets',  # Git 仓库目录名格式
+            'email': 'newuser@example.com',
+            'first_name': 'Test',
+            'last_name': 'User'
+        }
+
+        from unittest.mock import patch
+        from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+
+        with patch.object(DefaultSocialAccountAdapter, 'populate_user') as mock_populate:
+            mock_user = Mock()
+            mock_user.username = 'abc123-assets'
+            mock_user.email = 'newuser@example.com'
+            mock_user.first_name = 'Test'
+            mock_user.last_name = 'User'
+            mock_populate.return_value = mock_user
+
+            result = self.adapter.populate_user(request, sociallogin, data)
+
+            # 用户名应该被修改，不匹配 Git 仓库目录名格式
+            assert result.username != 'abc123-assets'
+            assert not result.username.endswith('-assets') or len(result.username) > len('abc123-assets')
+
