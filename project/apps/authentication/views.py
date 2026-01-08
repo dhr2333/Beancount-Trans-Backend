@@ -96,8 +96,12 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
         # 使用验证码认证后端查找用户
         user = authenticate(request, phone=str(phone_number), code=code)
 
+        # 记录用户是否是新注册的
+        is_new_user = False
+        
         # 如果用户不存在但验证码正确，自动注册
         if not user:
+            is_new_user = True
             try:
                 with transaction.atomic():
                     # 根据手机号生成唯一用户名（只使用本地号码部分，去掉国家代码）
@@ -142,9 +146,16 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     'error': '注册失败，请稍后重试'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        # 记录用户之前的最后登录时间（用于判断是否为新用户）
+        previous_last_login = user.last_login
+        
         # 更新最后登录时间
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
+
+        # 如果之前没有记录 is_new_user，通过检查 previous_last_login 来判断
+        if not is_new_user:
+            is_new_user = previous_last_login is None
 
         # 生成 JWT token
         refresh = RefreshToken.for_user(user)
@@ -164,7 +175,8 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                 'email': user.email,
                 'phone_number': str(phone_number)
             },
-            'requires_2fa': requires_2fa
+            'requires_2fa': requires_2fa,
+            'is_new_user': is_new_user
         }
 
         if requires_2fa:
