@@ -119,10 +119,9 @@ class DirectoryViewSet(ModelViewSet):
             bean_filename = f"{base_name}.bean"
 
             # 从trans/main.bean中移除include语句
-            BeanFileManager.update_trans_main_bean_include(
+            BeanFileManager.remove_bean_from_trans_main(
                 user,
-                bean_filename,
-                action='remove'
+                bean_filename
             )
 
             # 删除.bean文件（从trans目录）
@@ -200,10 +199,9 @@ class FileViewSet(ModelViewSet):
                 uploaded_file.name
             )
             # 上传文件时即向trans/main.bean增加对应文件的include
-            BeanFileManager.update_trans_main_bean_include(
+            BeanFileManager.add_bean_to_trans_main(
                 request.user,
-                bean_filename,
-                action='add'
+                bean_filename
             )
 
             return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
@@ -277,10 +275,9 @@ class FileViewSet(ModelViewSet):
         bean_filename = f"{base_name}.bean"
 
         # 从trans/main.bean中移除include语句
-        BeanFileManager.update_trans_main_bean_include(
+        BeanFileManager.remove_bean_from_trans_main(
             request.user,
-            bean_filename,
-            action='remove'
+            bean_filename
         )
 
         # 删除.bean文件（从trans目录）

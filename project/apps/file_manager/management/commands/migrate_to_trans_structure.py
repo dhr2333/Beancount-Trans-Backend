@@ -132,14 +132,14 @@ class Command(BaseCommand):
         else:
             # 如果main.bean不存在，创建新的
             if not dry_run:
-                BeanFileManager.update_main_bean_include(user.username, '', 'add')
+                BeanFileManager.ensure_main_bean(user.username)
             self.stdout.write('  创建新的 main.bean')
 
         # 5. 更新trans/main.bean（为每个迁移的文件添加include）
         if not dry_run:
             for bean_filename in migrated_files:
-                BeanFileManager.update_trans_main_bean_include(
-                    user.username, bean_filename, action='add'
+                BeanFileManager.add_bean_to_trans_main(
+                    user.username, bean_filename
                 )
         else:
             self.stdout.write(f'  将在 trans/main.bean 中添加 {len(migrated_files)} 个 include')

@@ -649,7 +649,7 @@ class PlatformGitService:
         from project.utils.file import BeanFileManager
 
         # 使用 BeanFileManager 的标准方法重建 main.bean
-        BeanFileManager.update_main_bean_include(user, None, 'add')
+        BeanFileManager.ensure_main_bean(user)
         logger.info(f"Rebuilt standard main.bean for user {user.username}")
 
     def _init_and_push_template_in_user_directory(self, git_repo: GitRepository, template_dir: Path):
