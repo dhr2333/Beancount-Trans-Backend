@@ -758,19 +758,40 @@ class UserProfileViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['delete'], url_path='delete_account')
     def delete_account(self, request):
-        """删除账户"""
+        """删除账户
+        
+        清理顺序：
+        1. 停止 Fava 容器
+        2. 删除 Gitea 远程仓库（如果启用）
+        3. 删除 OSS/MinIO 文件
+        4. 删除文件系统 Assets 目录
+        5. 删除数据库记录
+        6. 清理 Redis 缓存
+        """
         user = request.user
+        username = user.username
+        user_email = getattr(user, 'email', None)
 
         try:
+            import os
+            import shutil
             from django.db import transaction
             from django.apps import apps
+            from django.core.cache import cache
+            from django.conf import settings
+            from pathlib import Path
 
-            # 删除用户的所有关联数据
+            # 获取所有需要删除的模型
             Account = apps.get_model('account_config', 'Account')
             Expense = apps.get_model('maps', 'Expense')
             Assets = apps.get_model('maps', 'Assets')
             Income = apps.get_model('maps', 'Income')
             File = apps.get_model('file_manager', 'File')
+            Directory = apps.get_model('file_manager', 'Directory')
+            Tag = apps.get_model('tags', 'Tag')
+            Template = apps.get_model('maps', 'Template')
+            FormatConfig = apps.get_model('translate', 'FormatConfig')
+            FavaInstance = apps.get_model('fava_instances', 'FavaInstance')
 
             # 统计要删除的数据
             account_count = Account.objects.filter(owner=user).count()
@@ -778,21 +799,113 @@ class UserProfileViewSet(viewsets.GenericViewSet):
             assets_count = Assets.objects.filter(owner=user).count()
             income_count = Income.objects.filter(owner=user).count()
             file_count = File.objects.filter(owner=user).count()
+            directory_count = Directory.objects.filter(owner=user).count()
+            tag_count = Tag.objects.filter(owner=user).count()
+            template_count = Template.objects.filter(owner=user).count()
+            fava_count = FavaInstance.objects.filter(owner=user).count()
 
-            logger.warning(f"用户 {user.username} (ID: {user.id}) 请求删除账户，将删除:")
-            logger.warning(f"  账户: {account_count}, 映射: {expense_count + assets_count + income_count}, 文件: {file_count}")
+            logger.warning(f"用户 {username} (ID: {user.id}) 请求删除账户，将删除:")
+            logger.warning(f"  账户: {account_count}, 映射: {expense_count + assets_count + income_count}, "
+                         f"文件: {file_count}, 目录: {directory_count}, 标签: {tag_count}, "
+                         f"模板: {template_count}, Fava实例: {fava_count}")
 
-            # 使用事务确保数据一致性
+            # ========== 1. 停止 Fava 容器 ==========
+            try:
+                from project.apps.fava_instances.services.fava_manager import FavaContainerManager
+                manager = FavaContainerManager()
+                running_instances = FavaInstance.objects.filter(
+                    owner=user,
+                    status__in=['running', 'starting']
+                )
+                for instance in running_instances:
+                    try:
+                        instance.status = 'stopping'
+                        instance.save()
+                        if instance.container_id:
+                            manager.stop_container(instance.container_id)
+                        instance.status = 'stopped'
+                        instance.container_id = ''
+                        instance.container_name = ''
+                        instance.save()
+                        logger.info(f"已停止 Fava 容器: {instance.container_id}")
+                    except Exception as e:
+                        logger.warning(f"停止 Fava 容器失败 {instance.container_id}: {str(e)}")
+                        instance.status = 'error'
+                        instance.save()
+            except Exception as e:
+                logger.warning(f"停止 Fava 容器时出错: {str(e)}")
+
+            # ========== 2. 删除 Gitea 远程仓库 ==========
+            try:
+                from project.apps.git_repository.services import PlatformGitService
+                git_service = PlatformGitService()
+                try:
+                    git_repo = user.git_repo
+                    # 删除 Gitea 远程仓库和相关资源
+                    git_service.delete_user_repository(user)
+                    logger.info(f"已删除 Gitea 远程仓库: {git_repo.repo_name}")
+                except Exception:
+                    # 用户未启用 Git 功能，跳过
+                    pass
+            except Exception as e:
+                logger.warning(f"删除 Gitea 仓库时出错: {str(e)}")
+
+            # ========== 3. 删除 OSS/MinIO 文件 ==========
+            try:
+                from project.utils.storage_factory import get_storage_client
+                storage_client = get_storage_client()
+                
+                # 获取用户的所有文件
+                user_files = File.objects.filter(owner=user)
+                deleted_storage_files = 0
+                
+                for file_obj in user_files:
+                    storage_name = file_obj.storage_name
+                    # 检查是否有其他文件引用相同的存储文件
+                    other_references = File.objects.filter(
+                        storage_name=storage_name
+                    ).exclude(id=file_obj.id).exists()
+                    
+                    if not other_references:
+                        try:
+                            if storage_client.delete_file(storage_name):
+                                deleted_storage_files += 1
+                        except Exception as e:
+                            logger.warning(f"删除存储文件失败 {storage_name}: {str(e)}")
+                
+                logger.info(f"已删除 {deleted_storage_files} 个存储文件")
+            except Exception as e:
+                logger.warning(f"删除 OSS/MinIO 文件时出错: {str(e)}")
+
+            # ========== 4. 删除文件系统 Assets 目录 ==========
+            try:
+                from project.utils.file import BeanFileManager
+                user_assets_path = Path(BeanFileManager.get_user_assets_path(user))
+                
+                if user_assets_path.exists() and user_assets_path.is_dir():
+                    try:
+                        shutil.rmtree(user_assets_path)
+                        logger.info(f"已删除用户 Assets 目录: {user_assets_path}")
+                    except Exception as e:
+                        logger.warning(f"删除用户 Assets 目录失败 {user_assets_path}: {str(e)}")
+            except Exception as e:
+                logger.warning(f"删除文件系统 Assets 目录时出错: {str(e)}")
+
+            # ========== 5. 删除数据库记录（在事务中执行）==========
             with transaction.atomic():
                 # 删除所有关联数据
+                Directory.objects.filter(owner=user).delete()
+                File.objects.filter(owner=user).delete()
+                Tag.objects.filter(owner=user).delete()
+                Template.objects.filter(owner=user).delete()
+                FormatConfig.objects.filter(owner=user).delete()
+                FavaInstance.objects.filter(owner=user).delete()
                 Account.objects.filter(owner=user).delete()
                 Expense.objects.filter(owner=user).delete()
                 Assets.objects.filter(owner=user).delete()
                 Income.objects.filter(owner=user).delete()
-                File.objects.filter(owner=user).delete()
 
                 # 删除社交账号绑定
-                from allauth.socialaccount.models import SocialAccount
                 SocialAccount.objects.filter(user=user).delete()
 
                 # 删除TOTP设备
@@ -806,18 +919,27 @@ class UserProfileViewSet(viewsets.GenericViewSet):
                 if hasattr(user, 'profile'):
                     user.profile.delete()
 
-                # 删除用户
-                username = user.username
+                # 删除用户（最后删除）
                 user.delete()
 
-            logger.info(f"用户 {username} 的账户已删除")
+            # ========== 6. 清理 Redis 缓存 ==========
+            try:
+                if user_email:
+                    # 清理邮箱验证码缓存
+                    cache.delete(UserProfile.get_email_code_cache_key(user_email))
+                    cache.delete(UserProfile.get_email_resend_cache_key(user_email))
+                    logger.info(f"已清理用户缓存: {user_email}")
+            except Exception as e:
+                logger.warning(f"清理 Redis 缓存时出错: {str(e)}")
+
+            logger.info(f"用户 {username} 的账户已完全删除")
 
             return Response({
                 'message': '账户已删除'
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error(f"删除账户失败: {str(e)}")
+            logger.error(f"删除账户失败: {str(e)}", exc_info=True)
             return Response({
                 'error': f'删除账户失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
