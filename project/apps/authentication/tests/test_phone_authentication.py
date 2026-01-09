@@ -40,33 +40,35 @@ class TestPhoneAuthentication:
         assert '发送过于频繁' in response.data['error']
 
     def test_register_with_phone(self):
-        """测试手机号注册"""
+        """测试手机号注册（用户名和密码自动生成）"""
         phone_number = '+8613800138002'
 
         # 先存储验证码到缓存（模拟发送验证码）
         profile = UserProfile(phone_number=phone_number)
         profile.store_sms_code('123456', phone_number)
 
-        # 注册
+        # 注册（不再支持用户名和密码字段）
         response = self.client.post('/api/auth/phone/register/', {
             'phone_number': phone_number,
             'code': '123456',
-            'username': 'testuser',
-            'password': 'TestPass123!',
             'email': 'test@example.com'
         })
 
         assert response.status_code == 201
         assert 'access' in response.data
-        assert response.data['user']['username'] == 'testuser'
+        # 用户名应该自动生成，格式为手机号数字（如 13800138002）
+        username = response.data['user']['username']
+        assert username.isdigit() or '_' in username  # 纯数字或带后缀
 
         # 验证用户已创建
-        user = User.objects.get(username='testuser')
+        username = response.data['user']['username']
+        user = User.objects.get(username=username)
         assert user.profile.phone_number == phone_number
         assert user.profile.phone_verified is True
+        assert not user.has_usable_password()  # 密码应该为空
 
     def test_login_by_code(self):
-        """测试验证码登录"""
+        """测试验证码登录（已注册用户）"""
         # 创建用户
         user = User.objects.create_user(username='testuser2', password='TestPass123!')
         profile = user.profile
@@ -86,6 +88,33 @@ class TestPhoneAuthentication:
         assert response.status_code == 200
         assert 'access' in response.data
         assert response.data['user']['username'] == 'testuser2'
+
+    def test_login_by_code_auto_register(self):
+        """测试验证码登录自动注册（未注册用户）"""
+        phone_number = '+8613800140000'
+        
+        # 存储验证码（但用户不存在）
+        profile = UserProfile(phone_number=phone_number)
+        profile.store_sms_code('888888', phone_number)
+        
+        # 验证码登录（应该自动注册）
+        response = self.client.post('/api/auth/phone/login-by-code/', {
+            'phone_number': phone_number,
+            'code': '888888'
+        })
+        
+        assert response.status_code == 200
+        assert 'access' in response.data
+        assert 'user' in response.data
+        # 用户名应该自动生成，格式为手机号数字（如 13800140000）
+        username = response.data['user']['username']
+        assert username.isdigit() or '_' in username  # 纯数字或带后缀
+        
+        # 验证用户已创建
+        user = User.objects.get(username=username)
+        assert user.profile.phone_number == phone_number
+        assert user.profile.phone_verified is True
+        assert not user.has_usable_password()  # 密码应该为空
 
     def test_login_by_password(self):
         """测试密码登录"""
@@ -121,7 +150,7 @@ class TestPhoneAuthentication:
 
         assert response.status_code == 401
 
-    def test_register_without_username_generation(self):
+    def test_register_username_auto_generation(self):
         """测试注册时自动生成用户名"""
         phone_number = '+8613800138010'
         profile = UserProfile(phone_number=phone_number)
@@ -130,38 +159,40 @@ class TestPhoneAuthentication:
         response = self.client.post('/api/auth/phone/register/', {
             'phone_number': phone_number,
             'code': '123456',
-            'password': 'TestPass123!',
             'email': 'test@example.com'
-            # 不提供用户名
         })
 
         assert response.status_code == 201
         assert 'access' in response.data
         assert 'user' in response.data
-        assert response.data['user']['username'].startswith('user_')
+        # 用户名应该自动生成，格式为手机号数字（如 13800138010）
+        username = response.data['user']['username']
+        assert username.isdigit() or '_' in username  # 纯数字或带后缀
 
-    def test_register_duplicate_username(self):
-        """测试注册时用户名冲突处理"""
+    def test_register_username_conflict_handling(self):
+        """测试注册时用户名冲突自动处理（生成唯一用户名）"""
         phone_number = '+8613800138011'
         profile = UserProfile(phone_number=phone_number)
         profile.store_sms_code('123456', phone_number)
 
-        # 先创建一个用户
-        User.objects.create_user(username='testuser5', password='TestPass123!')
+        # 先创建一个用户，使用可能冲突的用户名
+        User.objects.create_user(username='13800138011', password='TestPass123!')
 
-        # 尝试使用相同用户名注册
+        # 注册时应该自动生成不冲突的用户名
         response = self.client.post('/api/auth/phone/register/', {
             'phone_number': phone_number,
-            'code': '123456',
-            'username': 'testuser5',
-            'password': 'TestPass123!'
+            'code': '123456'
         })
 
-        assert response.status_code == 400
-        assert '用户名已存在' in str(response.data)
+        assert response.status_code == 201
+        # 用户名应该与已存在的不同
+        username = response.data['user']['username']
+        assert username != '13800138011'
+        # 如果冲突，应该有后缀；如果不冲突，应该是纯数字
+        assert username.isdigit() or '_' in username  # 纯数字或带后缀
 
-    def test_register_without_password(self):
-        """测试注册时不设置密码"""
+    def test_register_no_password_by_default(self):
+        """测试注册时默认不设置密码"""
         phone_number = '+8613800138012'
         profile = UserProfile(phone_number=phone_number)
         profile.store_sms_code('123456', phone_number)
@@ -169,13 +200,12 @@ class TestPhoneAuthentication:
         response = self.client.post('/api/auth/phone/register/', {
             'phone_number': phone_number,
             'code': '123456',
-            'username': 'testuser6',
             'email': 'test@example.com'
-            # 不提供密码
         })
 
         assert response.status_code == 201
-        user = User.objects.get(username='testuser6')
+        username = response.data['user']['username']
+        user = User.objects.get(username=username)
         assert not user.has_usable_password()
 
     def test_login_by_code_requires_2fa(self):

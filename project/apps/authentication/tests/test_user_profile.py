@@ -64,6 +64,100 @@ class TestUserProfile:
         assert response.status_code == 400
         assert '已被其他用户使用' in str(response.data)
 
+    def test_update_profile_username_git_repo_format(self):
+        """测试用户名不能使用 Git 仓库目录名格式"""
+        self.client.force_authenticate(user=self.user)
+
+        # 尝试使用 Git 仓库目录名格式（如 abc123-assets）
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': 'abc123-assets'
+        })
+
+        assert response.status_code == 400
+        assert 'Git 仓库目录名格式' in str(response.data)
+
+    def test_update_profile_username_git_repo_format_variations(self):
+        """测试各种 Git 仓库目录名格式变体都被拒绝"""
+        self.client.force_authenticate(user=self.user)
+
+        invalid_usernames = [
+            'abc123-assets',
+            'ABCDEF-assets',
+            '123456-assets',
+            'abcdef123456-assets',
+            'a1b2c3-assets',
+        ]
+
+        for username in invalid_usernames:
+            response = self.client.patch('/api/auth/profile/update_me/', {
+                'username': username
+            })
+            assert response.status_code == 400
+            assert 'Git 仓库目录名格式' in str(response.data)
+
+    def test_update_profile_username_phone_format_own_phone(self):
+        """测试可以使用自己的手机号作为用户名"""
+        self.client.force_authenticate(user=self.user)
+
+        # 用户绑定的手机号是 +8613800138030，本地号码是 13800138030
+        # 尝试使用自己的手机号作为用户名
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': '13800138030'
+        })
+
+        assert response.status_code == 200
+        self.user.refresh_from_db()
+        assert self.user.username == '13800138030'
+
+    def test_update_profile_username_phone_format_other_phone(self):
+        """测试不能使用别人的手机号作为用户名"""
+        self.client.force_authenticate(user=self.user)
+
+        # 尝试使用别人的手机号（不是用户绑定的手机号）
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': '13800138000'
+        })
+
+        assert response.status_code == 400
+        assert '只能使用自己绑定的手机号' in str(response.data)
+
+    def test_update_profile_username_phone_format_no_phone(self):
+        """测试未绑定手机号时不能使用手机号作为用户名"""
+        # 创建一个没有绑定手机号的用户
+        user2 = User.objects.create_user(
+            username='testuser2',
+            password='TestPass123!'
+        )
+        self.client.force_authenticate(user=user2)
+
+        # 尝试使用手机号作为用户名
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': '13800138000'
+        })
+
+        assert response.status_code == 400
+        assert '尚未绑定手机号' in str(response.data)
+
+    def test_update_profile_username_phone_format_conflict(self):
+        """测试使用自己的手机号作为用户名时，如果已被其他用户使用，应该拒绝"""
+        # 创建另一个用户，使用手机号作为用户名
+        user2 = User.objects.create_user(
+            username='13800138030',  # 与 self.user 绑定的手机号相同
+            password='TestPass123!'
+        )
+        user2.profile.phone_number = '+8613800138031'
+        user2.profile.save()
+
+        self.client.force_authenticate(user=self.user)
+
+        # 尝试使用自己的手机号，但已被其他用户使用
+        response = self.client.patch('/api/auth/profile/update_me/', {
+            'username': '13800138030'
+        })
+
+        assert response.status_code == 400
+        assert '已被其他用户使用' in str(response.data)
+
     def test_update_profile_email(self):
         """测试更新邮箱成功"""
         self.client.force_authenticate(user=self.user)

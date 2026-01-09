@@ -6,6 +6,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from project.apps.authentication.models import UserProfile
+from project.apps.authentication.utils import generate_unique_username, validate_username_format
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,32 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
         """允许OAuth自动注册"""
         return True
+
+    def populate_user(self, request, sociallogin, data):
+        """在创建用户之前填充用户数据，处理用户名冲突
+
+        Args:
+            request: HTTP 请求对象
+            sociallogin: SocialLogin 对象
+            data: 从 OAuth 提供商获取的用户数据
+
+        Returns:
+            User 对象（未保存到数据库）
+        """
+        # 调用父类方法获取初始用户数据
+        user = super().populate_user(request, sociallogin, data)
+
+        # 检查用户名是否冲突或格式无效
+        if user.username:
+            original_username = user.username
+            # 如果用户名格式无效或已存在，生成新的唯一用户名
+            is_valid, _ = validate_username_format(user.username)
+            if not is_valid or User.objects.filter(username=user.username).exists():
+                logger.info(f"OAuth 用户名 {original_username} 冲突或格式无效，生成新用户名")
+                user.username = generate_unique_username(original_username)
+                logger.info(f"生成新用户名: {user.username}")
+
+        return user
 
     def pre_social_login(self, request, sociallogin):
         """OAuth登录前的处理，确保已存在用户具备UserProfile"""
