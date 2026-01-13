@@ -280,8 +280,9 @@ class Command(BaseCommand):
 
         for item in template_items:
             # 检查账户是否存在
+            # item.account 现在是账户路径字符串，不再是账户对象
             if item.account:
-                account = Account.objects.filter(owner=user, account=item.account.account).first()
+                account = Account.objects.filter(owner=user, account=item.account).first()
                 if not account:
                     continue  # 跳过账户不存在的映射
             else:
@@ -307,8 +308,9 @@ class Command(BaseCommand):
 
         for item in template_items:
             # 检查账户是否存在
+            # item.account 现在是账户路径字符串，不再是账户对象
             if item.account:
-                account = Account.objects.filter(owner=user, account=item.account.account).first()
+                account = Account.objects.filter(owner=user, account=item.account).first()
                 if not account:
                     continue
             else:
@@ -333,8 +335,9 @@ class Command(BaseCommand):
 
         for item in template_items:
             # 检查账户是否存在
+            # item.account 现在是账户路径字符串，不再是账户对象
             if item.account:
-                account = Account.objects.filter(owner=user, account=item.account.account).first()
+                account = Account.objects.filter(owner=user, account=item.account).first()
                 if not account:
                     continue
             else:

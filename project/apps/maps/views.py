@@ -5,6 +5,7 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
 from project.apps.maps.models import Expense, Assets, Income, Template, TemplateItem
+from project.apps.account.models import Account
 from project.apps.common.permissions import TemplatePermission, IsOwnerOrAdminReadWriteOnly
 from project.apps.common.views import BaseMappingViewSet
 from project.apps.maps.serializers import (
@@ -409,8 +410,14 @@ class TemplateViewSet(ModelViewSet):
         else:
             return Response({"error": "未知的模板类型"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 构建响应消息
+        message = "模板应用成功"
+        if result.get('missing_accounts'):
+            missing_count = len(result['missing_accounts'])
+            message += f"。注意：有 {missing_count} 个映射的账户不存在，已设置为空，请及时修改。"
+
         return Response({
-            "message": "模板应用成功",
+            "message": message,
             "result": result
         })
 
@@ -419,7 +426,8 @@ class TemplateViewSet(ModelViewSet):
         result = {
             'created': 0,
             'skipped': 0,
-            'overwritten': 0
+            'overwritten': 0,
+            'missing_accounts': []
         }
 
         if action_type == 'overwrite':
@@ -427,11 +435,24 @@ class TemplateViewSet(ModelViewSet):
             Expense.objects.filter(owner=self.request.user).delete()
             # 直接创建所有模板映射，无需检查冲突
             for item in template.items.all():
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 Expense.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payee=item.payee,
-                    expend=item.account,
+                    expend=target_account,
                     currency=item.currency
                 )
                 result['created'] += 1
@@ -448,12 +469,25 @@ class TemplateViewSet(ModelViewSet):
                         existing.delete()
                         result['overwritten'] += 1
 
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 # 创建新的映射
                 Expense.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payee=item.payee,
-                    expend=item.account,
+                    expend=target_account,
                     currency=item.currency
                 )
                 result['created'] += 1
@@ -465,7 +499,8 @@ class TemplateViewSet(ModelViewSet):
         result = {
             'created': 0,
             'skipped': 0,
-            'overwritten': 0
+            'overwritten': 0,
+            'missing_accounts': []
         }
 
         if action_type == 'overwrite':
@@ -473,11 +508,24 @@ class TemplateViewSet(ModelViewSet):
             Income.objects.filter(owner=self.request.user).delete()
             # 直接创建所有模板映射，无需检查冲突
             for item in template.items.all():
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 Income.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payer=item.payer,
-                    income=item.account
+                    income=target_account
                 )
                 result['created'] += 1
         else:  # merge 模式
@@ -493,12 +541,25 @@ class TemplateViewSet(ModelViewSet):
                         existing.delete()
                         result['overwritten'] += 1
 
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 # 创建新的映射
                 Income.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payer=item.payer,
-                    income=item.account
+                    income=target_account
                 )
                 result['created'] += 1
 
@@ -509,7 +570,8 @@ class TemplateViewSet(ModelViewSet):
         result = {
             'created': 0,
             'skipped': 0,
-            'overwritten': 0
+            'overwritten': 0,
+            'missing_accounts': []
         }
 
         if action_type == 'overwrite':
@@ -517,11 +579,24 @@ class TemplateViewSet(ModelViewSet):
             Assets.objects.filter(owner=self.request.user).delete()
             # 直接创建所有模板映射，无需检查冲突
             for item in template.items.all():
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 Assets.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     full=item.full,
-                    assets=item.account
+                    assets=target_account
                 )
                 result['created'] += 1
         else:  # merge 模式
@@ -537,12 +612,25 @@ class TemplateViewSet(ModelViewSet):
                         existing.delete()
                         result['overwritten'] += 1
 
+                # 根据账户路径在目标用户账户中查找
+                target_account = None
+                if item.account:  # item.account 现在是账户路径字符串
+                    target_account = Account.objects.filter(
+                        account=item.account,
+                        owner=self.request.user
+                    ).first()
+                    if not target_account:
+                        result['missing_accounts'].append({
+                            'key': item.key,
+                            'account': item.account
+                        })
+
                 # 创建新的映射
                 Assets.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     full=item.full,
-                    assets=item.account
+                    assets=target_account
                 )
                 result['created'] += 1
 

@@ -8,7 +8,7 @@ from project.models import BaseModel
 class Expense(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
-    expend = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="支出账户")
+    expend = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, help_text="支出账户")
     owner = models.ForeignKey(User, related_name='expense', on_delete=models.CASCADE)
     currency = models.CharField(max_length=24, null=True, blank=True, help_text="货币代码")
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
@@ -26,7 +26,7 @@ class Expense(BaseModel):
 class Assets(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     full = models.CharField(max_length=16, null=False, help_text="账户名称")
-    assets = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="资产账户")
+    assets = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, help_text="资产账户")
     owner = models.ForeignKey(User, related_name='assets', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
     tags = models.ManyToManyField('tags.Tag', blank=True, related_name='assets_mappings', help_text="关联标签")
@@ -43,7 +43,7 @@ class Assets(BaseModel):
 class Income(BaseModel):
     key = models.CharField(max_length=16, null=False, help_text="关键字")
     payer = models.CharField(max_length=8, null=True, blank=True, help_text="付款方")
-    income = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="收入账户")
+    income = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, help_text="收入账户")
     owner = models.ForeignKey(User, related_name='income', on_delete=models.CASCADE)
     enable = models.BooleanField(default=True, verbose_name="是否启用", help_text="启用状态")
     tags = models.ManyToManyField('tags.Tag', blank=True, related_name='income_mappings', help_text="关联标签")
@@ -84,7 +84,7 @@ class Template(BaseModel):
 class TemplateItem(BaseModel):
     template = models.ForeignKey(Template, related_name='items', on_delete=models.CASCADE)
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="映射账户")
+    account = models.CharField(max_length=128, null=True, blank=True, help_text="映射账户路径")
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")

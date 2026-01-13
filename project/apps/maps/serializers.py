@@ -182,16 +182,13 @@ class IncomeSerializer(serializers.ModelSerializer):
 
 
 class TemplateItemSerializer(serializers.ModelSerializer):
-    # 读取时显示详细信息
-    account = AccountSummarySerializer(read_only=True)
-
-    # 写入时使用ID
-    account_id = serializers.PrimaryKeyRelatedField(
-        queryset=Account.objects.all(),
-        source='account',
-        write_only=True,
+    # account 字段现在是账户路径字符串，不再是外键
+    account = serializers.CharField(
+        max_length=128,
+        allow_null=True,
+        allow_blank=True,
         required=False,
-        allow_null=True
+        help_text="映射账户"
     )
 
     class Meta:
