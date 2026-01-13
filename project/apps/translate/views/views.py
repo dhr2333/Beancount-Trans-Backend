@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from project.utils.exceptions import UnsupportedFileTypeError, DecryptionError
 from project.utils.token import get_token_user_id
 from project.utils.tools import get_user_config
-from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
+from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly, AnonymousReadOnlyPermission
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -73,18 +73,28 @@ class BillAnalyzeView(APIView):
 
 
 class UserConfigAPI(APIView):
-    """用户个人配置接口"""
+    """用户个人配置接口
+    
+    支持匿名用户获取格式化输出配置（只读），匿名用户将获取 id=1 用户的配置。
+    只有认证用户可以更新配置。
+    """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, IsOwnerOrAdminReadWriteOnly]
+    permission_classes = [AnonymousReadOnlyPermission]
 
     def get(self, request):
-        """获取当前用户配置"""
+        """获取当前用户配置（匿名用户获取 id=1 用户的配置）"""
         config = FormatConfig.get_user_config(request.user)
         serializer = FormatConfigSerializer(config)
         return Response(serializer.data)
 
     def put(self, request):
-        """更新当前用户配置"""
+        """更新当前用户配置（需要认证）"""
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': '需要登录才能更新配置'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
         config = FormatConfig.get_user_config(request.user)
         serializer = FormatConfigSerializer(
             config,
