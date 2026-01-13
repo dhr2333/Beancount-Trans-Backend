@@ -84,7 +84,7 @@ class Template(BaseModel):
 class TemplateItem(BaseModel):
     template = models.ForeignKey(Template, related_name='items', on_delete=models.CASCADE)
     key = models.CharField(max_length=16, null=False, help_text="关键字")
-    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, help_text="映射账户")
+    account = models.CharField(max_length=128, null=True, blank=True, help_text="映射账户路径")
     payee = models.CharField(max_length=32, null=True, blank=True, help_text="收款方")
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")

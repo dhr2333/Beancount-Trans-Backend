@@ -150,7 +150,7 @@ class MappingDataProvider:
                     key=item.key,
                     payee=item.payee,
                     expend=MockAccountObject(
-                        account=item.account.account if item.account else 'Expenses:Other'
+                        account=item.account if item.account else 'Expenses:Other'
                     ) if item.account else None,
                     currency=item.currency,
                     enable=True,
@@ -171,7 +171,7 @@ class MappingDataProvider:
                     key=item.key,
                     full=item.full,
                     assets=MockAccountObject(
-                        account=item.account.account if item.account else 'Assets:Other'
+                        account=item.account if item.account else 'Assets:Other'
                     ) if item.account else None,
                     enable=True,
                     tags=EmptyTagsManager()
@@ -191,7 +191,7 @@ class MappingDataProvider:
                     key=item.key,
                     payer=item.payer,
                     income=MockAccountObject(
-                        account=item.account.account if item.account else 'Income:Other'
+                        account=item.account if item.account else 'Income:Other'
                     ) if item.account else None,
                     enable=True,
                     tags=EmptyTagsManager()

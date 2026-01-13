@@ -801,15 +801,13 @@ class Command(BaseCommand):
             ]
 
             for key, payee, account_path, currency in expense_mappings:
-                account_obj = Account.objects.filter(account=account_path, owner=admin_user).first()
-                if account_obj:
-                    TemplateItem.objects.create(
-                        template=expense_template,
-                        key=key,
-                        payee=payee if payee else None,
-                        account=account_obj,
-                        currency=currency
-                    )
+                TemplateItem.objects.create(
+                    template=expense_template,
+                    key=key,
+                    payee=payee if payee else None,
+                    account=account_path,  # 直接使用账户路径字符串
+                    currency=currency
+                )
 
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方支出映射模板 ({len(expense_mappings)} 项)'
@@ -847,14 +845,12 @@ class Command(BaseCommand):
 ]
 
             for key, full, account_path in assets_mappings:
-                account_obj = Account.objects.filter(account=account_path, owner=admin_user).first()
-                if account_obj:
-                    TemplateItem.objects.create(
-                        template=assets_template,
-                        key=key,
-                        full=full,
-                        account=account_obj
-                    )
+                TemplateItem.objects.create(
+                    template=assets_template,
+                    key=key,
+                    full=full,
+                    account=account_path  # 直接使用账户路径字符串
+                )
 
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方资产映射模板 ({len(assets_mappings)} 项)'
@@ -887,14 +883,12 @@ class Command(BaseCommand):
 ]
 
             for key, payer, account_path in income_mappings:
-                account_obj = Account.objects.filter(account=account_path, owner=admin_user).first()
-                if account_obj:
-                    TemplateItem.objects.create(
-                        template=income_template,
-                        key=key,
-                        payer=payer,
-                        account=account_obj
-                    )
+                TemplateItem.objects.create(
+                    template=income_template,
+                    key=key,
+                    payer=payer,
+                    account=account_path  # 直接使用账户路径字符串
+                )
 
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方收入映射模板 ({len(income_mappings)} 项)'
