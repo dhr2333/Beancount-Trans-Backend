@@ -7,7 +7,7 @@ from project.models import BaseModel
 
 class Account(BaseModel):
     account = models.CharField(max_length=128, help_text="账户路径", verbose_name="账户")
-    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children', help_text="父账户", verbose_name="父账户")
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='children', help_text="父账户", verbose_name="父账户")
     owner = models.ForeignKey(User, related_name='accounts', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
     enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
 
@@ -23,6 +23,12 @@ class Account(BaseModel):
     def clean(self):
         if not all(part.isidentifier() for part in self.account.split(':')):
             raise ValidationError("账户路径必须由字母、数字和下划线组成，用冒号分隔")
+
+        # 验证根账户类型
+        root = self.account.split(':')[0]
+        valid_roots = ['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']
+        if root not in valid_roots:
+            raise ValidationError(f"根账户必须是以下之一: {', '.join(valid_roots)}")
 
     def save(self, *args, **kwargs):
         """保存账户时自动创建父账户，并同步映射状态"""
@@ -41,14 +47,21 @@ class Account(BaseModel):
             except Account.DoesNotExist:
                 pass
 
-        if not self.parent and ':' in self.account:
+        # 始终根据新的账户路径计算并设置父账户
+        if ':' in self.account:
             parent_account_path = ':'.join(self.account.split(':')[:-1])
             try:
                 # 尝试获取已存在的父账户
-                self.parent = Account.objects.get(account=parent_account_path, owner=self.owner)
+                new_parent = Account.objects.get(account=parent_account_path, owner=self.owner)
+                # 只有当父账户确实需要改变时才更新
+                if self.parent != new_parent:
+                    self.parent = new_parent
             except Account.DoesNotExist:
                 # 自动创建父账户
                 self.parent = self._create_parent_account(parent_account_path)
+        else:
+            # 根级账户，没有父账户
+            self.parent = None
 
         super().save(*args, **kwargs)
 
@@ -102,16 +115,14 @@ class Account(BaseModel):
             children = self.children.all()
 
             for child in children:
-                # 计算新的子账户名称
-                # 例如：Expenses:Culturer:Entertainment -> Expenses:Culture:Entertainment
                 old_child_name = child.account
-                # 将旧名称中的父账户部分替换为新名称
-                new_child_name = old_child_name.replace(old_account_name, self.account, 1)
-
-                # 更新子账户名称
-                child.account = new_child_name
-                # 递归保存，这会触发子账户的子账户也进行更新
-                child.save()
+                # 检查子账户名称是否以旧父账户名称为前缀
+                if old_child_name.startswith(old_account_name + ':'):
+                    # 替换前缀部分
+                    new_child_name = self.account + old_child_name[len(old_account_name):]
+                    child.account = new_child_name
+                    # 递归保存，这会触发子账户的子账户也进行更新
+                    child.save()
 
         except Exception as e:
             # 记录错误但不阻止父账户保存
