@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.4.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.1...5.4.2) (2026-01-14)
+
+### Bug Fixes
+
+* Update Account model to use PROTECT for parent relationship and enhance validation ([#54](https://github.com/dhr2333/Beancount-Trans-Backend/issues/54)) ([6deccb7](https://github.com/dhr2333/Beancount-Trans-Backend/commit/6deccb782c0363cf69f89a87bf14c273d917f539))
+
 ## [5.4.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.0...5.4.1) (2026-01-13)
 
 ### Bug Fixes
