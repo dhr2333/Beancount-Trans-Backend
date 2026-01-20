@@ -97,6 +97,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.file_manager',
     'project.apps.git_repository',
     'project.apps.maps',
+    'project.apps.reconciliation',
     'project.apps.tags',
     'project.apps.translate',
 ]
