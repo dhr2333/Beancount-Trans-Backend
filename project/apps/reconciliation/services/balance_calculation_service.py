@@ -34,7 +34,7 @@ class BalanceCalculationService:
         
         Args:
             user: 用户对象
-            account_name: 账户路径，如 "Assets:Bank:CMB"
+            account_name: 账户路径，如 "Assets:Savings:Web:WechatFund"
             as_of_date: 截止日期，默认为 None（计算到最新）
             
         Returns:
@@ -121,24 +121,27 @@ class BalanceCalculationService:
     def generate_balance_directive(
         account_name: str, 
         balance: Decimal, 
-        balance_date: date
+        balance_date: date,
+        currency: str = 'CNY'
     ) -> str:
         """生成 balance 指令
         
         注意：balance_date 应该是明日，表示该日期开始时的余额
         
         Args:
-            account_name: 账户路径，如 "Assets:Bank:CMB"
+            account_name: 账户路径，如 "Assets:Savings:Web:WechatFund"
             balance: 余额（Decimal 类型）
             balance_date: 余额日期（应为明日）
+            currency: 币种，默认为 CNY
             
         Returns:
-            balance 指令字符串，格式："{balance_date} balance {account_name} {balance} CNY"
+            balance 指令字符串，格式："{balance_date} balance {account_name} {balance} {currency}"
             
         示例:
-            "2026-01-21 balance Assets:Bank:CMB 1005.00 CNY"
+            "2026-01-21 balance Assets:Savings:Web:WechatFund 1005.00 CNY"
+            "2026-01-21 balance Assets:Savings:Government:Provident:WenZhou 11968.28 COIN"
         """
-        return f"{balance_date} balance {account_name} {balance} CNY"
+        return f"{balance_date} balance {account_name} {balance} {currency}"
     
     @staticmethod
     def generate_pad_directive(
@@ -151,7 +154,7 @@ class BalanceCalculationService:
         注意：pad_date 应该是今日，在 balance 之前
         
         Args:
-            account_name: 需要 pad 的账户路径，如 "Assets:Bank:CMB"
+            account_name: 需要 pad 的账户路径，如 "Assets:Savings:Web:WechatFund"
             pad_account: pad 目标账户，如 "Expenses:Adjustment"
             pad_date: pad 日期（应为今日）
             
@@ -159,7 +162,7 @@ class BalanceCalculationService:
             pad 指令字符串，格式："{pad_date} pad {account_name} {pad_account}"
             
         示例:
-            "2026-01-20 pad Assets:Bank:CMB Expenses:Adjustment"
+            "2026-01-20 pad Assets:Savings:Web:WechatFund Expenses:Adjustment"
         """
         return f"{pad_date} pad {account_name} {pad_account}"
 

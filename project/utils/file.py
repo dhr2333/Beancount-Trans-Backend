@@ -235,6 +235,31 @@ class BeanFileManager:
         return os.path.join(trans_dir, 'main.bean')
 
     @staticmethod
+    def get_reconciliation_bean_path(user_or_username):
+        """获取对账文件路径（trans/reconciliation.bean）
+        
+        Args:
+            user_or_username: User 对象或 username 字符串
+            
+        Returns:
+            trans/reconciliation.bean 文件的完整路径
+        """
+        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(user_or_username), 'trans')
+        return os.path.join(trans_dir, 'reconciliation.bean')
+
+    @staticmethod
+    def ensure_reconciliation_bean_included(user_or_username):
+        """确保 trans/main.bean 包含 reconciliation.bean
+        
+        如果 trans/main.bean 中还没有 include "reconciliation.bean"，
+        则自动添加。
+        
+        Args:
+            user_or_username: User 对象或 username 字符串
+        """
+        BeanFileManager.add_bean_to_trans_main(user_or_username, 'reconciliation.bean')
+
+    @staticmethod
     def init_user_bean_structure(user_or_username):
         """初始化完整的用户账本文件结构（幂等操作）
         
