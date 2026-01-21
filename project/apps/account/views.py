@@ -132,7 +132,9 @@ class AccountViewSet(ModelViewSet):
     @action(detail=False, methods=['get'])
     def tree(self, request):
         """获取账户树形结构"""
-        root_accounts = self.get_queryset().filter(parent__isnull=True)
+        # 应用 filter_backends 确保只返回当前用户的数据
+        queryset = self.filter_queryset(self.get_queryset())
+        root_accounts = queryset.filter(parent__isnull=True)
 
         serializer = self.get_serializer(root_accounts, many=True)
         return Response(serializer.data)
