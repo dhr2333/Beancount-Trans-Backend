@@ -3,6 +3,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from project.models import BaseModel
+from project.apps.reconciliation.models import CycleUnit
 
 
 class Account(BaseModel):
@@ -10,6 +11,23 @@ class Account(BaseModel):
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='children', help_text="父账户", verbose_name="父账户")
     owner = models.ForeignKey(User, related_name='accounts', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
     enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
+    
+    # 对账周期配置
+    reconciliation_cycle_unit = models.CharField(
+        max_length=10,
+        choices=CycleUnit.choices,
+        null=True,
+        blank=True,
+        verbose_name="对账周期单位",
+        help_text="对账周期单位：天/周/月/年"
+    )
+    reconciliation_cycle_interval = models.PositiveIntegerField(
+        default=1,
+        null=True,
+        blank=True,
+        verbose_name="对账周期间隔",
+        help_text="每隔多少个周期单位执行一次对账"
+    )
 
     class Meta:
         unique_together = ['account', 'owner']
@@ -29,6 +47,19 @@ class Account(BaseModel):
         valid_roots = ['Assets', 'Liabilities', 'Equity', 'Income', 'Expenses']
         if root not in valid_roots:
             raise ValidationError(f"根账户必须是以下之一: {', '.join(valid_roots)}")
+
+        # 验证对账周期配置的一致性
+        has_unit = bool(self.reconciliation_cycle_unit)
+        has_interval = self.reconciliation_cycle_interval is not None
+
+        if has_unit != has_interval:
+           raise ValidationError(
+              "对账周期单位和对账周期间隔必须同时设置或同时为空"
+         )
+
+        # 如果设置了周期，验证间隔必须大于 0
+        if has_unit and self.reconciliation_cycle_interval <= 0:
+            raise ValidationError("对账周期间隔必须大于 0")
 
     def save(self, *args, **kwargs):
         """保存账户时自动创建父账户，并同步映射状态"""
@@ -309,6 +340,17 @@ class Account(BaseModel):
         }
 
         return result
+
+    def has_reconciliation_cycle(self) -> bool:
+        """检查是否配置了对账周期"""
+        return bool(self.reconciliation_cycle_unit and self.reconciliation_cycle_interval)
+    
+    def get_reconciliation_cycle_display(self) -> str:
+        """获取对账周期的显示文本"""
+        if not self.has_reconciliation_cycle():
+            return "未设置"
+        unit_display = dict(CycleUnit.choices).get(self.reconciliation_cycle_unit, '')
+        return f"每 {self.reconciliation_cycle_interval} {unit_display}"
 
 
 class AccountTemplate(BaseModel):
