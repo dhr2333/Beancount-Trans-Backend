@@ -59,16 +59,16 @@ class AccountViewSet(ModelViewSet):
         queryset = super().get_queryset()
 
         # 根据用户过滤，匿名用户使用id=1用户的数据
-        User = get_user_model()
-        if self.request.user.is_authenticated:
-            queryset = queryset.filter(owner=self.request.user)
-        else:
-            # 匿名用户使用id=1用户的账户
-            try:
-                default_user = User.objects.get(id=1)
-                queryset = queryset.filter(owner=default_user)
-            except User.DoesNotExist:
-                queryset = queryset.none()
+        # User = get_user_model()
+        # if self.request.user.is_authenticated:
+        #     queryset = queryset.filter(owner=self.request.user)
+        # else:
+        #     # 匿名用户使用id=1用户的账户
+        #     try:
+        #         default_user = User.objects.get(id=1)
+        #         queryset = queryset.filter(owner=default_user)
+        #     except User.DoesNotExist:
+        #         queryset = queryset.none()
 
         # 根据账户类型过滤
         account_type = self.request.query_params.get('account_type')
@@ -85,6 +85,49 @@ class AccountViewSet(ModelViewSet):
     def perform_create(self, serializer):
         """创建账户时设置属主"""
         serializer.save(owner=self.request.user)
+    
+    def perform_update(self, serializer):
+        """更新账户时处理对账周期配置变更"""
+        from datetime import date
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.reconciliation.models import ScheduledTask
+        
+        instance = self.get_object()
+        old_cycle_unit = instance.reconciliation_cycle_unit
+        old_cycle_interval = instance.reconciliation_cycle_interval
+        
+        # 保存更新
+        updated_instance = serializer.save()
+        
+        new_cycle_unit = updated_instance.reconciliation_cycle_unit
+        new_cycle_interval = updated_instance.reconciliation_cycle_interval
+        
+        # 处理对账周期配置变更
+        account_content_type = ContentType.objects.get_for_model(Account)
+        
+        # 场景1：设置周期（从无到有）
+        if not old_cycle_unit and new_cycle_unit:
+            # 创建首个待办，执行日期为今日
+            ScheduledTask.objects.create(
+                task_type='reconciliation',
+                content_type=account_content_type,
+                object_id=updated_instance.id,
+                scheduled_date=date.today(),
+                status='pending'
+            )
+        
+        # 场景2：删除周期配置（从有到无）
+        elif old_cycle_unit and not new_cycle_unit:
+            # 将相关待办的状态更新为 cancelled
+            ScheduledTask.objects.filter(
+                task_type='reconciliation',
+                content_type=account_content_type,
+                object_id=updated_instance.id,
+                status='pending'
+            ).update(status='cancelled')
+        
+        # 场景3：修改周期配置（从有到有）
+        # 相关待办不自动更新，保持原有 scheduled_date
 
     @action(detail=False, methods=['get'])
     def tree(self, request):

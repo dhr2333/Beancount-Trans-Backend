@@ -79,6 +79,7 @@ class AccountSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'has_children', 'mapping_count',
+            'reconciliation_cycle_unit', 'reconciliation_cycle_interval',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified', 'owner']
