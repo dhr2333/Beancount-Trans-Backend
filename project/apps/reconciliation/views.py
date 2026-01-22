@@ -64,23 +64,24 @@ class ScheduledTaskViewSet(ModelViewSet):
         """
         queryset = super().get_queryset()  # 过滤器后端已处理用户过滤
         
-        # 状态筛选
-        status_param = self.request.query_params.get('status')
-        if status_param:
-            queryset = queryset.filter(status=status_param)
+        # 到期筛选（优先处理，因为会限制状态）
+        due = self.request.query_params.get('due')
+        if due and due.lower() == 'true':
+            # 到期筛选：scheduled_date <= today 且 status = pending
+            queryset = queryset.filter(
+                scheduled_date__lte=date.today(),
+                status='pending'
+            )
+        else:
+            # 如果没有 due 参数，才应用 status 筛选
+            status_param = self.request.query_params.get('status')
+            if status_param:
+                queryset = queryset.filter(status=status_param)
         
         # 任务类型筛选
         task_type = self.request.query_params.get('task_type')
         if task_type:
             queryset = queryset.filter(task_type=task_type)
-        
-        # 到期筛选
-        due = self.request.query_params.get('due')
-        if due and due.lower() == 'true':
-            queryset = queryset.filter(
-                scheduled_date__lte=date.today(),
-                status='pending'
-            )
         
         return queryset.select_related('content_type').order_by('scheduled_date')
     

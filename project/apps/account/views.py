@@ -182,6 +182,9 @@ class AccountViewSet(ModelViewSet):
             result = {
                 'account': account.account,
                 'account_id': account.id,
+                'reconciliation_cycle_unit': account.reconciliation_cycle_unit,
+                'reconciliation_cycle_interval': account.reconciliation_cycle_interval,
+                'reconciliation_cycle_display': account.get_reconciliation_cycle_display(),
                 'expense_mappings': [
                     {
                         'id': m.id, 
