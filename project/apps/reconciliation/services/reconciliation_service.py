@@ -89,7 +89,12 @@ class ReconciliationService:
                 if item.get('is_auto'):
                     auto_item = item
                 else:
-                    amount = Decimal(str(item['amount']))
+                    # 如果金额为空，说明该账户是要自动分配剩余金额的，不该再为该账户生成 transactions 指令
+                    amount = item.get('amount')
+                    if amount is None:
+                        # 金额为空时，跳过该条目，不生成 transaction 指令
+                        continue
+                    amount = Decimal(str(amount))
                     total_allocated += amount
                     # 生成 transaction 指令
                     transaction_directives.append(
@@ -99,20 +104,18 @@ class ReconciliationService:
                     )
             
             # 4.2 处理自动计算条目或剩余差额
-            remaining = difference - total_allocated
+            # 在复式记账中：实际余额 + 差额分配 = 预期余额
+            # 所以：差额分配 = 预期余额 - 实际余额 = -difference
+            # 剩余差额 = -difference - total_allocated
+            remaining = -difference - total_allocated
             
             pad_directive = None
             if auto_item:
-                # 有自动计算条目
-                # 生成 pad 指令
+                # 有自动计算条目（使用 pad 兜底）
+                # 只生成 pad 指令，不生成 transaction 指令
+                # pad 指令会自动处理剩余差额，无需额外的 transaction 指令
                 pad_directive = BalanceCalculationService.generate_pad_directive(
                     account.account, auto_item['account'], today
-                )
-                # 生成 transaction 指令（自动计算）
-                transaction_directives.append(
-                    ReconciliationService._generate_transaction_directive(
-                        account.account, auto_item['account'], remaining, currency, today
-                    )
                 )
             elif abs(remaining) > Decimal('0.01'):
                 # 没有自动计算，但有剩余差额，不允许这种情况
@@ -224,5 +227,3 @@ class ReconciliationService:
             logger.info(f"已创建对账文件并添加到 trans/main.bean: {reconciliation_path}")
         
         logger.info(f"已写入 {len(directives)} 条对账指令到 {reconciliation_path}")
-
-

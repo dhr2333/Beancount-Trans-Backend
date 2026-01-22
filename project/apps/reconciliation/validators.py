@@ -75,20 +75,25 @@ class ReconciliationValidator:
             errors.append('只能有一个条目标记为自动计算')
         
         # 7. 验证金额总和
-        remaining = difference - total_allocated
+        # 在复式记账中：实际余额 + 差额分配 = 预期余额
+        # 所以：差额分配 = 预期余额 - 实际余额 = -difference
+        # 因此：total_allocated 应该等于 -difference
+        target_allocation = -difference
+        remaining = target_allocation - total_allocated
         
         if auto_count == 0:
             # 模式A：全部手动填写金额（不需要 pad）
             # 允许小数点误差（0.01）
-            if abs(total_allocated - difference) > Decimal('0.01'):
+            # 检查：actual_balance + total_allocated 是否等于 expected_balance
+            if abs(actual_balance + total_allocated - expected_balance) > Decimal('0.01'):
                 errors.append(
-                    f'已分配金额 {total_allocated} 与差额 {difference} 不匹配（全部手动分配时，金额总和必须等于差额）'
+                    f'已分配金额 {total_allocated} 与差额不匹配（实际余额 {actual_balance} + 差额分配 {total_allocated} = {actual_balance + total_allocated}，预期余额 {expected_balance}，应分配：{target_allocation}）'
                 )
-        else:
-            # 模式B：有一个自动计算条目（使用 pad）
-            # 已分配金额不能大于等于差额绝对值（否则自动计算会为0或负数）
-            if total_allocated >= abs(difference):
-                errors.append('已分配金额不能大于等于差额绝对值')
+        # else:
+        #     # 模式B：有一个自动计算条目（使用 pad）
+        #     # 已分配金额的绝对值不能大于等于差额绝对值（否则自动计算会为0或负数）
+        #     if abs(total_allocated) >= abs(difference):
+        #         errors.append('已分配金额的绝对值不能大于等于差额绝对值')
         
         # 8. 如果有剩余差额，必须要有 auto_item（用于 pad）
         if abs(remaining) > Decimal('0.01') and auto_count == 0:
