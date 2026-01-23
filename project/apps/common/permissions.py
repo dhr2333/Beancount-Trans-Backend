@@ -33,6 +33,12 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
         if hasattr(obj, 'user'):
             return obj.user == request.user
 
+        # 特殊处理：ScheduledTask 通过 content_object (Account) 关联到用户
+        if hasattr(obj, 'content_object') and obj.content_object:
+            content_obj = obj.content_object
+            if hasattr(content_obj, 'owner'):
+                return content_obj.owner == request.user
+
         # 如果没有owner或user属性，拒绝访问
         return False
 

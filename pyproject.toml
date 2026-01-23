@@ -16,7 +16,6 @@ filterwarnings = [
 # 附加参数
 addopts = """
     --no-migrations
-    --reuse-db
     --cov=project
     --cov-report=html:reports/htmlcov
     --cov-report=xml:reports/coverage.xml
