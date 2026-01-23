@@ -69,7 +69,6 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'django.contrib.humanize',
     'django_filters',
     'django.contrib.sites',
-    'coreapi',
     'corsheaders',
 
     # 第三方应用
