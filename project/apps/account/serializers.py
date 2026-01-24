@@ -126,8 +126,10 @@ class AccountSerializer(serializers.ModelSerializer):
 
     def validate_account(self, value):
         """验证账户路径格式"""
-        if not all(part.isidentifier() for part in value.split(':')):
-            raise serializers.ValidationError("账户路径必须由字母、数字和下划线组成，用冒号分隔")
+        from project.apps.account.models import _is_valid_account_part
+        
+        if not all(_is_valid_account_part(part) for part in value.split(':')):
+            raise serializers.ValidationError("账户路径必须由字母、数字和连字符组成，用冒号分隔，不能以连字符开头或结尾")
 
         # 验证根账户类型
         root = value.split(':')[0]

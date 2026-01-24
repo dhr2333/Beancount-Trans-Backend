@@ -1,9 +1,29 @@
+import re
 from django.core.validators import RegexValidator
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from project.models import BaseModel
 from project.apps.reconciliation.models import CycleUnit
+
+
+def _is_valid_account_part(part: str) -> bool:
+    """
+    验证账户路径的每个部分是否有效
+    
+    允许：字母、数字、连字符（-）
+    不允许：以连字符开头或结尾，不能为空
+    
+    Args:
+        part: 账户路径的一部分（用冒号分隔后的单个部分）
+    
+    Returns:
+        bool: 是否有效
+    """
+    if not part:
+        return False
+    # 允许字母、数字和连字符，但不能以连字符开头或结尾
+    return bool(re.match(r'^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$', part))
 
 
 class Account(BaseModel):
@@ -39,8 +59,8 @@ class Account(BaseModel):
         return self.account
 
     def clean(self):
-        if not all(part.isidentifier() for part in self.account.split(':')):
-            raise ValidationError("账户路径必须由字母、数字和下划线组成，用冒号分隔")
+        if not all(_is_valid_account_part(part) for part in self.account.split(':')):
+            raise ValidationError("账户路径必须由字母、数字和连字符组成，用冒号分隔，不能以连字符开头或结尾")
 
         # 验证根账户类型
         root = self.account.split(':')[0]
