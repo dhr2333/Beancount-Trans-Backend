@@ -36,7 +36,7 @@ class ReconciliationService:
             actual_balance: 实际余额
             currency: 币种，默认 CNY
             transaction_items: 动态表单数据（用于处理差额）
-            as_of_date: 对账截止日期，默认为 None（计算到最新）
+            as_of_date: 对账截止日期，必须由前端提供
             
         Returns:
             包含生成的指令和下一个待办 ID 的字典
@@ -49,10 +49,11 @@ class ReconciliationService:
         if not isinstance(account, Account):
             raise ValueError("待办任务关联的对象不是 Account 类型")
         
-        # 2. 计算预期余额（使用 as_of_date）
-        today = date.today()
-        as_of_date = as_of_date or today  # 默认为今天
+        # 2. 验证 as_of_date 必须由前端提供
+        if as_of_date is None:
+            raise ValueError("as_of_date 必须由前端提供")
         
+        # 3. 计算预期余额（使用 as_of_date）
         balances = BalanceCalculationService.calculate_balance(
             task.content_object.owner, 
             account.account,
@@ -60,24 +61,29 @@ class ReconciliationService:
         )
         expected_balance = balances.get(currency, Decimal('0.00'))
         
-        # 3. 计算差额
+        # 4. 计算差额
         difference = actual_balance - expected_balance
         
-        # 4. 生成指令
+        # 5. 根据 as_of_date 计算指令日期
+        # transaction/pad 指令日期 = as_of_date
+        # balance 指令日期 = as_of_date + 1 day
+        transaction_date = as_of_date
+        balance_date = as_of_date + timedelta(days=1)
+        
+        # 6. 生成指令
         # 指令生成顺序：transaction → pad → balance（按需求要求）
         directives = []
-        tomorrow = today + timedelta(days=1)
         
         if difference == 0:
             # 无差额：仅生成 balance
             directives.append(
                 BalanceCalculationService.generate_balance_directive(
-                    account.account, actual_balance, tomorrow, currency
+                    account.account, actual_balance, balance_date, currency
                 )
             )
         else:
             # 有差额：处理 transaction_items
-            # 4.1 处理 transaction 条目（手动添加的）
+            # 6.1 处理 transaction 条目（手动添加的）
             if not transaction_items:
                 transaction_items = []
             
@@ -99,11 +105,11 @@ class ReconciliationService:
                     # 生成 transaction 指令
                     transaction_directives.append(
                         ReconciliationService._generate_transaction_directive(
-                            account.account, item['account'], amount, currency, today
+                            account.account, item['account'], amount, currency, transaction_date
                         )
                     )
             
-            # 4.2 处理自动计算条目或剩余差额
+            # 6.2 处理自动计算条目或剩余差额
             # 在复式记账中：实际余额 + 差额分配 = 预期余额
             # 所以：差额分配 = 预期余额 - 实际余额 = -difference
             # 剩余差额 = -difference - total_allocated
@@ -115,7 +121,7 @@ class ReconciliationService:
                 # 只生成 pad 指令，不生成 transaction 指令
                 # pad 指令会自动处理剩余差额，无需额外的 transaction 指令
                 pad_directive = BalanceCalculationService.generate_pad_directive(
-                    account.account, auto_item['account'], today
+                    account.account, auto_item['account'], transaction_date
                 )
             elif abs(remaining) > Decimal('0.01'):
                 # 没有自动计算，但有剩余差额，不允许这种情况
@@ -123,28 +129,29 @@ class ReconciliationService:
                     f"有剩余差额 {remaining} 时必须提供一个标记为自动计算的条目（用于 pad 兜底）"
                 )
             
-            # 4.3 按顺序组装指令：transaction → pad → balance
+            # 6.3 按顺序组装指令：transaction → pad → balance
             directives.extend(transaction_directives)  # 先添加 transaction
             if pad_directive:
                 directives.append(pad_directive)  # 再添加 pad
             directives.append(
                 BalanceCalculationService.generate_balance_directive(
-                    account.account, actual_balance, tomorrow, currency
+                    account.account, actual_balance, balance_date, currency
                 )
             )  # 最后添加 balance
         
-        # 5. 写入 .bean 文件
+        # 7. 写入 .bean 文件
         ReconciliationService._append_directives(
             task.content_object.owner, 
             directives
         )
         
-        # 6. 更新待办状态
+        # 8. 更新待办状态（completed_date 使用实际完成日期）
+        today = date.today()
         task.status = 'completed'
         task.completed_date = today
         task.save()
         
-        # 7. 创建下一个待办
+        # 9. 创建下一个待办
         next_task = None
         if account.reconciliation_cycle_unit and account.reconciliation_cycle_interval:
             try:

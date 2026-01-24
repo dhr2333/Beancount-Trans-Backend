@@ -135,9 +135,8 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         help_text="差额分配条目（有差额时使用）"
     )
     as_of_date = serializers.DateField(
-        required=False,
-        allow_null=True,
-        help_text="对账截止日期（默认为今天）"
+        required=True,
+        help_text="对账截止日期（必须由前端提供）"
     )
     
     def validate(self, data):
@@ -166,8 +165,10 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         
         account = task.content_object
         
-        # 计算预期余额（使用 as_of_date）
-        as_of_date = data.get('as_of_date') or date.today()
+        # 计算预期余额（使用 as_of_date，必须由前端提供）
+        as_of_date = data.get('as_of_date')
+        if not as_of_date:
+            raise serializers.ValidationError('as_of_date 必须由前端提供')
         balances = BalanceCalculationService.calculate_balance(
             account.owner,
             account.account,
