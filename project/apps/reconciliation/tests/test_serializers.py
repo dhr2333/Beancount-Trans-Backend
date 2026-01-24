@@ -257,6 +257,7 @@ class TestReconciliationExecuteSerializer:
         data = {
             'actual_balance': '1200.00',
             'currency': 'CNY',
+            'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
             'transaction_items': [
                 {
                     'account': 'Expenses:Food',
@@ -273,4 +274,174 @@ class TestReconciliationExecuteSerializer:
         # 验证器会验证金额总和
         # 这里只验证基本结构
         assert serializer.is_valid() or 'transaction_items' in serializer.errors
+
+
+@pytest.mark.django_db
+class TestReconciliationDuplicateCheck:
+    """测试重复对账检查逻辑
+    
+    需求：不允许同一账户同一天被对账两次（基于 as_of_date）
+    - 允许同一账户在同一天提交不同 as_of_date 的对账
+    - 不允许同一账户提交已对账过的 as_of_date
+    """
+    
+    def test_allow_same_account_different_as_of_date(
+        self, 
+        scheduled_task_pending_for_same_account,
+        scheduled_task_completed_with_as_of_date,
+        mock_bean_file_path
+    ):
+        """测试允许同一账户对账不同的 as_of_date
+        
+        场景：账户 A 在 2026-01-20 完成了 as_of_date=2026-01-20 的对账，
+        允许账户 A 在 2026-01-22 提交 as_of_date=2026-01-21 的对账
+        """
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 提交 as_of_date=2026-01-21（与已完成的 2026-01-20 不同）
+        data = {
+            'actual_balance': '1000.00',
+            'currency': 'CNY',
+            'as_of_date': '2026-01-21'  # 不同的 as_of_date
+        }
+        
+        serializer = ReconciliationExecuteSerializer(
+            data=data,
+            context={'task': scheduled_task_pending_for_same_account}
+        )
+        
+        # 应该通过验证（不同的 as_of_date）
+        assert serializer.is_valid(), f"验证应该通过，错误: {serializer.errors}"
+    
+    def test_reject_same_account_same_as_of_date(
+        self, 
+        scheduled_task_pending_for_same_account,
+        scheduled_task_completed_with_as_of_date,
+        mock_bean_file_path
+    ):
+        """测试拒绝同一账户重复对账相同的 as_of_date
+        
+        场景：账户 A 在 2026-01-20 完成了 as_of_date=2026-01-20 的对账，
+        不允许账户 A 在 2026-01-23 提交 as_of_date=2026-01-20 的对账
+        """
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 提交 as_of_date=2026-01-20（与已完成的相同）
+        data = {
+            'actual_balance': '1000.00',
+            'currency': 'CNY',
+            'as_of_date': '2026-01-20'  # 相同的 as_of_date，应被拒绝
+        }
+        
+        serializer = ReconciliationExecuteSerializer(
+            data=data,
+            context={'task': scheduled_task_pending_for_same_account}
+        )
+        
+        # 应该验证失败
+        assert not serializer.is_valid()
+        # 检查错误信息
+        assert '2026-01-20' in str(serializer.errors) or '重复对账' in str(serializer.errors)
+    
+    def test_allow_different_account_same_as_of_date(
+        self, 
+        user,
+        account,
+        scheduled_task_completed_with_as_of_date,
+        mock_bean_file_path
+    ):
+        """测试允许不同账户对账相同的 as_of_date
+        
+        场景：账户 A 已对账 as_of_date=2026-01-20，
+        账户 B 可以提交 as_of_date=2026-01-20 的对账
+        """
+        # 创建另一个账户
+        another_account = Account.objects.create(
+            account='Assets:Savings:Bank:BOC',
+            owner=user
+        )
+        
+        # 为另一个账户创建待办
+        content_type = ContentType.objects.get_for_model(Account)
+        another_task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=another_account.id,
+            scheduled_date=date(2026, 1, 22),
+            status='pending'
+        )
+        
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:BOC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:BOC 2000.00 CNY
+    Income:Salary -2000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 不同账户提交相同的 as_of_date
+        data = {
+            'actual_balance': '2000.00',
+            'currency': 'CNY',
+            'as_of_date': '2026-01-20'  # 与账户 A 相同的 as_of_date
+        }
+        
+        serializer = ReconciliationExecuteSerializer(
+            data=data,
+            context={'task': another_task}
+        )
+        
+        # 不同账户应该允许对账相同的 as_of_date
+        assert serializer.is_valid(), f"不同账户应该允许对账相同的 as_of_date，错误: {serializer.errors}"
+    
+    def test_same_task_can_resubmit_same_as_of_date(
+        self, 
+        scheduled_task_pending,
+        mock_bean_file_path
+    ):
+        """测试同一待办可以提交相同的 as_of_date（排除自身）
+        
+        场景：待办任务首次提交，不应被自己的历史记录阻止
+        """
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        data = {
+            'actual_balance': '1000.00',
+            'currency': 'CNY',
+            'as_of_date': str(date.today())
+        }
+        
+        serializer = ReconciliationExecuteSerializer(
+            data=data,
+            context={'task': scheduled_task_pending}
+        )
+        
+        # 首次提交应该通过
+        assert serializer.is_valid(), f"首次提交应该通过，错误: {serializer.errors}"
 

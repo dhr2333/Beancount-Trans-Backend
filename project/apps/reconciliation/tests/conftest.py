@@ -96,6 +96,35 @@ def scheduled_task_completed(user, account):
 
 
 @pytest.fixture
+def scheduled_task_completed_with_as_of_date(user, account):
+    """创建已完成的待办任务（带 as_of_date，用于重复对账测试）"""
+    content_type = ContentType.objects.get_for_model(Account)
+    # 假设 2026-01-20 已对账
+    return ScheduledTask.objects.create(
+        task_type='reconciliation',
+        content_type=content_type,
+        object_id=account.id,
+        scheduled_date=date(2026, 1, 15),
+        completed_date=date(2026, 1, 20),
+        as_of_date=date(2026, 1, 20),  # 账本对账日期
+        status='completed'
+    )
+
+
+@pytest.fixture
+def scheduled_task_pending_for_same_account(user, account):
+    """创建同一账户的待执行待办任务（用于重复对账测试）"""
+    content_type = ContentType.objects.get_for_model(Account)
+    return ScheduledTask.objects.create(
+        task_type='reconciliation',
+        content_type=content_type,
+        object_id=account.id,
+        scheduled_date=date(2026, 1, 22),  # 另一个待办
+        status='pending'
+    )
+
+
+@pytest.fixture
 def scheduled_task_cancelled(user, account):
     """创建已取消的待办任务"""
     content_type = ContentType.objects.get_for_model(Account)

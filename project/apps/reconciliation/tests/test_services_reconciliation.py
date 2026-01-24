@@ -33,7 +33,8 @@ class TestReconciliationService:
         result = ReconciliationService.execute_reconciliation(
             task=scheduled_task_pending,
             actual_balance=Decimal('1000.00'),
-            currency='CNY'
+            currency='CNY',
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -77,7 +78,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('1200.00'),
             currency='CNY',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -117,7 +119,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('1200.00'),
             currency='CNY',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -164,7 +167,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('1200.00'),
             currency='CNY',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -209,7 +213,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('600.00'),
             currency='CNY',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -248,7 +253,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('150.00'),
             currency='COIN',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'
@@ -286,7 +292,8 @@ class TestReconciliationService:
             result = ReconciliationService.execute_reconciliation(
                 task=scheduled_task_pending,
                 actual_balance=Decimal('1000.00'),
-                currency='CNY'
+                currency='CNY',
+                as_of_date=date(2026, 1, 5)  # as_of_date 必须由前端提供
             )
         
         assert result['status'] == 'success'
@@ -327,7 +334,8 @@ class TestReconciliationService:
         result = ReconciliationService.execute_reconciliation(
             task=scheduled_task_pending,
             actual_balance=Decimal('1000.00'),
-            currency='CNY'
+            currency='CNY',
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         # 验证文件已写入
@@ -366,7 +374,8 @@ class TestReconciliationService:
             task=scheduled_task_pending,
             actual_balance=Decimal('800.00'),
             currency='CNY',
-            transaction_items=transaction_items
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
         )
         
         assert result['status'] == 'success'

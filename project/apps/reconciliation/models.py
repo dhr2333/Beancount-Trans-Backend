@@ -52,6 +52,9 @@ class ScheduledTask(BaseModel):
     # completed_date：实际完成日期（仅当 status='completed' 时有效）
     completed_date = models.DateField(null=True, blank=True, verbose_name="实际完成日期")
     
+    # as_of_date：对账截止日期（仅对 reconciliation 任务有效，用于防止重复对账）
+    as_of_date = models.DateField(null=True, blank=True, verbose_name="账本对账日期")
+    
     status = models.CharField(
         max_length=16,
         choices=STATUS_CHOICES,
@@ -66,6 +69,7 @@ class ScheduledTask(BaseModel):
         indexes = [
             models.Index(fields=['task_type', 'status', 'scheduled_date']),
             models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['task_type', 'content_type', 'object_id', 'as_of_date', 'status']),
         ]
         
     def __str__(self):

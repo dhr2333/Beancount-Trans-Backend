@@ -145,10 +145,11 @@ class ReconciliationService:
             directives
         )
         
-        # 8. 更新待办状态（completed_date 使用实际完成日期）
+        # 8. 更新待办状态（completed_date 使用实际完成日期，保存 as_of_date）
         today = date.today()
         task.status = 'completed'
         task.completed_date = today
+        task.as_of_date = as_of_date  # 保存账本对账日期，用于防止重复对账
         task.save()
         
         # 9. 创建下一个待办

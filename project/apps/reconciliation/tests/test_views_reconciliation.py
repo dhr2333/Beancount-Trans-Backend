@@ -88,7 +88,8 @@ class TestReconciliationAPI:
             f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
             {
                 'actual_balance': '1000.00',
-                'currency': 'CNY'
+                'currency': 'CNY',
+                'as_of_date': str(date.today())  # as_of_date 必须由前端提供
             },
             format='json'
         )
@@ -124,6 +125,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '1200.00',
                 'currency': 'CNY',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Expenses:Food',
@@ -161,6 +163,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '1200.00',
                 'currency': 'CNY',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Income:Investment:Interest',
@@ -201,6 +204,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '1200.00',
                 'currency': 'CNY',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Expenses:Food',
@@ -248,6 +252,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '600.00',
                 'currency': 'CNY',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Income:Investment:Interest',
@@ -291,6 +296,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '150.00',
                 'currency': 'COIN',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Income:Investment:Interest',
@@ -354,6 +360,7 @@ class TestReconciliationAPI:
             {
                 'actual_balance': '1200.00',
                 'currency': 'CNY',
+                'as_of_date': str(date.today()),  # as_of_date 必须由前端提供
                 'transaction_items': [
                     {
                         'account': 'Expenses:Food',
@@ -367,4 +374,132 @@ class TestReconciliationAPI:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert 'transaction_items' in response.data
+
+
+@pytest.mark.django_db
+class TestReconciliationDuplicateCheckAPI:
+    """测试重复对账检查 API
+    
+    需求：不允许同一账户同一天被对账两次（基于 as_of_date）
+    """
+    
+    def test_api_allow_same_account_different_as_of_date(
+        self, 
+        user, 
+        account,
+        mock_bean_file_path, 
+        mock_reconciliation_bean_path, 
+        mock_ensure_reconciliation_included
+    ):
+        """测试 API：允许同一账户对账不同的 as_of_date"""
+        from django.contrib.contenttypes.models import ContentType
+        from datetime import date
+        
+        content_type = ContentType.objects.get_for_model(Account)
+        
+        # 创建已完成的对账任务（as_of_date=2026-01-20）
+        ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date(2026, 1, 15),
+            completed_date=date(2026, 1, 20),
+            as_of_date=date(2026, 1, 20),
+            status='completed'
+        )
+        
+        # 创建待执行的对账任务
+        pending_task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date(2026, 1, 22),
+            status='pending'
+        )
+        
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # 提交不同的 as_of_date（2026-01-21）
+        response = client.post(
+            f'/api/reconciliation/tasks/{pending_task.id}/execute/',
+            {
+                'actual_balance': '1000.00',
+                'currency': 'CNY',
+                'as_of_date': '2026-01-21'  # 不同的 as_of_date
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'success'
+    
+    def test_api_reject_same_account_same_as_of_date(
+        self, 
+        user, 
+        account,
+        mock_bean_file_path
+    ):
+        """测试 API：拒绝同一账户重复对账相同的 as_of_date"""
+        from django.contrib.contenttypes.models import ContentType
+        from datetime import date
+        
+        content_type = ContentType.objects.get_for_model(Account)
+        
+        # 创建已完成的对账任务（as_of_date=2026-01-20）
+        ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date(2026, 1, 15),
+            completed_date=date(2026, 1, 20),
+            as_of_date=date(2026, 1, 20),
+            status='completed'
+        )
+        
+        # 创建待执行的对账任务
+        pending_task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date(2026, 1, 23),
+            status='pending'
+        )
+        
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # 提交相同的 as_of_date（2026-01-20）
+        response = client.post(
+            f'/api/reconciliation/tasks/{pending_task.id}/execute/',
+            {
+                'actual_balance': '1000.00',
+                'currency': 'CNY',
+                'as_of_date': '2026-01-20'  # 相同的 as_of_date，应被拒绝
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '2026-01-20' in str(response.data) or '重复对账' in str(response.data)
 

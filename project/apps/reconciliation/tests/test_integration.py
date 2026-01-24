@@ -61,7 +61,8 @@ class TestReconciliationIntegration:
             f'/api/reconciliation/tasks/{initial_task.id}/execute/',
             {
                 'actual_balance': '1000.00',
-                'currency': 'CNY'
+                'currency': 'CNY',
+                'as_of_date': str(date.today())  # as_of_date 必须由前端提供
             },
             format='json'
         )
@@ -192,7 +193,8 @@ class TestReconciliationIntegration:
             result = ReconciliationService.execute_reconciliation(
                 task=task,
                 actual_balance=Decimal('1000.00'),
-                currency='CNY'
+                currency='CNY',
+                as_of_date=date(2026, 1, 5)  # as_of_date 必须由前端提供
             )
         
         # 验证下一个待办的 scheduled_date 是 2 月 1 号（基于 scheduled_date，而非 completed_date）

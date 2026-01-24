@@ -141,27 +141,14 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
     
     def validate(self, data):
         """验证对账数据"""
-        from datetime import date
         from .validators import ReconciliationValidator
         from .services import BalanceCalculationService
+        from .models import ScheduledTask
         
         # 获取任务和账户信息
         task = self.context.get('task')
         if not task:
             raise serializers.ValidationError('未提供待办任务')
-        
-        # 检查同一账户今天是否已经完成过对账
-        today = date.today()
-        existing_completed = ScheduledTask.objects.filter(
-            task_type='reconciliation',
-            content_type=task.content_type,
-            object_id=task.object_id,
-            status='completed',
-            completed_date=today
-        ).exclude(id=task.id).exists()
-        
-        if existing_completed:
-            raise serializers.ValidationError('该账户今天已完成对账，不允许重复完成')
         
         account = task.content_object
         
@@ -169,6 +156,21 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         as_of_date = data.get('as_of_date')
         if not as_of_date:
             raise serializers.ValidationError('as_of_date 必须由前端提供')
+        
+        # 检查同一账户是否已经对账过相同的 as_of_date
+        # 不允许同一账户同一天被对账两次（基于 as_of_date）
+        existing_reconciliation = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=task.content_type,
+            object_id=task.object_id,
+            status='completed',
+            as_of_date=as_of_date
+        ).exclude(id=task.id).exists()
+        
+        if existing_reconciliation:
+            raise serializers.ValidationError(
+                f'该账户已对账过 {as_of_date}，不允许重复对账同一日期'
+            )
         balances = BalanceCalculationService.calculate_balance(
             account.owner,
             account.account,
