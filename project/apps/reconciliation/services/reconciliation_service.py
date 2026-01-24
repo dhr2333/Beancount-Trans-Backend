@@ -153,6 +153,15 @@ class ReconciliationService:
                     account.reconciliation_cycle_interval,
                     task.scheduled_date  # 基于 scheduled_date，而非 completed_date
                 )
+                
+                # 如果计算出的日期是今天或更早，延后一个周期
+                if next_date <= today:
+                    next_date = CycleCalculator.get_next_date(
+                        account.reconciliation_cycle_unit,
+                        account.reconciliation_cycle_interval,
+                        next_date  # 基于计算出的 next_date 再延后一个周期
+                    )
+                
                 next_task = ScheduledTask.objects.create(
                     task_type='reconciliation',
                     content_type=ContentType.objects.get_for_model(Account),
