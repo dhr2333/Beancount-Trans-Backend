@@ -151,6 +151,19 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         if not task:
             raise serializers.ValidationError('未提供待办任务')
         
+        # 检查同一账户今天是否已经完成过对账
+        today = date.today()
+        existing_completed = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=task.content_type,
+            object_id=task.object_id,
+            status='completed',
+            completed_date=today
+        ).exclude(id=task.id).exists()
+        
+        if existing_completed:
+            raise serializers.ValidationError('该账户今天已完成对账，不允许重复完成')
+        
         account = task.content_object
         
         # 计算预期余额（使用 as_of_date）
