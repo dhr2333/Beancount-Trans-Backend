@@ -246,7 +246,6 @@ class ReconciliationService:
             for directive in directives:
                 f.write(directive)
                 f.write('\n')
-            f.write('\n')  # 末尾添加空行
         
         # 如果是新文件，确保 trans/main.bean 包含它
         if is_new_file:
