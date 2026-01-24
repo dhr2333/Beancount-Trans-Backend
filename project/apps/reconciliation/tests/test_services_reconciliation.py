@@ -385,4 +385,132 @@ class TestReconciliationService:
         # 虽然传入的是 -200.00，但服务层使用 abs(amount) 生成指令
         assert '200.00 CNY' in result['directives'][0]
         assert 'Assets:Savings:Bank:ICBC' in result['directives'][0]
+    
+    def test_execute_reconciliation_with_auto_001_positive(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试有差额场景 - 自动填充金额为 0.01 时使用 transaction 而不是 pad（正数）"""
+        # 创建包含余额的账本文件
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Income:Investment:Interest CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 执行对账（实际余额 = 1000.01，预期余额 = 1000.00，差额 = 0.01）
+        # 差额分配 = -0.01，剩余 = -0.01，应该使用 transaction 而不是 pad
+        transaction_items = [
+            {
+                'account': 'Income:Investment:Interest',
+                'amount': None,
+                'is_auto': True
+            }
+        ]
+        
+        result = ReconciliationService.execute_reconciliation(
+            task=scheduled_task_pending,
+            actual_balance=Decimal('1000.01'),
+            currency='CNY',
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
+        )
+        
+        assert result['status'] == 'success'
+        assert len(result['directives']) == 2  # transaction + balance（没有 pad）
+        
+        # 验证指令顺序：transaction → balance
+        assert 'Income:Investment:Interest' in result['directives'][0]
+        assert '0.01 CNY' in result['directives'][0] or '-0.01 CNY' in result['directives'][0]
+        assert 'pad' not in result['directives'][0]  # 不应该有 pad
+        assert 'balance' in result['directives'][1]
+        assert '1000.01 CNY' in result['directives'][1]
+    
+    def test_execute_reconciliation_with_auto_001_negative(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试有差额场景 - 自动填充金额为 -0.01 时使用 transaction 而不是 pad（负数）"""
+        # 创建包含余额的账本文件
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Adjustment CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 执行对账（实际余额 = 999.99，预期余额 = 1000.00，差额 = -0.01）
+        # 差额分配 = 0.01，剩余 = 0.01，应该使用 transaction 而不是 pad
+        transaction_items = [
+            {
+                'account': 'Expenses:Adjustment',
+                'amount': None,
+                'is_auto': True
+            }
+        ]
+        
+        result = ReconciliationService.execute_reconciliation(
+            task=scheduled_task_pending,
+            actual_balance=Decimal('999.99'),
+            currency='CNY',
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
+        )
+        
+        assert result['status'] == 'success'
+        assert len(result['directives']) == 2  # transaction + balance（没有 pad）
+        
+        # 验证指令顺序：transaction → balance
+        assert 'Expenses:Adjustment' in result['directives'][0]
+        assert '0.01 CNY' in result['directives'][0] or '-0.01 CNY' in result['directives'][0]
+        assert 'pad' not in result['directives'][0]  # 不应该有 pad
+        assert 'balance' in result['directives'][1]
+        assert '999.99 CNY' in result['directives'][1]
+    
+    def test_execute_reconciliation_with_auto_001_with_manual_transaction(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试有差额场景 - 手动 transaction + 自动填充 0.01：应该使用 transaction 而不是 pad"""
+        # 创建包含余额的账本文件
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Food CNY
+2025-01-01 open Income:Investment:Interest CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # 执行对账（实际余额 = 1000.01，预期余额 = 1000.00，差额 = 0.01）
+        # 手动分配 -0.00（实际上不分配），剩余 -0.01 由自动填充，应该使用 transaction 而不是 pad
+        # 注意：由于手动分配为 0，实际上 remaining = -0.01，应该使用 transaction
+        transaction_items = [
+            {
+                'account': 'Income:Investment:Interest',
+                'amount': None,
+                'is_auto': True
+            }
+        ]
+        
+        result = ReconciliationService.execute_reconciliation(
+            task=scheduled_task_pending,
+            actual_balance=Decimal('1000.01'),
+            currency='CNY',
+            transaction_items=transaction_items,
+            as_of_date=date.today()  # as_of_date 必须由前端提供
+        )
+        
+        assert result['status'] == 'success'
+        assert len(result['directives']) == 2  # transaction (0.01) + balance
+        
+        # 验证指令顺序：自动 transaction → balance
+        assert 'Income:Investment:Interest' in result['directives'][0]
+        assert '0.01 CNY' in result['directives'][0] or '-0.01 CNY' in result['directives'][0]
+        assert 'pad' not in result['directives'][0]  # 不应该有 pad
+        assert 'balance' in result['directives'][1]
+        assert '1000.01 CNY' in result['directives'][1]
 

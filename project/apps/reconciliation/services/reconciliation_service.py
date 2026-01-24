@@ -116,13 +116,21 @@ class ReconciliationService:
             remaining = -difference - total_allocated
             
             pad_directive = None
+            auto_transaction_directive = None
             if auto_item:
-                # 有自动计算条目（使用 pad 兜底）
-                # 只生成 pad 指令，不生成 transaction 指令
-                # pad 指令会自动处理剩余差额，无需额外的 transaction 指令
-                pad_directive = BalanceCalculationService.generate_pad_directive(
-                    account.account, auto_item['account'], transaction_date
-                )
+                # 有自动计算条目
+                if abs(remaining) == Decimal('0.01'):
+                    # 金额为正负 0.01 时，使用 transaction 而不是 pad
+                    # 使用 remaining 保留正负号（0.01 或 -0.01）
+                    auto_transaction_directive = ReconciliationService._generate_transaction_directive(
+                        account.account, auto_item['account'], remaining, currency, transaction_date
+                    )
+                else:
+                    # 其他情况使用 pad 兜底
+                    # pad 指令会自动处理剩余差额，无需额外的 transaction 指令
+                    pad_directive = BalanceCalculationService.generate_pad_directive(
+                        account.account, auto_item['account'], transaction_date
+                    )
             elif abs(remaining) > Decimal('0.01'):
                 # 没有自动计算，但有剩余差额，不允许这种情况
                 raise ValueError(
@@ -130,9 +138,11 @@ class ReconciliationService:
                 )
             
             # 6.3 按顺序组装指令：transaction → pad → balance
-            directives.extend(transaction_directives)  # 先添加 transaction
+            directives.extend(transaction_directives)  # 先添加手动 transaction
+            if auto_transaction_directive:
+                directives.append(auto_transaction_directive)  # 添加自动计算的 transaction（0.01 情况）
             if pad_directive:
-                directives.append(pad_directive)  # 再添加 pad
+                directives.append(pad_directive)  # 再添加 pad（非 0.01 情况）
             directives.append(
                 BalanceCalculationService.generate_balance_directive(
                     account.account, actual_balance, balance_date, currency
