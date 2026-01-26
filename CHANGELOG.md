@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.4.3](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.2...5.4.3) (2026-01-26)
+
+### Bug Fixes
+
+* Prevent self-referencing parent accounts in Account model ([#56](https://github.com/dhr2333/Beancount-Trans-Backend/issues/56)) ([f0768fe](https://github.com/dhr2333/Beancount-Trans-Backend/commit/f0768feb0e5d8c44678053c4d3ba01295dfeb978))
+
 ## [5.4.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.1...5.4.2) (2026-01-14)
 
 ### Bug Fixes
