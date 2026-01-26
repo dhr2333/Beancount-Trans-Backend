@@ -27,6 +27,7 @@ python manage.py init_official_templates
 ```
 
 此命令会自动创建：
+
 - admin 用户（id=1，用于匿名访问）
 - 66 个标准账户（Beancount 五大账户类型）
 - 39 个常用映射（支出/收入/资产）
@@ -40,9 +41,9 @@ python manage.py runserver
 
 ### 3. 访问 API
 
-- API 文档: http://localhost:8000/api/docs/
-- Admin 后台: http://localhost:8000/admin/
-- 账单解析: http://localhost:8000/api/translate/trans
+- API 文档: <http://localhost:8000/api/docs/>
+- Admin 后台: <http://localhost:8000/admin/>
+- 账单解析: <http://localhost:8000/api/translate/trans>
 
 详细使用说明请查看 [快速开始指南](docs/QUICK_START.md)。
 
@@ -62,14 +63,11 @@ Beancount-Trans-Backend/  # 项目根目录
 │   │   │   ├── migrations
 │   │   ├── maps  # 映射管理
 │   │   │   ├── migrations
-│   │   ├── owntracks  # Owntrack轨迹记录功能
-│   │   │   ├── migrations
 │   │   └── users  # 用户管理
 │   │       ├── migrations
 │   └── utils  # 通用工具
 ├── static  # 静态文件配置
 ├── templates  # 模板文件
-│   ├── owntracks
 │   └── translate
 ├── pyproject.toml  # pytest自动化测试配置文件
 └── translate  # 转换功能目录，对转换功能进行二次开发只要关注该目录

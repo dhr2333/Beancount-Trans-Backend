@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class OwntracksConfig(AppConfig):
+class ReconciliationConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'project.apps.owntracks'
+    name = 'project.apps.reconciliation'
