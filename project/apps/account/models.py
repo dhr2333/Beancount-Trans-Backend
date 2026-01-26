@@ -104,6 +104,9 @@ class Account(BaseModel):
             try:
                 # 尝试获取已存在的父账户
                 new_parent = Account.objects.get(account=parent_account_path, owner=self.owner)
+                # 关键修复：防止账户成为自己的父账户（防止循环引用）
+                if new_parent.pk == self.pk:
+                    raise ValidationError("账户不能成为自己的父账户")
                 # 只有当父账户确实需要改变时才更新
                 if self.parent != new_parent:
                     self.parent = new_parent
@@ -166,6 +169,10 @@ class Account(BaseModel):
             children = self.children.all()
 
             for child in children:
+                # 关键修复：避免更新自己（防止递归更新）
+                if child.pk == self.pk:
+                    continue
+                    
                 old_child_name = child.account
                 # 检查子账户名称是否以旧父账户名称为前缀
                 if old_child_name.startswith(old_account_name + ':'):
