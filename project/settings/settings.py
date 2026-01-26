@@ -407,7 +407,7 @@ REST_FRAMEWORK = {
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Beancount-Trans API',
     'DESCRIPTION': 'Beancount交易记录转换和管理系统的API文档',
-    'VERSION': '5.6.0',
+    'VERSION': '5.7.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
