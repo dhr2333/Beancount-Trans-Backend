@@ -244,6 +244,7 @@ class TestScheduledTaskViewSet:
         # 已完成的待办可能允许修改，这里只验证响应
         assert response.status_code in [status.HTTP_200_OK, status.HTTP_400_BAD_REQUEST]
     
+    @pytest.mark.skip(reason="cancel 接口移除")
     def test_cancel_task(self, user, account, scheduled_task_pending):
         """测试 DELETE /api/reconciliation/tasks/{id}/cancel/ 将状态更新为 cancelled"""
         client = APIClient()
@@ -258,6 +259,7 @@ class TestScheduledTaskViewSet:
         scheduled_task_pending.refresh_from_db()
         assert scheduled_task_pending.status == 'cancelled'
     
+    @pytest.mark.skip(reason="cancel 接口移除")
     def test_cancel_completed_task_returns_error(self, user, account, scheduled_task_completed):
         """测试验证不能取消已完成的待办"""
         client = APIClient()
