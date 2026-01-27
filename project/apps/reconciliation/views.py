@@ -93,23 +93,6 @@ class ScheduledTaskViewSet(ModelViewSet):
         return queryset.select_related('content_type').order_by('scheduled_date')
     
     @action(detail=True, methods=['post'])
-    def cancel(self, request, pk=None):
-        """取消待办任务"""
-        task = self.get_object()
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '只能取消待执行状态的待办'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        task.status = 'cancelled'
-        task.save()
-        
-        serializer = self.get_serializer(task)
-        return Response(serializer.data)
-    
-    @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         """开始对账：计算并返回预期余额"""
         task = self.get_object()
