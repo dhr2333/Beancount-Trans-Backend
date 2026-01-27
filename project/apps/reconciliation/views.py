@@ -22,9 +22,16 @@ from .serializers import (
     ScheduledTaskUpdateSerializer,
     ReconciliationStartSerializer,
     ReconciliationExecuteSerializer,
-    ReconciliationExecuteResponseSerializer
+    ReconciliationExecuteResponseSerializer,
+    ReconciliationDuplicateSerializer,
+    ReconciliationCommentResponseSerializer,
+    ReconciliationUncommentResponseSerializer
 )
-from .services import BalanceCalculationService, ReconciliationService
+from .services import (
+    BalanceCalculationService,
+    ReconciliationService,
+    ReconciliationCommentService
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,23 +91,6 @@ class ScheduledTaskViewSet(ModelViewSet):
             queryset = queryset.filter(task_type=task_type)
         
         return queryset.select_related('content_type').order_by('scheduled_date')
-    
-    @action(detail=True, methods=['post'])
-    def cancel(self, request, pk=None):
-        """取消待办任务"""
-        task = self.get_object()
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '只能取消待执行状态的待办'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        task.status = 'cancelled'
-        task.save()
-        
-        serializer = self.get_serializer(task)
-        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
@@ -201,5 +191,60 @@ class ScheduledTaskViewSet(ModelViewSet):
             logger.error(f"执行对账失败: {e}", exc_info=True)
             return Response(
                 {'error': f'执行对账失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # @action(detail=False, methods=['get'])
+    # def check_duplicates(self, request):
+    #     """检测重复条目（GET）
+        
+    #     检测 trans/reconciliation.bean 与 Git 仓库数据的重复条目。
+    #     """
+    #     try:
+    #         result = ReconciliationCommentService.detect_duplicate_entries(request.user)
+    #         serializer = ReconciliationDuplicateSerializer(result)
+    #         return Response(serializer.data)
+    #     except Exception as e:
+    #         logger.error(f"检测重复条目失败: {e}", exc_info=True)
+    #         return Response(
+    #             {'error': f'检测失败: {str(e)}'},
+    #             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    #         )
+    
+    @action(detail=False, methods=['post'])
+    def comment_duplicates(self, request):
+        """注释重复条目（POST）
+        
+        自动检测并注释 trans/reconciliation.bean 中与 Git 仓库重复的条目。
+        """
+        try:
+            result = ReconciliationCommentService.detect_and_comment_duplicates(request.user)
+            serializer = ReconciliationCommentResponseSerializer(result)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"注释重复条目失败: {e}", exc_info=True)
+            return Response(
+                {'error': f'注释失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def uncomment_all(self, request):
+        """取消所有注释（POST）
+        
+        取消 trans/reconciliation.bean 中所有对账条目的注释。
+        """
+        try:
+            uncommented_count = ReconciliationCommentService.uncomment_all_entries(request.user)
+            result = {
+                'uncommented_count': uncommented_count,
+                'message': f'已取消 {uncommented_count} 个条目的注释'
+            }
+            serializer = ReconciliationUncommentResponseSerializer(result)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"取消注释失败: {e}", exc_info=True)
+            return Response(
+                {'error': f'取消注释失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

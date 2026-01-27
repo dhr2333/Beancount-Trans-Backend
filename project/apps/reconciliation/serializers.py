@@ -218,3 +218,41 @@ class ReconciliationExecuteResponseSerializer(serializers.Serializer):
     )
 
 
+class ReconciliationDuplicateEntrySerializer(serializers.Serializer):
+    """重复条目信息序列化器"""
+    type = serializers.CharField(help_text="条目类型（Transaction/Pad/Balance）")
+    date = serializers.CharField(help_text="日期")
+    account = serializers.CharField(help_text="账户")
+    line_numbers = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text="行号列表"
+    )
+
+
+class ReconciliationDuplicateSerializer(serializers.Serializer):
+    """重复条目检测响应序列化器"""
+    has_duplicates = serializers.BooleanField(help_text="是否有重复条目")
+    duplicate_count = serializers.IntegerField(help_text="重复条目数量")
+    duplicates = ReconciliationDuplicateEntrySerializer(
+        many=True,
+        help_text="重复条目列表"
+    )
+
+
+class ReconciliationCommentResponseSerializer(serializers.Serializer):
+    """注释操作响应序列化器"""
+    commented_count = serializers.IntegerField(help_text="注释的行数")
+    message = serializers.CharField(help_text="操作消息")
+    matched_entries = ReconciliationDuplicateEntrySerializer(
+        many=True,
+        required=False,
+        help_text="匹配的条目列表"
+    )
+
+
+class ReconciliationUncommentResponseSerializer(serializers.Serializer):
+    """取消注释响应序列化器"""
+    uncommented_count = serializers.IntegerField(help_text="取消注释的行数")
+    message = serializers.CharField(help_text="操作消息")
+
+

@@ -119,9 +119,12 @@ class Account(BaseModel):
 
         super().save(*args, **kwargs)
 
-        # 如果enable状态发生变化，同步更新相关映射
+        # 如果enable状态发生变化，同步更新相关映射和待办任务
         if enable_changed:
             self._sync_mappings_enable_status()
+            # 如果账户被禁用，取消所有相关的待办任务
+            if not self.enable:
+                self._cancel_pending_tasks()
 
         # 如果账户名称发生变化，同步更新所有子账户的名称
         if account_name_changed and old_account_name:
@@ -210,6 +213,29 @@ class Account(BaseModel):
             logger = logging.getLogger(__name__)
             logger.error(f"同步映射状态失败: {str(e)}")
 
+    def _cancel_pending_tasks(self):
+        """取消账户相关的待办任务"""
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.reconciliation.models import ScheduledTask
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            account_content_type = ContentType.objects.get_for_model(Account)
+            cancelled_count = ScheduledTask.objects.filter(
+                task_type='reconciliation',
+                content_type=account_content_type,
+                object_id=self.id,
+                status='pending'
+            ).update(status='cancelled')
+            
+            if cancelled_count > 0:
+                logger.info(f"账户 {self.account} 关闭，已取消 {cancelled_count} 个待办任务")
+        except Exception as e:
+            # 记录错误但不阻止账户保存
+            logger.error(f"取消待办任务失败: {str(e)}")
+
     def has_children(self):
         """检查是否存在子账户"""
         return self.children.exists()
@@ -290,6 +316,9 @@ class Account(BaseModel):
             Income.objects.filter(income=self).update(enable=False)
 
             result['mappings_disabled'] = True
+
+        # 取消所有相关的待办任务
+        self._cancel_pending_tasks()
 
         # 关闭当前账户（不关闭子账户）
         self.enable = False
