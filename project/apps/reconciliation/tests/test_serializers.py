@@ -159,7 +159,8 @@ class TestReconciliationStartSerializer:
             ],
             'account_name': 'Assets:Savings:Bank:ICBC',
             'as_of_date': date.today(),
-            'default_currency': 'CNY'
+            'default_currency': 'CNY',
+            'is_first_reconciliation': True
         }
         
         serializer = ReconciliationStartSerializer(data)
@@ -168,6 +169,7 @@ class TestReconciliationStartSerializer:
         assert len(serialized_data['balances']) == 2
         assert serialized_data['account_name'] == 'Assets:Savings:Bank:ICBC'
         assert serialized_data['default_currency'] == 'CNY'
+        assert serialized_data['is_first_reconciliation'] is True
 
 
 @pytest.mark.django_db

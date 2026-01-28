@@ -43,6 +43,60 @@ class TestReconciliationAPI:
         assert len(response.data['balances']) == 2
         assert response.data['account_name'] == account.account
         assert 'default_currency' in response.data
+        # 验证 is_first_reconciliation 字段存在且为布尔类型
+        assert 'is_first_reconciliation' in response.data
+        assert isinstance(response.data['is_first_reconciliation'], bool)
+        # 首次对账应该返回 True（该账户还没有完成过对账任务）
+        assert response.data['is_first_reconciliation'] is True
+    
+    def test_start_reconciliation_is_first_reconciliation_logic(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试 is_first_reconciliation 逻辑：首次对账返回 True，后续对账返回 False"""
+        from django.contrib.contenttypes.models import ContentType
+        
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # 第一次调用 start API（首次对账）
+        response1 = client.post(f'/api/reconciliation/tasks/{scheduled_task_pending.id}/start/')
+        assert response1.status_code == status.HTTP_200_OK
+        assert response1.data['is_first_reconciliation'] is True
+        
+        # 完成第一次对账
+        execute_response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1000.00',
+                'currency': 'CNY',
+                'as_of_date': str(date.today())
+            },
+            format='json'
+        )
+        assert execute_response.status_code == status.HTTP_200_OK
+        
+        # 创建第二个待办任务（后续对账）
+        content_type = ContentType.objects.get_for_model(Account)
+        second_task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date.today(),
+            status='pending'
+        )
+        
+        # 第二次调用 start API（后续对账）
+        response2 = client.post(f'/api/reconciliation/tasks/{second_task.id}/start/')
+        assert response2.status_code == status.HTTP_200_OK
+        assert response2.data['is_first_reconciliation'] is False
     
     def test_start_reconciliation_task_not_exists_returns_404(self, user):
         """测试待办不存在时返回 404"""
