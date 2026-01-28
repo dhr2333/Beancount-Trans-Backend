@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.5.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.4...5.5.0) (2026-01-28)
+
+### Features
+
+* Add user filtering and optimization in ScheduledTask admin ([#62](https://github.com/dhr2333/Beancount-Trans-Backend/issues/62)) ([e03a632](https://github.com/dhr2333/Beancount-Trans-Backend/commit/e03a632547f3e23efffc13ddaf8cb71cf44fe195))
+
 ## [5.4.4](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.3...5.4.4) (2026-01-28)
 
 ### Bug Fixes
