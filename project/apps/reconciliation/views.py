@@ -111,10 +111,12 @@ class ScheduledTaskViewSet(ModelViewSet):
         
         account = task.content_object
         
-        # 计算预期余额
+        # 计算预期余额（只计算到当天的记录，明天之后的记录不计入）
+        as_of_date = date.today()
         balances = BalanceCalculationService.calculate_balance(
             account.owner,
-            account.account
+            account.account,
+            as_of_date=as_of_date
         )
         
         # 过滤出所有有余额的币种（余额不为0）
