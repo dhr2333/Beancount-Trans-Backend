@@ -513,4 +513,298 @@ class TestReconciliationService:
         assert 'pad' not in result['directives'][0]  # 不应该有 pad
         assert 'balance' in result['directives'][1]
         assert '1000.01 CNY' in result['directives'][1]
+    
+    def test_generate_transaction_directive_supports_all_currencies(self, user, account, scheduled_task_pending, mock_bean_file_path, tmp_path):
+        """测试目标账户支持所有货币时，使用源货币，无需转换"""
+        import os
+        # 创建账本文件，目标账户无货币声明（支持所有货币）
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        from project.apps.reconciliation.services.reconciliation_service import ReconciliationService
+        from decimal import Decimal
+        from datetime import date
+        
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            directive = ReconciliationService._generate_transaction_directive(
+                user=user,
+                from_account='Assets:Savings:Recharge:LiangLiangJiaDao',
+                to_account='Expenses:Food:Dinner',
+                amount=Decimal('68.00'),
+                currency='COIN',
+                transaction_date=date(2026, 1, 19)
+            )
+        
+        # 应该直接使用源货币，无需 @@ 转换
+        assert 'Expenses:Food:Dinner' in directive
+        assert '68.00 COIN' in directive
+        assert '@@' not in directive
+    
+    def test_generate_transaction_directive_source_in_list(self, user, account, scheduled_task_pending, mock_bean_file_path, tmp_path):
+        """测试源货币在支持列表中，使用源货币，无需转换"""
+        import os
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner CNY, COIN, USD
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        from project.apps.reconciliation.services.reconciliation_service import ReconciliationService
+        from decimal import Decimal
+        from datetime import date
+        
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            directive = ReconciliationService._generate_transaction_directive(
+                user=user,
+                from_account='Assets:Savings:Recharge:LiangLiangJiaDao',
+                to_account='Expenses:Food:Dinner',
+                amount=Decimal('68.00'),
+                currency='COIN',
+                transaction_date=date(2026, 1, 19)
+            )
+        
+        # 应该直接使用源货币，无需 @@ 转换
+        assert 'Expenses:Food:Dinner' in directive
+        assert '68.00 COIN' in directive
+        assert '@@' not in directive
+    
+    def test_generate_transaction_directive_convert_to_cny(self, user, account, scheduled_task_pending, mock_bean_file_path, tmp_path):
+        """测试源货币不在支持列表中，但有 CNY，使用 CNY 并转换"""
+        import os
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        from project.apps.reconciliation.services.reconciliation_service import ReconciliationService
+        from decimal import Decimal
+        from datetime import date
+        
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            directive = ReconciliationService._generate_transaction_directive(
+                user=user,
+                from_account='Assets:Savings:Recharge:LiangLiangJiaDao',
+                to_account='Expenses:Food:Dinner',
+                amount=Decimal('68.00'),
+                currency='COIN',
+                transaction_date=date(2026, 1, 19)
+            )
+        
+        # 应该使用 CNY 并转换
+        assert 'Expenses:Food:Dinner' in directive
+        assert '68.00 CNY' in directive
+        assert '@@' in directive
+        assert '68.00 COIN' in directive  # @@ 后的金额使用绝对值
+    
+    def test_generate_transaction_directive_convert_to_first_currency(self, user, account, scheduled_task_pending, mock_bean_file_path, tmp_path):
+        """测试源货币不在支持列表中，且没有 CNY，使用第一个货币并转换"""
+        import os
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner USD, EUR
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        from project.apps.reconciliation.services.reconciliation_service import ReconciliationService
+        from decimal import Decimal
+        from datetime import date
+        
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            directive = ReconciliationService._generate_transaction_directive(
+                user=user,
+                from_account='Assets:Savings:Recharge:LiangLiangJiaDao',
+                to_account='Expenses:Food:Dinner',
+                amount=Decimal('68.00'),
+                currency='COIN',
+                transaction_date=date(2026, 1, 19)
+            )
+        
+        # 应该使用第一个货币 USD 并转换
+        assert 'Expenses:Food:Dinner' in directive
+        assert '68.00 USD' in directive
+        assert '@@' in directive
+        assert '68.00 COIN' in directive  # @@ 后的金额使用绝对值
+    
+    def test_generate_transaction_directive_negative_amount(self, user, account, scheduled_task_pending, mock_bean_file_path, tmp_path):
+        """测试负数金额的货币转换（@@ 后应为绝对值）"""
+        import os
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        from project.apps.reconciliation.services.reconciliation_service import ReconciliationService
+        from decimal import Decimal
+        from datetime import date
+        
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            directive = ReconciliationService._generate_transaction_directive(
+                user=user,
+                from_account='Assets:Savings:Recharge:LiangLiangJiaDao',
+                to_account='Expenses:Food:Dinner',
+                amount=Decimal('-68.00'),
+                currency='COIN',
+                transaction_date=date(2026, 1, 19)
+            )
+        
+        # 应该使用 CNY 并转换，@@ 后的金额使用绝对值
+        assert 'Expenses:Food:Dinner' in directive
+        assert '-68.00 CNY' in directive  # 前面保持负数
+        assert '@@' in directive
+        assert '68.00 COIN' in directive  # @@ 后使用绝对值（正数）
+        assert '-68.00 COIN' not in directive  # 不应该有负数
+    
+    def test_execute_reconciliation_with_currency_conversion(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included, tmp_path):
+        """测试对账时自动进行货币转换"""
+        import os
+        # 更新账户名称为 COIN 货币账户
+        account.account = 'Assets:Savings:Recharge:LiangLiangJiaDao'
+        account.save()
+        
+        # 更新 scheduled_task_pending 关联的账户
+        from django.contrib.contenttypes.models import ContentType
+        content_type = ContentType.objects.get_for_model(Account)
+        scheduled_task_pending.content_type = content_type
+        scheduled_task_pending.object_id = account.id
+        scheduled_task_pending.save()
+        
+        # 创建账本文件：对账账户是 COIN，目标账户只支持 CNY
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner CNY
+2025-01-01 open Equity:Adjustments
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Recharge:LiangLiangJiaDao 100.00 COIN
+    Equity:Adjustments -100.00 COIN
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            # 执行对账（实际余额 = 168.00 COIN，预期余额 = 100.00 COIN，差额 = 68.00）
+            transaction_items = [
+                {
+                    'account': 'Expenses:Food:Dinner',
+                    'amount': Decimal('-68.00'),
+                    'is_auto': False
+                }
+            ]
+            
+            result = ReconciliationService.execute_reconciliation(
+                task=scheduled_task_pending,
+                actual_balance=Decimal('168.00'),
+                currency='COIN',
+                transaction_items=transaction_items,
+                as_of_date=date.today()
+            )
+        
+        assert result['status'] == 'success'
+        assert len(result['directives']) == 2  # transaction + balance
+        
+        # 验证 transaction 指令包含货币转换
+        transaction_directive = result['directives'][0]
+        assert 'Expenses:Food:Dinner' in transaction_directive
+        assert 'CNY' in transaction_directive  # 应该转换为 CNY
+        assert '@@' in transaction_directive  # 应该有货币转换
+        assert 'COIN' in transaction_directive  # 应该包含源货币
+    
+    def test_execute_reconciliation_no_conversion_when_supported(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included, tmp_path):
+        """测试对账时，如果目标账户支持源货币，无需转换"""
+        import os
+        # 更新账户名称为 COIN 货币账户
+        account.account = 'Assets:Savings:Recharge:LiangLiangJiaDao'
+        account.save()
+        
+        # 更新 scheduled_task_pending 关联的账户
+        from django.contrib.contenttypes.models import ContentType
+        content_type = ContentType.objects.get_for_model(Account)
+        scheduled_task_pending.content_type = content_type
+        scheduled_task_pending.object_id = account.id
+        scheduled_task_pending.save()
+        
+        # 创建账本文件：对账账户是 COIN，目标账户也支持 COIN
+        bean_content = """
+2025-01-01 open Assets:Savings:Recharge:LiangLiangJiaDao COIN
+2025-01-01 open Expenses:Food:Dinner CNY, COIN
+2025-01-01 open Equity:Adjustments
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Recharge:LiangLiangJiaDao 100.00 COIN
+    Equity:Adjustments -100.00 COIN
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        # Mock get_user_assets_path 返回包含 bean 文件的目录
+        from unittest.mock import patch
+        assets_dir = os.path.dirname(mock_bean_file_path)
+        with patch('project.apps.reconciliation.services.account_currency_service.BeanFileManager.get_user_assets_path') as mock_path:
+            mock_path.return_value = assets_dir
+            
+            # 执行对账
+            transaction_items = [
+                {
+                    'account': 'Expenses:Food:Dinner',
+                    'amount': Decimal('-68.00'),
+                    'is_auto': False
+                }
+            ]
+            
+            result = ReconciliationService.execute_reconciliation(
+                task=scheduled_task_pending,
+                actual_balance=Decimal('168.00'),
+                currency='COIN',
+                transaction_items=transaction_items,
+                as_of_date=date.today()
+            )
+        
+        assert result['status'] == 'success'
+        assert len(result['directives']) == 2  # transaction + balance
+        
+        # 验证 transaction 指令不包含货币转换
+        transaction_directive = result['directives'][0]
+        assert 'Expenses:Food:Dinner' in transaction_directive
+        assert 'COIN' in transaction_directive  # 应该直接使用 COIN
+        assert '@@' not in transaction_directive  # 不应该有货币转换
 

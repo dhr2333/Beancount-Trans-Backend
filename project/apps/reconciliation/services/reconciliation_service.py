@@ -13,6 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 from project.utils.file import BeanFileManager
 from .balance_calculation_service import BalanceCalculationService
 from .cycle_calculator import CycleCalculator
+from .account_currency_service import AccountCurrencyService
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ class ReconciliationService:
                     # 生成 transaction 指令
                     transaction_directives.append(
                         ReconciliationService._generate_transaction_directive(
-                            account.account, item['account'], amount, currency, transaction_date
+                            task.content_object.owner, account.account, item['account'], amount, currency, transaction_date
                         )
                     )
             
@@ -123,7 +124,7 @@ class ReconciliationService:
                     # 金额为正负 0.01 时，使用 transaction 而不是 pad
                     # 使用 remaining 保留正负号（0.01 或 -0.01）
                     auto_transaction_directive = ReconciliationService._generate_transaction_directive(
-                        account.account, auto_item['account'], remaining, currency, transaction_date
+                        task.content_object.owner, account.account, auto_item['account'], remaining, currency, transaction_date
                     )
                 else:
                     # 其他情况使用 pad 兜底
@@ -198,6 +199,7 @@ class ReconciliationService:
     
     @staticmethod
     def _generate_transaction_directive(
+        user,
         from_account: str,
         to_account: str,
         amount: Decimal,
@@ -206,13 +208,44 @@ class ReconciliationService:
     ) -> str:
         """生成 transaction 指令
         
-        示例：
+        如果目标账户不支持源货币，会自动选择合适的货币并使用 @@ 语法进行转换。
+        
+        示例（货币相同）：
         2026-01-20 * "Beancount-Trans" "对账调整"
           Expenses:Food 3.00 CNY
           Assets:Savings:Web:WechatFund
+        
+        示例（货币转换）：
+        2026-01-19 * "Beancount-Trans" "对账调整"
+          Expenses:Food:Dinner 68.00 CNY @@ 68.00 COIN
+          Assets:Savings:Recharge:LiangLiangJiaDao
+        
+        Args:
+            user: 用户对象（用于访问账本文件）
+            from_account: 源账户（对账账户）
+            to_account: 目标账户
+            amount: 金额
+            currency: 源货币（对账账户的货币）
+            transaction_date: 交易日期
+            
+        Returns:
+            Beancount transaction 指令字符串
         """
-        return f'''{transaction_date} * "Beancount-Trans" "对账调整"
+        # 获取目标账户的合适货币
+        target_currency = AccountCurrencyService.select_currency_for_account(
+            user, to_account, currency
+        )
+        
+        # 如果目标货币与源货币相同，使用原有格式
+        if target_currency == currency:
+            return f'''{transaction_date} * "Beancount-Trans" "对账调整"
     {to_account} {amount} {currency}
+    {from_account}'''
+        
+        # 如果目标货币与源货币不同，使用 @@ 语法进行转换
+        # @@ 后面的金额使用绝对值
+        return f'''{transaction_date} * "Beancount-Trans" "对账调整"
+    {to_account} {amount} {target_currency} @@ {abs(amount)} {currency}
     {from_account}'''
     
     @staticmethod
