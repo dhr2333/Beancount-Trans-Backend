@@ -115,6 +115,9 @@ class ReconciliationStartSerializer(serializers.Serializer):
         allow_null=True,
         help_text="默认币种（如果存在CNY则返回CNY，否则返回第一个币种）"
     )
+    is_first_reconciliation = serializers.BooleanField(
+        help_text="是否首次对账（True=首次，使用 Equity:Opening-Balances；False=后续，使用 Equity:Adjustments）"
+    )
 
 
 class ReconciliationExecuteSerializer(serializers.Serializer):

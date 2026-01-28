@@ -468,6 +468,21 @@ class Account(BaseModel):
         unit_display = dict(CycleUnit.choices).get(self.reconciliation_cycle_unit, '')
         return f"每 {self.reconciliation_cycle_interval} {unit_display}"
 
+    def is_first_reconciliation(self) -> bool:
+        """检查是否首次对账（该账户是否已完成过对账任务）"""
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.reconciliation.models import ScheduledTask
+        
+        content_type = ContentType.objects.get_for_model(Account)
+        has_completed = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=self.id,
+            status='completed'
+        ).exists()
+        
+        return not has_completed
+
 
 class AccountTemplate(BaseModel):
     """账户模板"""
