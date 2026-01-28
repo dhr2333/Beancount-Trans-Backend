@@ -83,6 +83,9 @@ class Account(BaseModel):
 
     def save(self, *args, **kwargs):
         """保存账户时自动创建父账户，并同步映射状态"""
+        # 检查是否是新创建的账户（在 save 之前检查）
+        is_new_account = self.pk is None
+        
         # 检查enable字段是否发生变化
         enable_changed = False
         account_name_changed = False
@@ -125,6 +128,13 @@ class Account(BaseModel):
             # 如果账户被禁用，取消所有相关的待办任务
             if not self.enable:
                 self._cancel_pending_tasks()
+            # 如果账户被启用，且配置了对账周期，创建待办任务
+            elif self.enable:
+                self._create_reconciliation_task_if_needed()
+        
+        # 如果是新创建的账户，且启用且配置了对账周期，创建待办任务
+        if is_new_account and self.enable:
+            self._create_reconciliation_task_if_needed()
 
         # 如果账户名称发生变化，同步更新所有子账户的名称
         if account_name_changed and old_account_name:
@@ -212,6 +222,56 @@ class Account(BaseModel):
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"同步映射状态失败: {str(e)}")
+
+    def _create_reconciliation_task_if_needed(self):
+        """如果需要，创建对账待办任务
+        
+        检查账户是否启用、是否配置了对账周期，以及是否已存在待执行的待办任务。
+        如果满足条件，创建首个待办任务。
+        """
+        from datetime import date
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.reconciliation.models import ScheduledTask
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        # 检查账户是否启用
+        if not self.enable:
+            return
+        
+        # 检查是否配置了对账周期
+        if not self.reconciliation_cycle_unit or not self.reconciliation_cycle_interval:
+            return
+        
+        try:
+            account_content_type = ContentType.objects.get_for_model(Account)
+            
+            # 检查是否已存在待执行的待办任务（避免重复创建）
+            existing_task = ScheduledTask.objects.filter(
+                task_type='reconciliation',
+                content_type=account_content_type,
+                object_id=self.id,
+                status='pending'
+            ).exists()
+            
+            if existing_task:
+                # 已存在待办任务，不重复创建
+                return
+            
+            # 创建首个待办任务，执行日期为今日
+            ScheduledTask.objects.create(
+                task_type='reconciliation',
+                content_type=account_content_type,
+                object_id=self.id,
+                scheduled_date=date.today(),
+                status='pending'
+            )
+            
+            logger.info(f"账户 {self.account} 已创建对账待办任务")
+        except Exception as e:
+            # 记录错误但不阻止账户保存
+            logger.error(f"创建对账待办任务失败: {str(e)}")
 
     def _cancel_pending_tasks(self):
         """取消账户相关的待办任务"""
