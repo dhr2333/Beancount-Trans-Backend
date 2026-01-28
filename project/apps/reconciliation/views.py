@@ -144,7 +144,8 @@ class ScheduledTaskViewSet(ModelViewSet):
             'balances': non_zero_balances,
             'account_name': account.account,
             'as_of_date': date.today(),
-            'default_currency': default_currency
+            'default_currency': default_currency,
+            'is_first_reconciliation': account.is_first_reconciliation()
         }
         
         serializer = ReconciliationStartSerializer(data)
