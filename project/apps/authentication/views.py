@@ -900,6 +900,12 @@ class UserProfileViewSet(viewsets.GenericViewSet):
                 Template.objects.filter(owner=user).delete()
                 FormatConfig.objects.filter(owner=user).delete()
                 FavaInstance.objects.filter(owner=user).delete()
+                
+                # 在删除账户之前，需要先清除所有账户的 parent 引用
+                # 因为 parent 字段使用 PROTECT 约束，必须先清除引用才能删除
+                Account.objects.filter(owner=user).update(parent=None)
+                
+                # 现在可以安全地删除所有账户
                 Account.objects.filter(owner=user).delete()
                 Expense.objects.filter(owner=user).delete()
                 Assets.objects.filter(owner=user).delete()
