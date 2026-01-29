@@ -289,6 +289,74 @@ class TestUserProfile:
             # 如果模型不存在，跳过关联数据测试
             pytest.skip("相关模型不存在，跳过关联数据测试")
 
+    def test_delete_account_with_parent_child_relationships(self):
+        """测试删除账户时正确处理父子账户关系（PROTECT约束）"""
+        from django.apps import apps
+
+        try:
+            Account = apps.get_model('account_config', 'Account')
+        except LookupError:
+            pytest.skip("Account 模型不存在，跳过测试")
+
+        # 创建具有父子关系的账户树
+        # Assets (根账户)
+        #   └── Assets:Savings (子账户)
+        #       └── Assets:Savings:Bank (孙账户)
+        #           └── Assets:Savings:Bank:ICBC (曾孙账户)
+
+        root_account = Account.objects.create(
+            account='Assets',
+            owner=self.user,
+            enable=True
+        )
+
+        child_account = Account.objects.create(
+            account='Assets:Savings',
+            owner=self.user,
+            parent=root_account,
+            enable=True
+        )
+
+        grandchild_account = Account.objects.create(
+            account='Assets:Savings:Bank',
+            owner=self.user,
+            parent=child_account,
+            enable=True
+        )
+
+        great_grandchild_account = Account.objects.create(
+            account='Assets:Savings:Bank:ICBC',
+            owner=self.user,
+            parent=grandchild_account,
+            enable=True
+        )
+
+        # 验证账户已创建且父子关系正确
+        assert Account.objects.filter(owner=self.user).count() == 4
+        child_account.refresh_from_db()
+        grandchild_account.refresh_from_db()
+        great_grandchild_account.refresh_from_db()
+        assert child_account.parent == root_account
+        assert grandchild_account.parent == child_account
+        assert great_grandchild_account.parent == grandchild_account
+
+        # 执行删除操作
+        self.client.force_authenticate(user=self.user)
+        user_id = self.user.id
+
+        response = self.client.delete('/api/auth/profile/delete_account/')
+
+        # 验证删除成功
+        assert response.status_code == 200
+        assert '账户已删除' in response.data['message']
+
+        # 验证所有账户（包括有父子关系的）都已删除
+        # 这验证了修复：在删除前先清除 parent 引用，避免 PROTECT 约束阻止删除
+        assert Account.objects.filter(owner_id=user_id).count() == 0
+
+        # 验证用户已删除
+        assert not User.objects.filter(id=user_id).exists()
+
     def test_delete_account_transaction_rollback(self):
         """测试删除失败时回滚"""
         # 这个测试需要模拟删除过程中的异常
