@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.5.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.5.0...5.5.1) (2026-01-29)
+
+### Bug Fixes
+
+* Ensure proper handling of parent-child relationships during account deletion ([#63](https://github.com/dhr2333/Beancount-Trans-Backend/issues/63)) ([20420f3](https://github.com/dhr2333/Beancount-Trans-Backend/commit/20420f36638fc6fed2e95eb6fdc2b7f99eb32300))
+
 ## [5.5.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.4.4...5.5.0) (2026-01-28)
 
 ### Features
