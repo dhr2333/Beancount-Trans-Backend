@@ -267,7 +267,9 @@ class Command(BaseCommand):
                 owner=user,
                 account=account_path,
                 parent=parent_account,
-                enable=item.enable
+                enable=item.enable,
+                reconciliation_cycle_unit=item.reconciliation_cycle_unit,
+                reconciliation_cycle_interval=item.reconciliation_cycle_interval
             )
             created_accounts[account_path] = account
 

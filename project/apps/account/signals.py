@@ -34,7 +34,9 @@ def apply_official_account_templates(user):
                     Account.objects.create(
                         owner=user,
                         account=item.account_path,
-                        enable=item.enable
+                        enable=item.enable,
+                        reconciliation_cycle_unit=item.reconciliation_cycle_unit,
+                        reconciliation_cycle_interval=item.reconciliation_cycle_interval
                     )
                     logger.debug(f"为用户 {user.username} 创建账户: {item.account_path}")
         except Exception as e:

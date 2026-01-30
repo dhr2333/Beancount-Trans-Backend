@@ -514,6 +514,22 @@ class AccountTemplateItem(BaseModel):
     template = models.ForeignKey(AccountTemplate, related_name='items', on_delete=models.CASCADE)
     account_path = models.CharField(max_length=128, null=False, help_text="账户路径")
     enable = models.BooleanField(default=True, help_text="默认启用状态")
+    
+    # 对账周期配置
+    reconciliation_cycle_unit = models.CharField(
+        max_length=10,
+        choices=CycleUnit.choices,
+        null=True,
+        blank=True,
+        verbose_name="对账周期单位",
+        help_text="对账周期单位：天/周/月/年"
+    )
+    reconciliation_cycle_interval = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="对账周期间隔",
+        help_text="每隔多少个周期单位执行一次对账"
+    )
 
     class Meta:
         db_table = 'account_template_item'
@@ -525,6 +541,21 @@ class AccountTemplateItem(BaseModel):
                 name='unique_account_per_template'
             )
         ]
+
+    def clean(self):
+        """验证对账周期配置的一致性"""
+        # 验证对账周期配置的一致性
+        has_unit = bool(self.reconciliation_cycle_unit)
+        has_interval = self.reconciliation_cycle_interval is not None
+
+        if has_unit != has_interval:
+            raise ValidationError(
+                "对账周期单位和对账周期间隔必须同时设置或同时为空"
+            )
+
+        # 如果设置了周期，验证间隔必须大于 0
+        if has_interval and self.reconciliation_cycle_interval <= 0:
+            raise ValidationError("对账周期间隔必须大于 0")
 
     def __str__(self):
         return f"{self.template.name} - {self.account_path}"
