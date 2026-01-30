@@ -393,7 +393,9 @@ class AccountTemplateViewSet(ModelViewSet):
                 Account.objects.create(
                     owner=user,
                     account=item.account_path,
-                    enable=item.enable
+                    enable=item.enable,
+                    reconciliation_cycle_unit=item.reconciliation_cycle_unit,
+                    reconciliation_cycle_interval=item.reconciliation_cycle_interval
                 )
                 result['created'] += 1
         else:  # merge 模式
@@ -413,7 +415,9 @@ class AccountTemplateViewSet(ModelViewSet):
                 Account.objects.create(
                     owner=user,
                     account=item.account_path,
-                    enable=item.enable
+                    enable=item.enable,
+                    reconciliation_cycle_unit=item.reconciliation_cycle_unit,
+                    reconciliation_cycle_interval=item.reconciliation_cycle_interval
                 )
                 result['created'] += 1
 

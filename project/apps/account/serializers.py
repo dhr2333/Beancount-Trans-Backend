@@ -242,7 +242,7 @@ class AccountTemplateItemSerializer(serializers.ModelSerializer):
     """账户模板项序列化器"""
     class Meta:
         model = AccountTemplateItem
-        fields = ['id', 'account_path', 'enable', 'created', 'modified']
+        fields = ['id', 'account_path', 'enable', 'reconciliation_cycle_unit', 'reconciliation_cycle_interval', 'created', 'modified']
         read_only_fields = ['created', 'modified']
 
 
