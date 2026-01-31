@@ -1,6 +1,6 @@
 {
   "name": "beancount-trans-backend",
-  "version": "5.4.0",
+  "version": "5.7.0",
   "description": "Semantic-release configuration for Beancount-Trans backend",
   "private": true,
   "type": "module",
