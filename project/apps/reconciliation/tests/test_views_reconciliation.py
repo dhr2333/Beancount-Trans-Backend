@@ -157,6 +157,40 @@ class TestReconciliationAPI:
         scheduled_task_pending.refresh_from_db()
         assert scheduled_task_pending.status == 'completed'
     
+    def test_execute_reconciliation_no_difference_with_transaction_items_ignored(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试无差额时即使提供 transaction_items 也进行忽略，对账成功"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        # 无差额场景，但请求中附带 transaction_items（应被忽略）
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1000.00',
+                'currency': 'CNY',
+                'as_of_date': str(date.today()),
+                'transaction_items': [
+                    {'account': 'Expenses:Food', 'amount': '100.00', 'is_auto': False}
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'success'
+        assert len(response.data['directives']) == 1
+        assert 'balance' in response.data['directives'][0]
+    
     def test_execute_reconciliation_with_transaction_only(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
         """测试执行对账 - 有差额（仅 transaction）"""
         bean_content = """
