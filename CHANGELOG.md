@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.6.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.6.0...5.6.1) (2026-02-01)
+
+### Bug Fixes
+
+* 对账无差额时忽略 `transaction_items` 条目 ([#66](https://github.com/dhr2333/Beancount-Trans-Backend/issues/66)) ([78d3e84](https://github.com/dhr2333/Beancount-Trans-Backend/commit/78d3e847952026a48757d9a2e553639a0f050854))
+
 ## [5.6.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.5.1...5.6.0) (2026-01-30)
 
 ### Features
