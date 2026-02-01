@@ -32,11 +32,9 @@ class ReconciliationValidator:
         # 1. 计算差额
         difference = actual_balance - expected_balance
         
-        # 2. 如果无差额，不需要 transaction_items
+       # 2. 如果无差额，忽略 transaction_items（即使提供也视为有效）
         if difference == 0:
-            if transaction_items:
-                errors.append('无差额时不应提供 transaction_items')
-            return len(errors) == 0, errors
+            return True, []
         
         # 3. 有差额时必须提供 transaction_items
         if not transaction_items:

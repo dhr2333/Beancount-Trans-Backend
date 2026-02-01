@@ -40,8 +40,8 @@ class TestReconciliationValidator:
         
         assert is_valid
     
-    def test_validate_no_difference_no_transaction_items(self):
-        """测试无差额时不应提供 transaction_items"""
+    def test_validate_no_difference_ignores_transaction_items(self):
+        """测试无差额时即使提供 transaction_items 也进行忽略，视为有效"""
         actual_balance = Decimal('1000.00')
         expected_balance = Decimal('1000.00')
         transaction_items = [
@@ -58,8 +58,8 @@ class TestReconciliationValidator:
             transaction_items
         )
         
-        assert not is_valid
-        assert any('无差额时不应提供 transaction_items' in error for error in errors)
+        assert is_valid
+        assert len(errors) == 0
     
     def test_validate_difference_requires_transaction_items(self):
         """测试有差额时必须提供 transaction_items"""
