@@ -29,9 +29,16 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     task_type_display = serializers.CharField(source='get_task_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
-    # 账户信息
+    # 账户信息（对账待办）
     account_name = serializers.SerializerMethodField()
     account_type = serializers.SerializerMethodField()
+    
+    # 文件信息（解析待办）
+    file_name = serializers.SerializerMethodField()
+    file_id = serializers.SerializerMethodField()
+    
+    # 缓存过期时间（解析待办）
+    expires_at = serializers.SerializerMethodField()
     
     class Meta:
         model = ScheduledTask
@@ -40,6 +47,8 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'scheduled_date', 'completed_date',
             'status', 'status_display',
             'account_name', 'account_type',
+            'file_name', 'file_id',
+            'expires_at',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -56,6 +65,31 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
         from project.apps.account.models import Account
         if isinstance(obj.content_object, Account):
             return obj.content_object.get_account_type()
+        return None
+    
+    def get_file_name(self, obj):
+        """获取关联文件名（解析待办）"""
+        from project.apps.translate.models import ParseFile
+        if isinstance(obj.content_object, ParseFile):
+            return obj.content_object.file.name
+        return None
+    
+    def get_file_id(self, obj):
+        """获取文件ID（解析待办）"""
+        from project.apps.translate.models import ParseFile
+        if isinstance(obj.content_object, ParseFile):
+            return obj.content_object.file_id
+        return None
+    
+    def get_expires_at(self, obj):
+        """获取缓存过期时间（解析待办）"""
+        if obj.task_type == 'parse_review':
+            from project.apps.translate.models import ParseFile
+            from project.apps.translate.services.parse_review_service import ParseReviewService
+            if isinstance(obj.content_object, ParseFile):
+                parse_result = ParseReviewService.get_parse_result(obj.content_object.file_id)
+                if parse_result and 'expires_at' in parse_result:
+                    return parse_result['expires_at']
         return None
 
 

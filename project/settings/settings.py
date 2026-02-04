@@ -538,6 +538,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fava_instances.tasks.cleanup_fava_containers',
         'schedule': datetime.timedelta(seconds=60),  # 每1分钟执行一次清理任务
     },
+    'auto_confirm_expired_parse_reviews': {
+        'task': 'project.apps.translate.tasks.auto_confirm_expired_parse_reviews',
+        'schedule': datetime.timedelta(hours=1),  # 每小时执行一次
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

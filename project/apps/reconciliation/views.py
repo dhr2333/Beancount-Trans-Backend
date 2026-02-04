@@ -52,6 +52,8 @@ class ScheduledTaskViewSet(ModelViewSet):
         """根据操作类型返回不同的序列化器"""
         if self.action == 'list':
             return ScheduledTaskListSerializer
+        elif self.action == 'retrieve':
+            return ScheduledTaskListSerializer
         elif self.action in ['update', 'partial_update']:
             return ScheduledTaskUpdateSerializer
         elif self.action == 'start':

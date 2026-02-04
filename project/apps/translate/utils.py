@@ -148,7 +148,7 @@ class FormatData:
                 else:
                     formatted_str += ("\n    Income:Other")
 
-        return formatted_str + "\n\n"
+        return formatted_str + "\n"
 
     def balance_instance(entry):
         formatted_str = ""
@@ -162,7 +162,7 @@ class FormatData:
         formatted_str += f" {entry['account']}"
         formatted_str += f" Assets:Other"
 
-        return formatted_str + "\n\n"
+        return formatted_str + "\n"
 
     def installment_instance(entry):
         formatted_str = ""
@@ -185,7 +185,7 @@ class FormatData:
         formatted_str += f"    {entry['account']} {entry['account_sign']}"
         formatted_str += f"{float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY"
 
-        return formatted_str + "\n\n"
+        return formatted_str + "\n"
 
 
 # class IgnoreData:
