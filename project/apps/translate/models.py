@@ -28,6 +28,15 @@ class FormatConfig(models.Model):
     )
     ai_model = models.CharField(max_length=16, default='BERT', null=False, help_text="AI模型")
     deepseek_apikey = models.CharField(max_length=128, null=True, blank=True, help_text="DeepSeek API密钥")
+    parsing_mode_preference = models.CharField(
+        max_length=16,
+        default='review',
+        choices=[
+            ('review', '审核模式'),
+            ('direct_write', '直接写入模式')
+        ],
+        help_text="解析模式偏好：审核模式需要用户审核后再写入，直接写入模式解析后立即写入"
+    )
 
     class Meta:
         verbose_name = "格式化输出"
@@ -77,7 +86,8 @@ class FormatConfig(models.Model):
                 'income_template': 'Income:Discount',
                 'commission_template': 'Expenses:Finance:Commission',
                 'currency': 'CNY',
-                'ai_model': 'BERT'
+                'ai_model': 'BERT',
+                'parsing_mode_preference': 'review'
             }
         )[0]  # 始终返回配置实例
 
@@ -93,6 +103,7 @@ class ParseFile(models.Model):
             ('unprocessed', '未解析'),
             ('pending', '待解析'),
             ('processing', '解析中'),
+            ('pending_review', '待审核'),
             ('parsed', '已解析'),
             ('failed', '解析失败'),
             ('cancelled', '取消解析')

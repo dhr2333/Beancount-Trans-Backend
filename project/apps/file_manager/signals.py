@@ -96,7 +96,19 @@ def create_sample_files_for_new_user(sender, instance, created, **kwargs):
                 )
 
                 # 创建解析记录
-                ParseFile.objects.create(file=new_file)
+                parse_file = ParseFile.objects.create(file=new_file)
+
+                # 创建解析待办任务（状态为 inactive）
+                from project.apps.reconciliation.models import ScheduledTask
+                from django.contrib.contenttypes.models import ContentType
+                content_type = ContentType.objects.get_for_model(ParseFile)
+                ScheduledTask.objects.create(
+                    task_type='parse_review',
+                    content_type=content_type,
+                    object_id=parse_file.file_id,
+                    status='inactive',
+                    scheduled_date=None  # 解析待办不需要 scheduled_date
+                )
 
                 # 创建对应的 .bean 文件
                 bean_filename = BeanFileManager.create_bean_file(

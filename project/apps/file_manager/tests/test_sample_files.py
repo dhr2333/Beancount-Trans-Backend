@@ -18,6 +18,8 @@ django.setup()
 from project.apps.file_manager.models import Directory, File
 from project.apps.translate.models import ParseFile
 from project.apps.account.management.commands.init_official_templates import Command
+from project.apps.reconciliation.models import ScheduledTask
+from django.contrib.contenttypes.models import ContentType
 
 
 class SampleFilesTestCase(TransactionTestCase):
@@ -26,6 +28,8 @@ class SampleFilesTestCase(TransactionTestCase):
     def setUp(self):
         """测试前准备"""
         # 清理所有数据
+        from project.apps.reconciliation.models import ScheduledTask
+        ScheduledTask.objects.all().delete()
         User.objects.all().delete()
         Directory.objects.all().delete()
         File.objects.all().delete()
@@ -116,8 +120,48 @@ class SampleFilesTestCase(TransactionTestCase):
             # 检查新用户是否有Root目录（这是信号处理器应该创建的）
             self.assertIsNotNone(new_root_dir, "新用户应该有Root目录")
 
-            # 注意：文件引用功能可能需要在实际运行环境中测试
-            # 在测试环境中，信号处理器可能不会完全按预期工作
+            # 验证新用户是否有文件引用
+            new_user_files = File.objects.filter(
+                owner=new_user,
+                directory=new_root_dir
+            )
+            
+            if new_user_files.exists():
+                # 验证 ParseFile 创建
+                parse_files = ParseFile.objects.filter(
+                    file__in=new_user_files
+                )
+                self.assertEqual(parse_files.count(), new_user_files.count(), 
+                               "每个文件应该有对应的 ParseFile")
+                
+                # 验证 ScheduledTask 创建
+                content_type = ContentType.objects.get_for_model(ParseFile)
+                scheduled_tasks = ScheduledTask.objects.filter(
+                    task_type='parse_review',
+                    content_type=content_type,
+                    object_id__in=parse_files.values_list('file_id', flat=True),
+                    status='inactive'
+                )
+                self.assertEqual(scheduled_tasks.count(), parse_files.count(), 
+                               "每个 ParseFile 应该有对应的 ScheduledTask（状态为 inactive）")
+                
+                # 验证 ScheduledTask 的字段
+                for task in scheduled_tasks:
+                    self.assertEqual(task.task_type, 'parse_review', 
+                                   "任务类型应该是 parse_review")
+                    self.assertEqual(task.status, 'inactive', 
+                                   "初始状态应该是 inactive")
+                    self.assertIsNone(task.scheduled_date, 
+                                    "解析待办不需要 scheduled_date")
+                    self.assertIn(task.object_id, 
+                                parse_files.values_list('file_id', flat=True),
+                                "ScheduledTask 应该关联到正确的 ParseFile")
+                
+                print("✓ 新用户文件引用、ParseFile 和 ScheduledTask 创建测试通过")
+            else:
+                # 如果没有文件引用，至少验证新用户有Root目录
+                print("⚠ 新用户没有文件引用（可能信号处理器未执行）")
+            
             print("✓ 新用户Root目录创建测试通过")
         else:
             # 如果没有案例文件，至少验证新用户有Root目录
@@ -207,6 +251,7 @@ def run_tests():
         print("✓ 文件引用机制避免重复存储")
         print("✓ 目录结构自动创建")
         print("✓ 解析记录自动创建")
+        print("✓ 解析待办任务自动创建（ScheduledTask）")
         print("✓ .bean 文件自动创建")
         print("\n使用方法:")
         print("1. 运行: python manage.py init_official_templates")

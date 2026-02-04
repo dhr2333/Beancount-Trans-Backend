@@ -210,7 +210,7 @@ class FileWritingStep(Step):
                     # 如果找不到用户，回退到使用 username
                     user = username
             
-            formatted_data = "\n\n".join([entry['formatted'].rstrip('\n') for entry in context['formatted_data']])
+            formatted_data = "\n\n".join([entry['formatted'].rstrip() for entry in context['formatted_data']])
 
             original_filename = context['uploaded_file'].name
             bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename)

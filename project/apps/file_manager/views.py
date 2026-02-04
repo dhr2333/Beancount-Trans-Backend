@@ -11,6 +11,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from project.apps.file_manager.models import Directory, File
 from project.apps.translate.models import ParseFile
 from project.apps.file_manager.serializers import DirectorySerializer, FileSerializer
+from project.apps.reconciliation.models import ScheduledTask
+from django.contrib.contenttypes.models import ContentType
 from project.apps.common.filters import CurrentUserFilterBackend
 from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
 from project.utils.file import generate_file_hash
@@ -190,8 +192,18 @@ class FileViewSet(ModelViewSet):
                 content_type=uploaded_file.content_type
             )
 
-            ParseFile.objects.create(
+            parse_file = ParseFile.objects.create(
                file=file_obj,
+            )
+
+            # 创建解析待办任务（状态为 inactive）
+            content_type = ContentType.objects.get_for_model(ParseFile)
+            ScheduledTask.objects.create(
+                task_type='parse_review',
+                content_type=content_type,
+                object_id=parse_file.file_id,
+                status='inactive',
+                scheduled_date=None  # 解析待办不需要 scheduled_date
             )
 
             bean_filename = BeanFileManager.create_bean_file(
