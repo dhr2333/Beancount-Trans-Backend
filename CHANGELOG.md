@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.7.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.6.1...5.7.0) (2026-02-04)
+
+### Features
+
+* 文件解析支持审核功能 ([#67](https://github.com/dhr2333/Beancount-Trans-Backend/issues/67)) ([aba134a](https://github.com/dhr2333/Beancount-Trans-Backend/commit/aba134a2fd1a41fbcd017ef253e0b5e68b3299cb))
+
 ## [5.6.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.6.0...5.6.1) (2026-02-01)
 
 ### Bug Fixes
