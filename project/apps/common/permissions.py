@@ -37,101 +37,13 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
         if hasattr(obj, 'content_object') and obj.content_object:
             content_obj = obj.content_object
             
-            # #region agent log
-            import json
-            import time
-            try:
-                with open('/home/daihaorui/桌面/GitHub/Beancount-Trans/.cursor/debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({
-                        'sessionId': 'debug-session',
-                        'runId': 'run1',
-                        'hypothesisId': 'A',
-                        'location': 'permissions.py:37',
-                        'message': '权限检查：检查content_object',
-                        'data': {
-                            'user_id': request.user.id,
-                            'username': request.user.username,
-                            'content_object_type': type(content_obj).__name__,
-                            'has_owner': hasattr(content_obj, 'owner'),
-                            'has_file': hasattr(content_obj, 'file'),
-                            'file_has_owner': hasattr(content_obj, 'file') and hasattr(content_obj.file, 'owner') if hasattr(content_obj, 'file') else False
-                        },
-                        'timestamp': int(time.time() * 1000)
-                    }, ensure_ascii=False) + '\n')
-            except Exception:
-                pass
-            # #endregion
-            
             # 直接有 owner 属性（如 Account）
             if hasattr(content_obj, 'owner'):
-                result = content_obj.owner == request.user
-                
-                # #region agent log
-                try:
-                    with open('/home/daihaorui/桌面/GitHub/Beancount-Trans/.cursor/debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({
-                            'sessionId': 'debug-session',
-                            'runId': 'run1',
-                            'hypothesisId': 'A',
-                            'location': 'permissions.py:50',
-                            'message': '权限检查：通过content_object.owner',
-                            'data': {
-                                'user_id': request.user.id,
-                                'content_object_owner_id': content_obj.owner.id if content_obj.owner else None,
-                                'result': result
-                            },
-                            'timestamp': int(time.time() * 1000)
-                        }, ensure_ascii=False) + '\n')
-                except Exception:
-                    pass
-                # #endregion
-                
-                return result
+                return content_obj.owner == request.user
             
             # ParseFile 类型：通过 file.owner 获取所有者
             if hasattr(content_obj, 'file') and hasattr(content_obj.file, 'owner'):
-                result = content_obj.file.owner == request.user
-                
-                # #region agent log
-                try:
-                    with open('/home/daihaorui/桌面/GitHub/Beancount-Trans/.cursor/debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({
-                            'sessionId': 'debug-session',
-                            'runId': 'run1',
-                            'hypothesisId': 'A',
-                            'location': 'permissions.py:70',
-                            'message': '权限检查：通过content_object.file.owner',
-                            'data': {
-                                'user_id': request.user.id,
-                                'file_owner_id': content_obj.file.owner.id if content_obj.file.owner else None,
-                                'result': result
-                            },
-                            'timestamp': int(time.time() * 1000)
-                        }, ensure_ascii=False) + '\n')
-                except Exception:
-                    pass
-                # #endregion
-                
-                return result
-
-        # #region agent log
-        try:
-            with open('/home/daihaorui/桌面/GitHub/Beancount-Trans/.cursor/debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({
-                    'sessionId': 'debug-session',
-                    'runId': 'run1',
-                    'hypothesisId': 'A',
-                    'location': 'permissions.py:85',
-                    'message': '权限检查：拒绝访问',
-                    'data': {
-                        'user_id': request.user.id,
-                        'username': request.user.username
-                    },
-                    'timestamp': int(time.time() * 1000)
-                }, ensure_ascii=False) + '\n')
-        except Exception:
-            pass
-        # #endregion
+                return content_obj.file.owner == request.user
 
         # 如果没有owner或user属性，拒绝访问
         return False
