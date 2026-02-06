@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.7.0...5.8.0) (2026-02-06)
+
+### Features
+
+* Add date field validation for transaction items in reconciliation ([#69](https://github.com/dhr2333/Beancount-Trans-Backend/issues/69)) ([b8669cf](https://github.com/dhr2333/Beancount-Trans-Backend/commit/b8669cf3c4940805e33a810a32b3378012075b93))
+
 ## [5.7.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.6.1...5.7.0) (2026-02-04)
 
 ### Features
