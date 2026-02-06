@@ -61,7 +61,7 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'task_type', 'get_account_name', 'get_user',
         'scheduled_date', 'completed_date', 
-        'status', 'created'
+        'status', 'created', 'as_of_date'
     ]
     list_filter = ['task_type', 'status', 'scheduled_date', ScheduledTaskUserFilter]
     search_fields = ['object_id']
