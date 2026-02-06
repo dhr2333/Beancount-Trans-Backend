@@ -216,21 +216,6 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         if not as_of_date:
             raise serializers.ValidationError('as_of_date 必须由前端提供')
         
-        # 检查同一账户是否已经对账过相同的 as_of_date
-        # 不允许同一账户同一天被对账两次（基于 as_of_date）
-        existing_reconciliation = ScheduledTask.objects.filter(
-            task_type='reconciliation',
-            content_type=task.content_type,
-            object_id=task.object_id,
-            status='completed',
-            as_of_date=as_of_date
-        ).exclude(id=task.id).exists()
-        
-        if existing_reconciliation:
-            raise serializers.ValidationError(
-                f'该账户已有 {as_of_date} 的对账记录，不允许重复对账同一日期'
-            )
-        
         # 检查提交的 as_of_date 是否大于已完成的 as_of_date
         # 获取该账户已完成的对账记录中最大的 as_of_date
         max_completed_as_of_date = ScheduledTask.objects.filter(
@@ -243,10 +228,15 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
             max_date=models.Max('as_of_date')
         )['max_date']
         
-        if max_completed_as_of_date and as_of_date <= max_completed_as_of_date:
-            raise serializers.ValidationError(
-                f'对账日期 {as_of_date} 不能早于或等于上一次对账日期 {max_completed_as_of_date}，只能对账未来的日期'
-            )
+        if max_completed_as_of_date:
+            if as_of_date == max_completed_as_of_date:
+                raise serializers.ValidationError(
+                    f'该账户已有 {as_of_date} 的对账记录，不允许重复对账同一日期'
+                )
+            elif as_of_date < max_completed_as_of_date:
+                raise serializers.ValidationError(
+                    f'对账日期 {as_of_date} 不能早于上一次对账日期 {max_completed_as_of_date}，只能对账未来的日期'
+                )
         balances = BalanceCalculationService.calculate_balance(
             account.owner,
             account.account,
