@@ -144,12 +144,27 @@ class ScheduledTaskViewSet(ModelViewSet):
             else:
                 default_currency = non_zero_balances[0]['currency']
         
+        # 获取上一次对账日期（最近一次完成的对账任务的 as_of_date）
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.account.models import Account
+        account_content_type = ContentType.objects.get_for_model(Account)
+        last_reconciliation = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=account_content_type,
+            object_id=account.id,
+            status='completed',
+            as_of_date__isnull=False
+        ).exclude(id=task.id).order_by('-as_of_date').first()
+        
+        last_reconciliation_date = last_reconciliation.as_of_date if last_reconciliation else None
+        
         data = {
             'balances': non_zero_balances,
             'account_name': account.account,
             'as_of_date': date.today(),
             'default_currency': default_currency,
-            'is_first_reconciliation': account.is_first_reconciliation()
+            'is_first_reconciliation': account.is_first_reconciliation(),
+            'last_reconciliation_date': last_reconciliation_date
         }
         
         serializer = ReconciliationStartSerializer(data)
