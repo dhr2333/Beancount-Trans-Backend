@@ -115,6 +115,21 @@ class TransactionItemSerializer(serializers.Serializer):
         default=False,
         help_text="是否为自动计算"
     )
+    date = serializers.DateField(
+        required=False,
+        allow_null=True,
+        help_text="交易日期（仅 is_auto=false 时可指定，不能超过 as_of_date）"
+    )
+    
+    def validate(self, data):
+        """验证日期字段规则"""
+        is_auto = data.get('is_auto', False)
+        item_date = data.get('date')
+        
+        if is_auto and item_date is not None:
+            raise serializers.ValidationError('is_auto=true 的条目不允许指定日期')
+        
+        return data
 
 
 class CurrencyBalanceSerializer(serializers.Serializer):
@@ -219,6 +234,20 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         # 验证对账数据
         actual_balance = data['actual_balance']
         transaction_items = data.get('transaction_items', [])
+        
+        # 验证 transaction_items 中的日期
+        date_errors = []
+        for i, item in enumerate(transaction_items):
+            item_date = item.get('date')
+            is_auto = item.get('is_auto', False)
+            
+            if not is_auto and item_date is not None:
+                # is_auto=false 的条目，日期不能超过 as_of_date
+                if item_date > as_of_date:
+                    date_errors.append(f'条目 {i+1} 的日期 {item_date} 不能超过对账截止日期 {as_of_date}')
+        
+        if date_errors:
+            raise serializers.ValidationError({'transaction_items': date_errors})
         
         # 转换为字典列表
         transaction_items_dict = [
