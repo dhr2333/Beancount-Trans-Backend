@@ -206,7 +206,7 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         
         if existing_reconciliation:
             raise serializers.ValidationError(
-                f'该账户已对账过 {as_of_date}，不允许重复对账同一日期'
+                f'该账户已有 {as_of_date} 的对账记录，不允许重复对账同一日期'
             )
         balances = BalanceCalculationService.calculate_balance(
             account.owner,
