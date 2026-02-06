@@ -134,11 +134,6 @@ class ReconciliationService:
                     pad_directive = BalanceCalculationService.generate_pad_directive(
                         account.account, auto_item['account'], transaction_date
                     )
-            elif abs(remaining) > Decimal('0.01'):
-                # 没有自动计算，但有剩余差额，不允许这种情况
-                raise ValueError(
-                    f"有剩余差额 {remaining} 时必须提供一个标记为自动计算的条目（用于 pad 兜底）"
-                )
             
             # 6.3 按顺序组装指令：transaction → pad → balance
             directives.extend(transaction_directives)  # 先添加手动 transaction
