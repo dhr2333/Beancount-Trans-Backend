@@ -2,12 +2,9 @@
 对账执行 API 测试
 """
 import pytest
-import os
-from datetime import date
-from decimal import Decimal
+from datetime import date, timedelta
 from rest_framework.test import APIClient
 from rest_framework import status
-from unittest.mock import patch
 
 from project.apps.reconciliation.models import ScheduledTask
 from project.apps.account.models import Account
@@ -462,6 +459,207 @@ class TestReconciliationAPI:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert 'transaction_items' in response.data
+    
+    def test_execute_reconciliation_with_date_in_transaction_item(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试 is_auto=false 的条目可以指定日期，且日期在指令中使用"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Food CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        as_of_date = date.today()
+        item_date = as_of_date - timedelta(days=5)  # 条目日期早于 as_of_date
+        
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1200.00',
+                'currency': 'CNY',
+                'as_of_date': str(as_of_date),
+                'transaction_items': [
+                    {
+                        'account': 'Expenses:Food',
+                        'amount': '-200.00',
+                        'is_auto': False,
+                        'date': str(item_date)  # 指定日期
+                    }
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'success'
+        # 验证指令中使用了指定的日期
+        assert str(item_date) in response.data['directives'][0]
+    
+    def test_execute_reconciliation_without_date_uses_as_of_date(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试 is_auto=false 的条目未指定日期时使用 as_of_date"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Food CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        as_of_date = date.today()
+        
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1200.00',
+                'currency': 'CNY',
+                'as_of_date': str(as_of_date),
+                'transaction_items': [
+                    {
+                        'account': 'Expenses:Food',
+                        'amount': '-200.00',
+                        'is_auto': False
+                        # 未指定日期
+                    }
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'success'
+        # 验证指令中使用了 as_of_date
+        assert str(as_of_date) in response.data['directives'][0]
+    
+    def test_execute_reconciliation_date_exceeds_as_of_date_rejected(self, user, account, scheduled_task_pending, mock_bean_file_path):
+        """测试 is_auto=false 的条目日期超过 as_of_date 时被拒绝"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Food CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        as_of_date = date.today()
+        item_date = as_of_date + timedelta(days=1)  # 条目日期晚于 as_of_date
+        
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1200.00',
+                'currency': 'CNY',
+                'as_of_date': str(as_of_date),
+                'transaction_items': [
+                    {
+                        'account': 'Expenses:Food',
+                        'amount': '-200.00',
+                        'is_auto': False,
+                        'date': str(item_date)  # 日期超过 as_of_date
+                    }
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'transaction_items' in response.data
+        assert '不能超过对账截止日期' in str(response.data)
+    
+    def test_execute_reconciliation_auto_item_with_date_rejected(self, user, account, scheduled_task_pending, mock_bean_file_path):
+        """测试 is_auto=true 的条目不允许指定日期"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Income:Investment:Interest CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1200.00',
+                'currency': 'CNY',
+                'as_of_date': str(date.today()),
+                'transaction_items': [
+                    {
+                        'account': 'Income:Investment:Interest',
+                        'amount': None,
+                        'is_auto': True,
+                        'date': str(date.today())  # is_auto=true 时不允许指定日期
+                    }
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'is_auto=true 的条目不允许指定日期' in str(response.data)
+    
+    def test_execute_reconciliation_auto_item_uses_as_of_date(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
+        """测试 is_auto=true 的条目统一使用 as_of_date"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Income:Investment:Interest CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+        
+        client = APIClient()
+        client.force_authenticate(user=user)
+        
+        as_of_date = date.today()
+        
+        response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1000.01',
+                'currency': 'CNY',
+                'as_of_date': str(as_of_date),
+                'transaction_items': [
+                    {
+                        'account': 'Income:Investment:Interest',
+                        'amount': None,
+                        'is_auto': True
+                    }
+                ]
+            },
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'success'
+        # 验证自动计算的 transaction 指令使用了 as_of_date
+        assert str(as_of_date) in response.data['directives'][0]
 
 
 @pytest.mark.django_db

@@ -103,10 +103,12 @@ class ReconciliationService:
                         continue
                     amount = Decimal(str(amount))
                     total_allocated += amount
+                    # 使用条目指定的日期，如果未指定则使用 as_of_date
+                    item_date = item.get('date') or transaction_date
                     # 生成 transaction 指令
                     transaction_directives.append(
                         ReconciliationService._generate_transaction_directive(
-                            task.content_object.owner, account.account, item['account'], amount, currency, transaction_date
+                            task.content_object.owner, account.account, item['account'], amount, currency, item_date
                         )
                     )
             

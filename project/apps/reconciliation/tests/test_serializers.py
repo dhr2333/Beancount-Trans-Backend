@@ -144,6 +144,57 @@ class TestTransactionItemSerializer:
         assert serializer.validated_data['account'] == 'Income:Investment:Interest'
         assert serializer.validated_data['amount'] is None
         assert serializer.validated_data['is_auto'] is True
+    
+    def test_transaction_item_with_date(self):
+        """测试 is_auto=false 时可以指定日期"""
+        data = {
+            'account': 'Expenses:Food',
+            'amount': '100.00',
+            'is_auto': False,
+            'date': '2026-01-15'
+        }
+        
+        serializer = TransactionItemSerializer(data=data)
+        assert serializer.is_valid()
+        assert serializer.validated_data['date'] == date(2026, 1, 15)
+    
+    def test_transaction_item_without_date(self):
+        """测试 is_auto=false 时未指定日期（应该允许）"""
+        data = {
+            'account': 'Expenses:Food',
+            'amount': '100.00',
+            'is_auto': False
+        }
+        
+        serializer = TransactionItemSerializer(data=data)
+        assert serializer.is_valid()
+        assert serializer.validated_data.get('date') is None
+    
+    def test_transaction_item_auto_with_date_rejected(self):
+        """测试 is_auto=true 时不允许指定日期（应该报错）"""
+        data = {
+            'account': 'Income:Investment:Interest',
+            'amount': None,
+            'is_auto': True,
+            'date': '2026-01-15'
+        }
+        
+        serializer = TransactionItemSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'is_auto=true 的条目不允许指定日期' in str(serializer.errors)
+    
+    def test_transaction_item_date_format(self):
+        """测试日期格式验证"""
+        data = {
+            'account': 'Expenses:Food',
+            'amount': '100.00',
+            'is_auto': False,
+            'date': 'invalid-date'
+        }
+        
+        serializer = TransactionItemSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'date' in serializer.errors
 
 
 @pytest.mark.django_db
