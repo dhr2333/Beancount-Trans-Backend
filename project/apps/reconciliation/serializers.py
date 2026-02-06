@@ -235,6 +235,17 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         actual_balance = data['actual_balance']
         transaction_items = data.get('transaction_items', [])
         
+        # 验证 transaction_items 中的账户不能与对账账户相同
+        account_errors = []
+        reconciliation_account = account.account
+        for i, item in enumerate(transaction_items):
+            item_account = item.get('account')
+            if item_account and item_account == reconciliation_account:
+                account_errors.append(f'条目 {i+1} 的账户不能与对账账户相同（{reconciliation_account}）')
+        
+        if account_errors:
+            raise serializers.ValidationError({'transaction_items': account_errors})
+        
         # 验证 transaction_items 中的日期
         date_errors = []
         for i, item in enumerate(transaction_items):
