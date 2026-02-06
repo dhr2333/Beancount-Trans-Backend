@@ -81,9 +81,9 @@ class ReconciliationValidator:
         
         if auto_count == 0:
             # 模式A：全部手动填写金额（不需要 pad）
-            # 允许小数点误差（0.01）
+            # 金额必须完全闭环，不允许任何误差
             # 检查：actual_balance + total_allocated 是否等于 expected_balance
-            if abs(actual_balance + total_allocated - expected_balance) > Decimal('0.01'):
+            if actual_balance + total_allocated != expected_balance:
                 errors.append(
                     f'已分配金额 {total_allocated} 与差额不匹配（实际余额 {actual_balance} + 差额分配 {total_allocated} = {actual_balance + total_allocated}，预期余额 {expected_balance}，应分配：{target_allocation}）'
                 )
@@ -94,7 +94,8 @@ class ReconciliationValidator:
         #         errors.append('已分配金额的绝对值不能大于等于差额绝对值')
         
         # 8. 如果有剩余差额，必须要有 auto_item（用于 pad）
-        if abs(remaining) > Decimal('0.01') and auto_count == 0:
+        # 金额必须完全闭环，不允许任何误差
+        if remaining != Decimal('0.00') and auto_count == 0:
             errors.append('有剩余差额时必须提供一个标记为自动计算的条目（用于 pad 兜底）')
         
         return len(errors) == 0, errors
