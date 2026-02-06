@@ -170,8 +170,8 @@ class ReconciliationService:
                     task.scheduled_date  # 基于 scheduled_date，而非 completed_date
                 )
                 
-                # 如果计算出的日期是今天或更早，延后一个周期
-                if next_date <= today:
+                # 如果计算出的日期是今天或之前，循环延后直到日期为明天之后
+                while next_date <= today:
                     next_date = CycleCalculator.get_next_date(
                         account.reconciliation_cycle_unit,
                         account.reconciliation_cycle_interval,
