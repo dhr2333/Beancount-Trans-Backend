@@ -7,8 +7,9 @@ import logging
 import os
 from decimal import Decimal
 from datetime import date, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 
 from project.utils.file import BeanFileManager
 from .balance_calculation_service import BalanceCalculationService
@@ -22,6 +23,7 @@ class ReconciliationService:
     """对账服务：处理差额逻辑和指令生成"""
     
     @staticmethod
+    @transaction.atomic
     def execute_reconciliation(
         task,
         actual_balance: Decimal,
@@ -30,7 +32,7 @@ class ReconciliationService:
         as_of_date: Optional[date] = None
     ) -> Dict:
         """
-        执行对账的核心逻辑
+        执行对账的核心逻辑（带事务保护）
         
         Args:
             task: ScheduledTask 对象
@@ -147,52 +149,72 @@ class ReconciliationService:
                 )
             )  # 最后添加 balance
         
-        # 7. 写入 .bean 文件
-        ReconciliationService._append_directives(
-            task.content_object.owner, 
-            directives
-        )
+        # 7. 写入 .bean 文件（在事务外执行）
+        file_info = None
+        try:
+            file_info = ReconciliationService._append_directives(
+                task.content_object.owner, 
+                directives
+            )
+        except Exception as e:
+            # 文件写入失败，直接抛出异常，不执行数据库操作
+            logger.error(f"写入对账文件失败: {e}")
+            raise
         
-        # 8. 更新待办状态（completed_date 使用实际完成日期，保存 as_of_date）
-        today = date.today()
-        task.status = 'completed'
-        task.completed_date = today
-        task.as_of_date = as_of_date  # 保存账本对账日期，用于防止重复对账
-        task.save()
-        
-        # 9. 创建下一个待办
-        next_task = None
-        if account.reconciliation_cycle_unit and account.reconciliation_cycle_interval:
-            try:
-                next_date = CycleCalculator.get_next_date(
-                    account.reconciliation_cycle_unit,
-                    account.reconciliation_cycle_interval,
-                    task.scheduled_date  # 基于 scheduled_date，而非 completed_date
-                )
-                
-                # 如果计算出的日期是今天或更早，延后一个周期
-                if next_date <= today:
+        # 8-9. 在事务中更新数据库（如果失败会自动回滚数据库，但需要手动回滚文件）
+        try:
+            # 8. 更新待办状态
+            today = date.today()
+            task.status = 'completed'
+            task.completed_date = today
+            task.as_of_date = as_of_date  # 保存账本对账日期，用于防止重复对账
+            task.save()
+            
+            # 9. 创建下一个待办
+            next_task = None
+            if account.reconciliation_cycle_unit and account.reconciliation_cycle_interval:
+                try:
                     next_date = CycleCalculator.get_next_date(
                         account.reconciliation_cycle_unit,
                         account.reconciliation_cycle_interval,
-                        next_date  # 基于计算出的 next_date 再延后一个周期
+                        task.scheduled_date  # 基于 scheduled_date，而非 completed_date
                     )
-                
-                next_task = ScheduledTask.objects.create(
-                    task_type='reconciliation',
-                    content_type=ContentType.objects.get_for_model(Account),
-                    object_id=account.id,
-                    scheduled_date=next_date,
-                    status='pending'
-                )
-            except Exception as e:
-                logger.error(f"创建下一个待办失败: {e}")
+                    
+                    # 如果计算出的日期是今天或之前，循环延后直到日期为明天之后
+                    while next_date <= today:
+                        next_date = CycleCalculator.get_next_date(
+                            account.reconciliation_cycle_unit,
+                            account.reconciliation_cycle_interval,
+                            next_date  # 基于计算出的 next_date 再延后一个周期
+                        )
+                    
+                    next_task = ScheduledTask.objects.create(
+                        task_type='reconciliation',
+                        content_type=ContentType.objects.get_for_model(Account),
+                        object_id=account.id,
+                        scheduled_date=next_date,
+                        status='pending'
+                    )
+                except Exception as e:
+                    logger.error(f"创建下一个待办失败: {e}")
+                    # 注意：这里不抛出异常，因为创建下一个待办失败不应该影响主流程
+            
+            return {
+                'status': 'success',
+                'directives': directives,
+                'next_task_id': next_task.id if next_task else None
+            }
         
-        return {
-            'status': 'success',
-            'directives': directives,
-            'next_task_id': next_task.id if next_task else None
-        }
+        except Exception as e:
+            # 数据库操作失败，回滚文件写入
+            if file_info:
+                try:
+                    ReconciliationService._rollback_file_write(file_info)
+                except Exception as rollback_error:
+                    logger.error(f"回滚文件写入失败: {rollback_error}", exc_info=True)
+            
+            # 重新抛出原始异常
+            raise
     
     @staticmethod
     def _generate_transaction_directive(
@@ -246,7 +268,7 @@ class ReconciliationService:
     {from_account}'''
     
     @staticmethod
-    def _append_directives(user, directives: List[str]):
+    def _append_directives(user, directives: List[str]) -> Dict[str, Any]:
         """将指令追加到 trans/reconciliation.bean 文件
         
         对账指令作为交易记录，统一写入 trans/reconciliation.bean 文件。
@@ -255,6 +277,9 @@ class ReconciliationService:
         Args:
             user: 用户对象
             directives: 指令列表
+            
+        Returns:
+            dict: 包含文件路径和写入位置信息的字典，用于回滚
         """
         reconciliation_path = BeanFileManager.get_reconciliation_bean_path(user)
         
@@ -265,21 +290,64 @@ class ReconciliationService:
         # 检查文件是否已存在（首次创建）
         is_new_file = not os.path.exists(reconciliation_path)
         
-        # 追加指令到文件末尾
-        with open(reconciliation_path, 'a', encoding='utf-8') as f:
-            if is_new_file:
-                # 首次创建时添加文件头注释
-                f.write("; Trans directory - Auto-generated includes\n")
-                f.write("; This file is automatically generated by the platform\n\n")
-            
-            for directive in directives:
-                f.write(directive)
+        # 记录写入前的位置（用于回滚）
+        file_size_before = 0
+        if os.path.exists(reconciliation_path):
+            file_size_before = os.path.getsize(reconciliation_path)
+        
+        try:
+            # 追加指令到文件末尾
+            with open(reconciliation_path, 'a', encoding='utf-8') as f:
+                if is_new_file:
+                    # 首次创建时添加文件头注释
+                    f.write("; Trans directory - Auto-generated includes\n")
+                    f.write("; This file is automatically generated by the platform\n\n")
+                
+                for directive in directives:
+                    f.write(directive)
+                    f.write('\n')
                 f.write('\n')
-            f.write('\n')
+            
+            # 如果是新文件，确保 trans/main.bean 包含它
+            if is_new_file:
+                BeanFileManager.ensure_reconciliation_bean_included(user)
+                logger.info(f"已创建对账文件并添加到 trans/main.bean: {reconciliation_path}")
+            
+            logger.info(f"已写入 {len(directives)} 条对账指令到 {reconciliation_path}")
+            
+            # 返回文件信息，用于回滚
+            return {
+                'file_path': reconciliation_path,
+                'file_size_before': file_size_before,
+                'is_new_file': is_new_file
+            }
+        except IOError as e:
+            logger.error(f"写入对账文件失败: {e}")
+            raise ValueError(f"写入对账文件失败: {str(e)}")
+    
+    @staticmethod
+    def _rollback_file_write(file_info: Dict[str, Any]):
+        """回滚文件写入操作
         
-        # 如果是新文件，确保 trans/main.bean 包含它
-        if is_new_file:
-            BeanFileManager.ensure_reconciliation_bean_included(user)
-            logger.info(f"已创建对账文件并添加到 trans/main.bean: {reconciliation_path}")
+        Args:
+            file_info: 由 _append_directives 返回的文件信息字典
+        """
+        file_path = file_info['file_path']
+        file_size_before = file_info['file_size_before']
+        is_new_file = file_info['is_new_file']
         
-        logger.info(f"已写入 {len(directives)} 条对账指令到 {reconciliation_path}")
+        try:
+            if is_new_file:
+                # 如果是新文件，直接删除
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"已回滚：删除新创建的对账文件 {file_path}")
+            else:
+                # 如果是追加到现有文件，截断到写入前的大小
+                if os.path.exists(file_path):
+                    with open(file_path, 'r+', encoding='utf-8') as f:
+                        f.truncate(file_size_before)
+                    logger.info(f"已回滚：将对账文件截断到写入前的大小 {file_path}")
+        except Exception as e:
+            logger.error(f"回滚文件写入失败: {e}", exc_info=True)
+            # 回滚失败不应该阻止异常传播，只记录错误

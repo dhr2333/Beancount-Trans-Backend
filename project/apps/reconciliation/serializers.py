@@ -3,6 +3,7 @@
 """
 from rest_framework import serializers
 from decimal import Decimal
+from datetime import timedelta
 
 from .models import ScheduledTask
 
@@ -167,6 +168,11 @@ class ReconciliationStartSerializer(serializers.Serializer):
     is_first_reconciliation = serializers.BooleanField(
         help_text="是否首次对账（True=首次，使用 Equity:Opening-Balances；False=后续，使用 Equity:Adjustments）"
     )
+    last_reconciliation_date = serializers.DateField(
+        required=False,
+        allow_null=True,
+        help_text="上一次对账日期（如果存在，transaction_items 的日期必须在此日期之后）"
+    )
 
 
 class ReconciliationExecuteSerializer(serializers.Serializer):
@@ -235,6 +241,31 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
         actual_balance = data['actual_balance']
         transaction_items = data.get('transaction_items', [])
         
+        # 验证 transaction_items 中的账户不能与对账账户相同
+        account_errors = []
+        reconciliation_account = account.account
+        for i, item in enumerate(transaction_items):
+            item_account = item.get('account')
+            if item_account and item_account == reconciliation_account:
+                account_errors.append(f'条目 {i+1} 的账户不能与对账账户相同（{reconciliation_account}）')
+        
+        if account_errors:
+            raise serializers.ValidationError({'transaction_items': account_errors})
+        
+        # 获取上一次对账日期（最近一次完成的对账任务的 as_of_date）
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.account.models import Account
+        account_content_type = ContentType.objects.get_for_model(Account)
+        last_reconciliation = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=account_content_type,
+            object_id=account.id,
+            status='completed',
+            as_of_date__isnull=False
+        ).exclude(id=task.id).order_by('-as_of_date').first()
+        
+        last_reconciliation_date = last_reconciliation.as_of_date if last_reconciliation else None
+        
         # 验证 transaction_items 中的日期
         date_errors = []
         for i, item in enumerate(transaction_items):
@@ -245,6 +276,12 @@ class ReconciliationExecuteSerializer(serializers.Serializer):
                 # is_auto=false 的条目，日期不能超过 as_of_date
                 if item_date > as_of_date:
                     date_errors.append(f'条目 {i+1} 的日期 {item_date} 不能超过对账截止日期 {as_of_date}')
+                
+                # 日期不能早于上一次对账日期（如果存在）
+                if last_reconciliation_date and item_date <= last_reconciliation_date:
+                    date_errors.append(
+                        f'条目 {i+1} 的日期 {item_date} 不能早于或等于上一次对账日期 {last_reconciliation_date}（必须在 {last_reconciliation_date + timedelta(days=1)} 或之后）'
+                    )
         
         if date_errors:
             raise serializers.ValidationError({'transaction_items': date_errors})
