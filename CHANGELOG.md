@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.3](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.2...5.8.3) (2026-03-05)
+
+### Bug Fixes
+
+* Refactor official templates to use JSON data source ([#73](https://github.com/dhr2333/Beancount-Trans-Backend/issues/73)) ([510faa1](https://github.com/dhr2333/Beancount-Trans-Backend/commit/510faa16781093c77f9e38d0fafb96512af494c4))
+
 ## [5.8.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.1...5.8.2) (2026-02-06)
 
 ### Bug Fixes
