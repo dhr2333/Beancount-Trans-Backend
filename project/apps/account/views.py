@@ -395,7 +395,8 @@ class AccountTemplateViewSet(ModelViewSet):
                     account=item.account_path,
                     enable=item.enable,
                     reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                    reconciliation_cycle_interval=item.reconciliation_cycle_interval
+                    reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                    description=item.description or ''
                 )
                 result['created'] += 1
         else:  # merge 模式
@@ -417,7 +418,8 @@ class AccountTemplateViewSet(ModelViewSet):
                     account=item.account_path,
                     enable=item.enable,
                     reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                    reconciliation_cycle_interval=item.reconciliation_cycle_interval
+                    reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                    description=item.description or ''
                 )
                 result['created'] += 1
 

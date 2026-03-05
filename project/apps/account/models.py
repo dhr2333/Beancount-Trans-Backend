@@ -48,6 +48,7 @@ class Account(BaseModel):
         verbose_name="对账周期间隔",
         help_text="每隔多少个周期单位执行一次对账"
     )
+    description = models.CharField(max_length=256, blank=True, default='', verbose_name='描述', help_text='描述')
 
     class Meta:
         unique_together = ['account', 'owner']
@@ -530,6 +531,7 @@ class AccountTemplateItem(BaseModel):
         verbose_name="对账周期间隔",
         help_text="每隔多少个周期单位执行一次对账"
     )
+    description = models.CharField(max_length=256, blank=True, default='', verbose_name='描述', help_text='描述')
 
     class Meta:
         db_table = 'account_template_item'

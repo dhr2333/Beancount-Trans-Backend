@@ -15,7 +15,7 @@ class AccountTreeSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'mapping_count',
-            'children', 'created', 'modified'
+            'description', 'children', 'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified', 'owner']
 
@@ -80,7 +80,7 @@ class AccountSerializer(serializers.ModelSerializer):
             'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'has_children', 'mapping_count',
             'reconciliation_cycle_unit', 'reconciliation_cycle_interval',
-            'created', 'modified'
+            'description', 'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified', 'owner']
 
@@ -242,7 +242,7 @@ class AccountTemplateItemSerializer(serializers.ModelSerializer):
     """账户模板项序列化器"""
     class Meta:
         model = AccountTemplateItem
-        fields = ['id', 'account_path', 'enable', 'reconciliation_cycle_unit', 'reconciliation_cycle_interval', 'created', 'modified']
+        fields = ['id', 'account_path', 'enable', 'reconciliation_cycle_unit', 'reconciliation_cycle_interval', 'description', 'created', 'modified']
         read_only_fields = ['created', 'modified']
 
 

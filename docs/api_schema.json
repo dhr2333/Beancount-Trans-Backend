@@ -153,7 +153,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountTemplateDetail'
           description: ''
-  /api/account-templates/{id}/:
+  /api/account-templates/{id
+}/:
     get:
       operationId: account_templates_retrieve
       description: 账户模板管理视图集
@@ -265,16 +266,17 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/account-templates/{id}/apply/:
+  /api/account-templates/{id
+}/apply/:
     post:
       operationId: account_templates_apply_create
       description: |-
         应用模板到用户账户
 
         请求体: {
-            "action": "merge|overwrite",
-            "conflict_resolution": "skip|overwrite"
-        }
+  "action": "merge|overwrite",
+  "conflict_resolution": "skip|overwrite"
+}
       parameters:
       - in: path
         name: id
@@ -307,7 +309,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountTemplateDetail'
           description: ''
-  /api/account/{id}/:
+  /api/account/{id
+}/:
     get:
       operationId: account_retrieve
       description: |-
@@ -442,7 +445,8 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/account/{id}/mappings/:
+  /api/account/{id
+}/mappings/:
     get:
       operationId: account_mappings_retrieve
       description: 获取账户相关的映射
@@ -465,7 +469,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Account'
           description: ''
-  /api/account/{id}/migration_candidates/:
+  /api/account/{id
+}/migration_candidates/:
     get:
       operationId: account_migration_candidates_retrieve
       description: 获取可用的迁移目标账户列表
@@ -549,7 +554,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Assets'
           description: ''
-  /api/assets/{id}/:
+  /api/assets/{id
+}/:
     get:
       operationId: assets_retrieve
       description: 资产映射管理视图集
@@ -736,7 +742,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Directory'
           description: ''
-  /api/directories/{id}/:
+  /api/directories/{id
+}/:
     get:
       operationId: directories_retrieve
       description: |-
@@ -860,7 +867,8 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/directories/{id}/contents/:
+  /api/directories/{id
+}/contents/:
     get:
       operationId: directories_contents_retrieve
       description: |-
@@ -952,7 +960,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Expense'
           description: ''
-  /api/expense/{id}/:
+  /api/expense/{id
+}/:
     get:
       operationId: expense_retrieve
       description: 支出映射管理视图集
@@ -1164,7 +1173,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/File'
           description: ''
-  /api/files/{id}/:
+  /api/files/{id
+}/:
     get:
       operationId: files_retrieve
       parameters:
@@ -1268,7 +1278,8 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/files/{id}/download/:
+  /api/files/{id
+}/download/:
     get:
       operationId: files_download_retrieve
       parameters:
@@ -1350,7 +1361,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Income'
           description: ''
-  /api/income/{id}/:
+  /api/income/{id
+}/:
     get:
       operationId: income_retrieve
       description: 收入映射管理视图集
@@ -1545,7 +1557,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tag'
           description: ''
-  /api/tags/{id}/:
+  /api/tags/{id
+}/:
     get:
       operationId: tags_retrieve
       description: |-
@@ -1664,10 +1677,9 @@ paths:
       description: |-
         删除标签
 
-        请求体（可选）:
-        {
-            "force": false  # 是否强制删除（包括子标签）
-        }
+        请求体（可选）: {
+  "force": false  # 是否强制删除（包括子标签）
+}
       parameters:
       - in: path
         name: id
@@ -1683,7 +1695,8 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/tags/{id}/mappings/:
+  /api/tags/{id
+}/mappings/:
     get:
       operationId: tags_mappings_retrieve
       description: 获取标签相关的映射
@@ -1770,7 +1783,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/TemplateDetail'
           description: ''
-  /api/templates/{id}/:
+  /api/templates/{id
+}/:
     get:
       operationId: templates_retrieve
       parameters:
@@ -1878,7 +1892,8 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/templates/{id}/apply/:
+  /api/templates/{id
+}/apply/:
     post:
       operationId: templates_apply_create
       description: 应用模板到用户映射
@@ -1914,7 +1929,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/TemplateDetail'
           description: ''
-  /api/templates/{template_pk}/items/:
+  /api/templates/{template_pk
+}/items/:
     get:
       operationId: templates_items_list
       description: 模板项管理视图集
@@ -1975,7 +1991,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/TemplateItem'
           description: ''
-  /api/templates/{template_pk}/items/{id}/:
+  /api/templates/{template_pk
+}/items/{id
+}/:
     get:
       operationId: templates_items_retrieve
       description: 模板项管理视图集
@@ -2420,6 +2438,10 @@ components:
         enable:
           type: boolean
           description: 默认启用状态
+        description:
+          type: string
+          maxLength: 256
+          description: 描述
         created:
           type: string
           format: date-time
@@ -2445,6 +2467,10 @@ components:
         enable:
           type: boolean
           description: 默认启用状态
+        description:
+          type: string
+          maxLength: 256
+          description: 描述
       required:
       - account_path
     AccountTemplateList:
@@ -2535,6 +2561,10 @@ components:
         mapping_count:
           type: string
           readOnly: true
+        description:
+          type: string
+          maxLength: 256
+          description: 描述
         children:
           type: string
           readOnly: true
