@@ -1,0 +1,38 @@
+{
+  "name": "官方收入映射",
+  "description": "中国用户常用收入映射",
+  "version": "1.0.0",
+  "update_notes": null,
+  "items": [
+    {
+      "key": "小荷包",
+      "payer": null,
+      "account": "Assets:Savings:Web:XiaoHeBao"
+    },
+    {
+      "key": "收钱码经营版收款",
+      "payer": null,
+      "account": "Income:Business"
+    },
+    {
+      "key": "出行账户余额提现",
+      "payer": null,
+      "account": "Income:Sideline:DiDi"
+    },
+    {
+      "key": "理赔",
+      "payer": null,
+      "account": "Income:LegalSettlements:InsuranceClaims"
+    },
+    {
+      "key": "红包",
+      "payer": null,
+      "account": "Income:RedPacket:Personal"
+    },
+    {
+      "key": "老婆",
+      "payer": null,
+      "account": "Assets:Receivables:Personal"
+    }
+  ]
+}

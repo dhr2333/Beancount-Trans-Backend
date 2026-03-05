@@ -1,0 +1,458 @@
+{
+  "name": "中国用户标准账户模板",
+  "description": "适用于中国用户的标准 Beancount 账户结构",
+  "version": "1.0.0",
+  "update_notes": null,
+  "items": [
+    {
+      "account_path": "Assets",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Receivables",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Receivables:Personal",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Bank",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Bank:ICBC",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Bank:ICBC:C5244",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:HaLuo",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:LaoPoDaRen",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:LiangLiangJiaDao",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:LiuXianJi",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Mobile",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Mobile:C6428",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Telecom",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Telecom:C6428",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Unicom",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:Operator:Unicom:C6428",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Recharge:YiMing",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web:AliFund",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web:AliPay",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web:WechatFund",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web:WechatPay",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Assets:Savings:Web:XiaoHeBao",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Equity",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Culture",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Culture:Education",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Culture:Entertainment",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Culture:Subscription",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Finance",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Finance:Commission",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Finance:Insurance",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Food",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Food:Breakfast",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Food:Dinner",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Food:DrinkFruit",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Food:Lunch",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Government",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Government:Fine",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Health",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Health:Medical",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Health:Outpatient",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Home",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Home:Daily",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Home:Decoration",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Home:Recharge",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Shopping",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Shopping:Clothing",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Shopping:Digital",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Shopping:Makeup",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:Shopping:Parent",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:TransPort",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:TransPort:Private",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:TransPort:Private:Fuel",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:TransPort:Private:Park",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Expenses:TransPort:Public",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:Business",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:LegalSettlements",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:LegalSettlements:InsuranceClaims",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:RedPacket",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:RedPacket:Personal",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:Sideline",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Income:Sideline:DiDi",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Bank",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Bank:CITIC",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Bank:CITIC:C6428",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Web",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Web:AliPay",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    },
+    {
+      "account_path": "Liabilities:CreditCard:Web:DouYin",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null
+    }
+  ]
+}
