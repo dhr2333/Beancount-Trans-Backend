@@ -54,6 +54,13 @@
       "description": ""
     },
     {
+      "account_path": "Assets:Savings:Cash",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "现金"
+    },
+    {
       "account_path": "Assets:Savings:Recharge",
       "enable": true,
       "reconciliation_cycle_unit": null,
@@ -156,35 +163,28 @@
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "余额宝余额"
     },
     {
       "account_path": "Assets:Savings:Web:AliPay",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "支付宝余额"
     },
     {
       "account_path": "Assets:Savings:Web:WechatFund",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "微信零钱通"
     },
     {
       "account_path": "Assets:Savings:Web:WechatPay",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Assets:Savings:Web:XiaoHeBao",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "微信零钱"
     },
     {
       "account_path": "Equity",
@@ -192,6 +192,20 @@
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
       "description": ""
+    },
+    {
+      "account_path": "Equity:Adjustments",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "财务调整与差错更正，说明调整原因并逐步清零"
+    },
+    {
+      "account_path": "Equity:Opening-Balances",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "初始建账时资产与负债的差额，仅初始化时使用一次"
     },
     {
       "account_path": "Expenses",
@@ -205,140 +219,140 @@
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Culture:Education",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "非实物消费/服务"
     },
     {
       "account_path": "Expenses:Culture:Entertainment",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "娱乐活动"
+    },
+    {
+      "account_path": "Expenses:Culture:Relationship",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "人情往来"
     },
     {
       "account_path": "Expenses:Culture:Subscription",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "订阅服务"
+    },
+    {
+      "account_path": "Expenses:Culture:Travel",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "酒店旅游(门票、酒店)"
     },
     {
       "account_path": "Expenses:Finance",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "财务金融"
     },
     {
       "account_path": "Expenses:Finance:Commission",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "金融中介(手续费/贷款利息等)"
+    },
+    {
+      "account_path": "Expenses:Finance:Fine",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "罚款"
     },
     {
       "account_path": "Expenses:Finance:Insurance",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "保险（社会保险/商业保险/个人所得税等）"
     },
     {
       "account_path": "Expenses:Food",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "餐饮"
     },
     {
       "account_path": "Expenses:Food:Breakfast",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "早餐"
     },
     {
       "account_path": "Expenses:Food:Dinner",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "晚餐"
     },
     {
       "account_path": "Expenses:Food:DrinkFruit",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "饮料水果"
     },
     {
       "account_path": "Expenses:Food:Lunch",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Government",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Government:Fine",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "午餐"
     },
     {
       "account_path": "Expenses:Health",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "医疗健康"
+    },
+    {
+      "account_path": "Expenses:Health:Equipment",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "直接医疗费用（门诊/挂号/体检/药品/疫苗/治疗费等）"
     },
     {
       "account_path": "Expenses:Health:Medical",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Health:Outpatient",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "直接医疗费用（门诊/挂号/体检/药品/疫苗/治疗费等）"
     },
     {
       "account_path": "Expenses:Home",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Home:Daily",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "居家生活"
     },
     {
       "account_path": "Expenses:Home:Decoration",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "家居家装"
+    },
+    {
+      "account_path": "Expenses:Home:Rent",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "房租/房贷"
     },
     {
       "account_path": "Expenses:Home:Recharge",
@@ -348,74 +362,67 @@
       "description": ""
     },
     {
-      "account_path": "Expenses:Shopping",
+      "account_path": "Expenses:Home:Utilities",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "公共事业(水/电/气/网/物业/物流等)"
     },
     {
       "account_path": "Expenses:Shopping:Clothing",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "服饰鞋包"
+    },
+    {
+      "account_path": "Expenses:Shopping:Daily",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "日用百货（家庭共用消耗品：纸巾、垃圾袋、清洁剂、洗衣液等）"
     },
     {
       "account_path": "Expenses:Shopping:Digital",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "数码电器"
     },
     {
-      "account_path": "Expenses:Shopping:Makeup",
+      "account_path": "Expenses:Shopping:PersonalCare",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:Shopping:Parent",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "个人护理（私人用品消耗品：牙膏、洗发水、护肤品）"
     },
     {
       "account_path": "Expenses:TransPort",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "交通运输"
     },
     {
       "account_path": "Expenses:TransPort:Private",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Expenses:TransPort:Private:Fuel",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "私家车的所有费用"
     },
     {
       "account_path": "Expenses:TransPort:Private:Park",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "停车费"
     },
     {
       "account_path": "Expenses:TransPort:Public",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "公共交通(飞机/高铁/打车/公交/地铁/高速等)"
     },
     {
       "account_path": "Income",
@@ -425,53 +432,88 @@
       "description": ""
     },
     {
-      "account_path": "Income:Business",
+      "account_path": "Income:Active",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "主动收入"
     },
     {
-      "account_path": "Income:LegalSettlements",
+      "account_path": "Income:Active:Business",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "企业经营收入"
     },
     {
-      "account_path": "Income:LegalSettlements:InsuranceClaims",
+      "account_path": "Income:Active:Freelance",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "兼职/自由职业"
     },
     {
-      "account_path": "Income:RedPacket",
+      "account_path": "Income:Active:Salary",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "工资收益"
     },
     {
-      "account_path": "Income:RedPacket:Personal",
+      "account_path": "Income:Investment",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "被动收入"
     },
     {
-      "account_path": "Income:Sideline",
+      "account_path": "Income:Investment:CapitalGains",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "资本利得（卖出投资品的盈利部分）"
     },
     {
-      "account_path": "Income:Sideline:DiDi",
+      "account_path": "Income:Investment:Interest",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "利息收入（银行、债券）"
+    },
+    {
+      "account_path": "Income:Transfer",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "转移收入"
+    },
+    {
+      "account_path": "Income:Transfer:Governmental",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "来自政府的转移（补助、津贴、退税）"
+    },
+    {
+      "account_path": "Income:Transfer:Organizational",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "来自组织/企业的转移（机构红包、优惠抵扣、补偿）"
+    },
+    {
+      "account_path": "Income:Transfer:Personal",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "来自个人的转移（礼物、红包）"
+    },
+    {
+      "account_path": "Income:Transfer:Relationship",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "人情往来"
     },
     {
       "account_path": "Liabilities",
@@ -485,7 +527,7 @@
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "信用卡"
     },
     {
       "account_path": "Liabilities:CreditCard:Bank",
@@ -528,6 +570,27 @@
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
       "description": ""
+    },
+    {
+      "account_path": "Liabilities:Payables",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": ""
+    },
+    {
+      "account_path": "Liabilities:Payables:Organization",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "对XX的债务(机构)"
+    },
+    {
+      "account_path": "Liabilities:Payables:Personal",
+      "enable": true,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
+      "description": "对XX的债务(个人)"
     }
   ]
 }
