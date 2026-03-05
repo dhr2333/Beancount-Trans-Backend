@@ -45,7 +45,7 @@ class AccountAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('account', 'owner', 'enable', 'parent')
+            'fields': ('account', 'owner', 'enable', 'parent', 'description')
         }),
         ('统计信息', {
             'fields': ('has_children_display', 'mapping_count_display'),
@@ -203,7 +203,7 @@ class AccountTemplateAdmin(admin.ModelAdmin):
 @admin.register(AccountTemplateItem)
 class AccountTemplateItemAdmin(admin.ModelAdmin):
     """账户模板项管理"""
-    list_display = ['template', 'account_path', 'enable']
+    list_display = ['template', 'account_path', 'enable', 'description']
     list_per_page = 500
     list_filter = ['template', 'enable']
     search_fields = ['account_path']
