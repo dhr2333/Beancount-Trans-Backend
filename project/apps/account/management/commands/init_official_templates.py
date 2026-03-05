@@ -346,17 +346,23 @@ class Command(BaseCommand):
                 return
 
         # 案例文件配置
+        # 使用与 official_templates 相同的路径构建方式
+        from django.conf import settings
+        from pathlib import Path
+        PROJECT_DIR = Path(settings.BASE_DIR) / "project"
+        SAMPLE_FILES_DIR = PROJECT_DIR / "fixtures" / "sample_files"
+        
         sample_files = [
             {
                 'name': '完整测试_微信.csv',
                 'directory': root_dir,
-                'local_path': 'fixtures/sample_files/完整测试_微信.csv',
+                'local_path': str(SAMPLE_FILES_DIR / '完整测试_微信.csv'),
                 'content_type': 'text/csv'
             },
             {
                 'name': '完整测试_支付宝.csv',
                 'directory': root_dir,
-                'local_path': 'fixtures/sample_files/完整测试_支付宝.csv',
+                'local_path': str(SAMPLE_FILES_DIR / '完整测试_支付宝.csv'),
                 'content_type': 'text/csv'
             }
         ]
