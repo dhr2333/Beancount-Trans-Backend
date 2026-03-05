@@ -10,29 +10,34 @@
       "account": "Assets:Savings:Web:XiaoHeBao"
     },
     {
-      "key": "收钱码经营版收款",
+      "key": "红包",
       "payer": null,
-      "account": "Income:Business"
+      "account": "Income:Transfer:Personal"
     },
     {
       "key": "出行账户余额提现",
       "payer": null,
-      "account": "Income:Sideline:DiDi"
+      "account": "Income:Active:Freelance"
     },
     {
       "key": "理赔",
       "payer": null,
-      "account": "Income:LegalSettlements:InsuranceClaims"
+      "account": "Income:Transfer:Organizational"
     },
     {
-      "key": "红包",
+      "key": "保险理赔",
       "payer": null,
-      "account": "Income:RedPacket:Personal"
+      "account": "Income:Transfer:Organizational"
     },
     {
-      "key": "老婆",
+      "key": "收钱码经营版收款",
       "payer": null,
-      "account": "Assets:Receivables:Personal"
+      "account": "Income:Active:Business"
+    },
+    {
+      "key": "/",
+      "payer": null,
+      "account": "Income:Transfer:Personal"
     }
   ]
 }

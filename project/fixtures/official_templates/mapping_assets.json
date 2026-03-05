@@ -5,12 +5,22 @@
   "update_notes": null,
   "items": [
     {
+      "key": "6428",
+      "full": "中信银行信用卡(6428)",
+      "account": "Liabilities:CreditCard:Bank:CITIC:C6428"
+    },
+    {
       "key": "零钱通",
       "full": "微信零钱通",
       "account": "Assets:Savings:Web:WechatFund"
     },
     {
       "key": "零钱",
+      "full": "微信零钱",
+      "account": "Assets:Savings:Web:WechatPay"
+    },
+    {
+      "key": "/",
       "full": "微信零钱",
       "account": "Assets:Savings:Web:WechatPay"
     },
@@ -35,11 +45,6 @@
       "account": "Liabilities:CreditCard:Web:AliPay"
     },
     {
-      "key": "/",
-      "full": "微信零钱",
-      "account": "Assets:Savings:Web:WechatPay"
-    },
-    {
       "key": "单车骑行卡抵扣",
       "full": "单车骑行卡抵扣",
       "account": "Assets:Savings:Recharge:HaLuo"
@@ -53,16 +58,6 @@
       "key": "备用金",
       "full": "支付宝备用金",
       "account": "Liabilities:CreditCard:Web:AliPay"
-    },
-    {
-      "key": "6428",
-      "full": "中信银行信用卡(6428)",
-      "account": "Liabilities:CreditCard:Bank:CITIC:C6428"
-    },
-    {
-      "key": "5244",
-      "full": "中国工商银行储蓄卡(5244)",
-      "account": "Assets:Savings:Bank:ICBC:C5244"
     }
   ]
 }
