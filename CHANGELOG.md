@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.4](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.3...5.8.4) (2026-03-05)
+
+### Bug Fixes
+
+* Add description field to Account and AccountTemplateItem models ([#74](https://github.com/dhr2333/Beancount-Trans-Backend/issues/74)) ([504bb52](https://github.com/dhr2333/Beancount-Trans-Backend/commit/504bb520380928f544796746cfcf9545fb822d27))
+
 ## [5.8.3](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.2...5.8.3) (2026-03-05)
 
 ### Bug Fixes
