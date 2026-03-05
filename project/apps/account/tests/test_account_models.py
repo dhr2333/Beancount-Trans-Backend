@@ -254,3 +254,4 @@ class AccountCloseTest(TestCase):
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.expend, self.target_account)
         self.assertTrue(self.expense.enable)  # 映射保持启用状态
+
