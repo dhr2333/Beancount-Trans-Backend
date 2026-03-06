@@ -66,7 +66,10 @@ Beancount-Trans-Backend/
 
 ## API 文档
 
-本项目提供了详细的 [API文档](https://trans.dhr2333.cn/api/redoc)，涵盖了所有的请求和响应格式、示例代码等内容。我们使用了 Django REST framework 中的 [API文档生成工具](https://www.django-rest-framework.org/topics/documenting-your-api/#third-party-packages-for-openapi-support) 来自动生成这些文档，确保其准确性和全面性。
+本项目提供了详细的 [API 文档](https://trans.dhr2333.cn/api/docs)，涵盖所有请求和响应格式、示例等，由 Django REST framework 的 [API 文档方案](https://www.django-rest-framework.org/topics/documenting-your-api/#third-party-packages-for-openapi-support) 自动生成。
+
+- **给人看**：[/api/docs/](https://trans.dhr2333.cn/api/docs) — ReDoc 网页
+- **给机器/AI 用**：[/api/schema/](https://trans.dhr2333.cn/api/schema/) — OpenAPI 3 规范（JSON），可用于代码生成、契约测试或提供给 AI/工具读取
 
 ### 测试
 

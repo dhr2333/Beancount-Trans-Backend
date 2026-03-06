@@ -64,7 +64,7 @@ urlpatterns = [
 
     # API文档 - drf-spectacular
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI schema
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),  # ReDoc UI
+    path('api/docs/', SpectacularRedocView.as_view(url_name='schema'), name='docs'),  # ReDoc UI
 
     # allauth
     path("api/_allauth/", include("allauth.headless.urls")),

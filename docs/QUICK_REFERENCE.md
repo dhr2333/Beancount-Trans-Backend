@@ -104,7 +104,7 @@ Beancount-Trans-Backend/
 ### 管理后台
 
 - `/admin/` - Django Admin
-- `/api/redoc/` - API 文档
+- `/api/docs/` - API 文档（ReDoc）
 
 ## 故障排查
 
