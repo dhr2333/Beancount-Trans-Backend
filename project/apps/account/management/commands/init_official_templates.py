@@ -56,8 +56,8 @@ class Command(BaseCommand):
         # 6. 确保 admin 用户有格式化配置
         self._ensure_format_config(admin_user)
 
-        # 7. 为 admin 用户创建案例文件
-        self._create_sample_files_for_admin(admin_user, force)
+        # 7. 为 admin 用户创建案例文件（始终按 fixtures 强制覆盖，与 --force 无关）
+        self._create_sample_files_for_admin(admin_user)
 
         self.stdout.write(self.style.SUCCESS('✓ 官方模板和默认用户初始化完成'))
 
@@ -308,13 +308,18 @@ class Command(BaseCommand):
             f'✓ 为 admin 用户创建映射: 支出={final_expenses}, 资产={final_assets}, 收入={final_incomes}'
         ))
 
-    def _create_sample_files_for_admin(self, admin_user, force):
-        """为 admin 用户创建案例文件"""
+    def _create_sample_files_for_admin(self, admin_user):
+        """为 admin 用户创建案例文件。始终按 fixtures 强制覆盖（删除旧文件并重建），
+        删除语义与界面一致：无其他引用时一并删除 OSS 对象及 bean 相关文件。
+        """
+        import logging
+        import os
         from project.apps.file_manager.models import Directory, File
         from project.apps.translate.models import ParseFile
         from project.utils.storage_factory import get_storage_client
-        from project.utils.file import generate_file_hash, BeanFileManager
-        import os
+        from project.utils.file import BeanFileManager
+
+        logger = logging.getLogger(__name__)
 
         # 获取或创建 Root 目录
         root_dir = Directory.objects.filter(
@@ -330,33 +335,49 @@ class Command(BaseCommand):
                 parent=None
             )
 
-        # 检查是否已有案例文件
+        # 案例文件始终强制初始化：若已存在则先按「删除文件」语义清理（bean、OSS、记录）
         existing_files = File.objects.filter(
             owner=admin_user,
             directory=root_dir,
             name__in=['完整测试_微信.csv', '完整测试_支付宝.csv']
         )
+        storage_client = get_storage_client()
 
         if existing_files.exists():
-            if force:
-                existing_files.delete()
-                self.stdout.write(self.style.WARNING('删除现有案例文件'))
-            else:
-                self.stdout.write(self.style.WARNING('案例文件已存在，使用 --force 强制重建'))
-                return
+            for file_obj in list(existing_files):
+                base_name = os.path.splitext(file_obj.name)[0]
+                bean_filename = f"{base_name}.bean"
+                BeanFileManager.remove_bean_from_trans_main(admin_user, bean_filename)
+                BeanFileManager.delete_bean_file(admin_user, bean_filename)
+                other_refs = File.objects.filter(
+                    storage_name=file_obj.storage_name
+                ).exclude(id=file_obj.id).exists()
+                if not other_refs:
+                    try:
+                        storage_client.delete_file(file_obj.storage_name)
+                    except Exception as e:
+                        logger.warning("删除案例文件 OSS 对象失败 %s: %s", file_obj.storage_name, e)
+                file_obj.delete()
+            self.stdout.write(self.style.WARNING('删除现有案例文件'))
 
         # 案例文件配置
+        # 使用与 official_templates 相同的路径构建方式
+        from django.conf import settings
+        from pathlib import Path
+        PROJECT_DIR = Path(settings.BASE_DIR) / "project"
+        SAMPLE_FILES_DIR = PROJECT_DIR / "fixtures" / "sample_files"
+        
         sample_files = [
             {
                 'name': '完整测试_微信.csv',
                 'directory': root_dir,
-                'local_path': 'fixtures/sample_files/完整测试_微信.csv',
+                'local_path': str(SAMPLE_FILES_DIR / '完整测试_微信.csv'),
                 'content_type': 'text/csv'
             },
             {
                 'name': '完整测试_支付宝.csv',
                 'directory': root_dir,
-                'local_path': 'fixtures/sample_files/完整测试_支付宝.csv',
+                'local_path': str(SAMPLE_FILES_DIR / '完整测试_支付宝.csv'),
                 'content_type': 'text/csv'
             }
         ]

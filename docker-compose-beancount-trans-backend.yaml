@@ -1,0 +1,255 @@
+services:
+  beancount-trans-backend:
+    tty: true
+    image: harbor.dhr2333.cn/beancount-trans/beancount-trans-backend:git-b6c79b8
+    container_name: beancount-trans-backend
+    labels:
+      - "traefik.enable=true"
+      # - "traefik.http.routers.beancount-trans-backend.rule=Host(`trans.dhr2333.cn`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.beancount-trans-backend.rule=Host(`trans.dhr2333.cn`) && (PathPrefix(`/api`) || PathPrefix(`/admin`))"
+      - "traefik.http.routers.beancount-trans-backend.entrypoints=websecure"
+      - "traefik.http.routers.beancount-trans-backend.tls=true"
+      - "traefik.http.routers.beancount-trans-backend.tls.certresolver=alicloud-dns"
+      - "traefik.http.services.beancount-trans-backend.loadbalancer.server.port=8000"
+    restart: always
+    entrypoint: /code/beancount-trans/bin/docker_start.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./volumes/beancount-trans/collectstatic:/code/beancount-trans/collectstatic
+      - /root/Beancount-Trans/Beancount-Trans-Backend/Assets:/code/beancount-trans/Assets
+    user: root
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.settings
+
+      - DJANGO_SECRET_KEY=
+
+      # - DJANGO_DEBUG=False
+      - DJANGO_DEBUG=True
+
+      - DJANGO_ALLOWED_HOSTS=trans.dhr2333.cn
+
+      - CSRF_TRUSTED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - TRANS_POSTGRESQL_DATABASE=beancount-trans
+      - TRANS_POSTGRESQL_USER=dhr2333
+      - TRANS_POSTGRESQL_HOST=postgres
+      - TRANS_POSTGRESQL_PORT=5432
+      - TRANS_POSTGRESQL_PASSWORD=
+
+      - TRANS_REDIS_HOST=redis
+      - TRANS_REDIS_PORT=6379
+      - TRANS_REDIS_PASSWORD=lCs6UMzirdFOuUEj8tIP
+
+      - STORAGE_TYPE=oss
+      - OSS_ENDPOINT=oss-cn-hangzhou-internal.aliyuncs.com
+      - OSS_ACCESS_KEY_ID=
+      - OSS_ACCESS_KEY_SECRET=
+      - OSS_BUCKET_NAME=beancount-trans
+      - OSS_REGION=cn-hangzhou
+
+      - CORS_ALLOWED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - JWT_ACCESS_TOKEN_HOURS=1
+
+      - TRAEFIK_NETWORK=shared-network
+      - FAVA_IMAGE=harbor.dhr2333.cn/beancount-trans-assets:develop
+      - BASE_URL=trans.dhr2333.cn
+      - CERTRESOLVER=alicloud-dns
+
+      - ASSETS_HOST_PATH=/root/Beancount-Trans/Beancount-Trans-Backend/Assets
+
+      - GOOGLE_CLIENT_ID=27533849710-0ot3fj14f5vqkinena7is5ms08nfe2kl.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=G
+      - GITHUB_CLIENT_ID=Ov23liuJwXE0syF3flmO
+      - GITHUB_CLIENT_SECRET=
+
+      - ALIYUN_SMS_ACCESS_KEY_ID=
+      - ALIYUN_SMS_ACCESS_KEY_SECRET=
+      - ALIYUN_SMS_SIGN_NAME=温州市听云科技
+      - ALIYUN_SMS_TEMPLATE_CODE=SMS_498290173
+
+      - DEFAULT_FROM_EMAIL=dhr2diary@gmail.com
+      - EMAIL_BIND_SUBJECT=beancount-trans 验证码
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=465
+      - EMAIL_HOST_USER=dhr2diary@gmail.com
+      - EMAIL_HOST_PASSWORD=lxko ckuk soov xigr
+      - EMAIL_USE_TLS=false
+      - EMAIL_USE_SSL=true
+      - EMAIL_TIMEOUT=60
+      - EMAIL_CODE_EXPIRE_SECONDS=300
+      - EMAIL_CODE_RESEND_INTERVAL=60
+
+      - GITEA_BASE_URL=https://gitea.dhr2333.cn
+      - GITEA_ADMIN_TOKEN=
+      - GITEA_ORG_NAME=beancount-trans
+      - GITEA_WEBHOOK_SECRET=
+      - GIT_REPO_SIZE_LIMIT=20971520
+      - GITHUB_TOKEN=
+    networks:
+      - shared-network
+  beancount-trans-beat:
+    tty: true
+    image: harbor.dhr2333.cn/beancount-trans/beancount-trans-backend:git-b6c79b8
+    container_name: beancount-trans-beat
+    entrypoint: /code/beancount-trans/bin/celery_beat_start.sh
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - /root/Beancount-Trans/Beancount-Trans-Backend/Assets:/code/beancount-trans/Assets
+    user: root
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.settings
+
+      - DJANGO_SECRET_KEY=
+
+      - DJANGO_DEBUG=False
+
+      - DJANGO_ALLOWED_HOSTS=trans.dhr2333.cn
+
+      - CSRF_TRUSTED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - TRANS_POSTGRESQL_DATABASE=beancount-trans
+      - TRANS_POSTGRESQL_USER=dhr2333
+      - TRANS_POSTGRESQL_HOST=postgres
+      - TRANS_POSTGRESQL_PORT=5432
+      - TRANS_POSTGRESQL_PASSWORD=
+
+      - TRANS_REDIS_HOST=redis
+      - TRANS_REDIS_PORT=6379
+      - TRANS_REDIS_PASSWORD=lCs6UMzirdFOuUEj8tIP
+
+      - STORAGE_TYPE=oss
+      - OSS_ENDPOINT=oss-cn-hangzhou-internal.aliyuncs.com
+      - OSS_ACCESS_KEY_ID=
+      - OSS_ACCESS_KEY_SECRET=
+      - OSS_BUCKET_NAME=beancount-trans
+      - OSS_REGION=cn-hangzhou
+
+      - CORS_ALLOWED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - JWT_ACCESS_TOKEN_HOURS=1
+
+      - TRAEFIK_NETWORK=shared-network
+      - FAVA_IMAGE=harbor.dhr2333.cn/beancount-trans-assets:develop
+      - BASE_URL=trans.dhr2333.cn
+      - CERTRESOLVER=alicloud-dns
+
+      - ASSETS_HOST_PATH=/root/Beancount-Trans/Beancount-Trans-Backend/Assets
+
+      - GOOGLE_CLIENT_ID=27533849710-0ot3fj14f5vqkinena7is5ms08nfe2kl.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=G
+      - GITHUB_CLIENT_ID=Ov23liuJwXE0syF3flmO
+      - GITHUB_CLIENT_SECRET=
+
+      - ALIYUN_SMS_ACCESS_KEY_ID=
+      - ALIYUN_SMS_ACCESS_KEY_SECRET=
+      - ALIYUN_SMS_SIGN_NAME=温州市听云科技
+      - ALIYUN_SMS_TEMPLATE_CODE=SMS_498290173
+
+      - DEFAULT_FROM_EMAIL=dhr2diary@gmail.com
+      - EMAIL_BIND_SUBJECT=beancount-trans 验证码
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=465
+      - EMAIL_HOST_USER=dhr2diary@gmail.com
+      - EMAIL_HOST_PASSWORD=lxko ckuk soov xigr
+      - EMAIL_USE_TLS=false
+      - EMAIL_USE_SSL=true
+      - EMAIL_TIMEOUT=60
+      - EMAIL_CODE_EXPIRE_SECONDS=300
+      - EMAIL_CODE_RESEND_INTERVAL=60
+
+      - GITEA_BASE_URL=https://gitea.dhr2333.cn
+      - GITEA_ADMIN_TOKEN=
+      - GITEA_ORG_NAME=beancount-trans
+      - GITEA_WEBHOOK_SECRET=
+      - GIT_REPO_SIZE_LIMIT=20971520
+      - GITHUB_TOKEN=
+    networks:
+      - shared-network
+  beancount-trans-worker:
+    tty: true
+    image: harbor.dhr2333.cn/beancount-trans/beancount-trans-backend:git-b6c79b8
+    restart: always
+    entrypoint: /code/beancount-trans/bin/celery_worker_start.sh
+    deploy:
+      replicas: 2
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - /root/Beancount-Trans/Beancount-Trans-Backend/Assets:/code/beancount-trans/Assets
+    user: root
+    environment:
+      - DJANGO_SETTINGS_MODULE=project.settings.settings
+
+      - DJANGO_SECRET_KEY=
+
+      - DJANGO_DEBUG=False
+
+      - DJANGO_ALLOWED_HOSTS=trans.dhr2333.cn
+
+      - CSRF_TRUSTED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - TRANS_POSTGRESQL_DATABASE=beancount-trans
+      - TRANS_POSTGRESQL_USER=dhr2333
+      - TRANS_POSTGRESQL_HOST=postgres
+      - TRANS_POSTGRESQL_PORT=5432
+      - TRANS_POSTGRESQL_PASSWORD=
+
+      - TRANS_REDIS_HOST=redis
+      - TRANS_REDIS_PORT=6379
+      - TRANS_REDIS_PASSWORD=lCs6UMzirdFOuUEj8tIP
+
+      - STORAGE_TYPE=oss
+      - OSS_ENDPOINT=oss-cn-hangzhou-internal.aliyuncs.com
+      - OSS_ACCESS_KEY_ID=
+      - OSS_ACCESS_KEY_SECRET=
+      - OSS_BUCKET_NAME=beancount-trans
+      - OSS_REGION=cn-hangzhou
+
+      - CORS_ALLOWED_ORIGINS=http://trans.dhr2333.cn,https://trans.dhr2333.cn
+
+      - JWT_ACCESS_TOKEN_HOURS=1
+
+      - TRAEFIK_NETWORK=shared-network
+      - FAVA_IMAGE=harbor.dhr2333.cn/beancount-trans-assets:develop
+      - BASE_URL=trans.dhr2333.cn
+      - CERTRESOLVER=alicloud-dns
+
+      - ASSETS_HOST_PATH=/root/Beancount-Trans/Beancount-Trans-Backend/Assets
+
+      - GOOGLE_CLIENT_ID=27533849710-0ot3fj14f5vqkinena7is5ms08nfe2kl.apps.googleusercontent.com
+      - GOOGLE_CLIENT_SECRET=G
+      - GITHUB_CLIENT_ID=Ov23liuJwXE0syF3flmO
+      - GITHUB_CLIENT_SECRET=
+
+      - ALIYUN_SMS_ACCESS_KEY_ID=
+      - ALIYUN_SMS_ACCESS_KEY_SECRET=
+      - ALIYUN_SMS_SIGN_NAME=温州市听云科技
+      - ALIYUN_SMS_TEMPLATE_CODE=SMS_498290173
+
+      - DEFAULT_FROM_EMAIL=dhr2diary@gmail.com
+      - EMAIL_BIND_SUBJECT=beancount-trans 验证码
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=465
+      - EMAIL_HOST_USER=dhr2diary@gmail.com
+      - EMAIL_HOST_PASSWORD=lxko ckuk soov xigr
+      - EMAIL_USE_TLS=false
+      - EMAIL_USE_SSL=true
+      - EMAIL_TIMEOUT=60
+      - EMAIL_CODE_EXPIRE_SECONDS=300
+      - EMAIL_CODE_RESEND_INTERVAL=60
+
+      - GITEA_BASE_URL=https://gitea.dhr2333.cn
+      - GITEA_ADMIN_TOKEN=
+      - GITEA_ORG_NAME=beancount-trans
+      - GITEA_WEBHOOK_SECRET=
+      - GIT_REPO_SIZE_LIMIT=20971520
+      - GITHUB_TOKEN=
+    networks:
+      - shared-networ
+
+networks:
+  shared-network:
+    external: true

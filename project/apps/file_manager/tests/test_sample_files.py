@@ -48,7 +48,7 @@ class SampleFilesTestCase(TransactionTestCase):
 
         # 创建案例文件
         command = Command()
-        command._create_sample_files_for_admin(self.admin_user, force=True)
+        command._create_sample_files_for_admin(self.admin_user)
 
         # 验证目录结构
         root_dir = Directory.objects.filter(
@@ -88,7 +88,7 @@ class SampleFilesTestCase(TransactionTestCase):
 
         # 首先为 admin 创建案例文件
         command = Command()
-        command._create_sample_files_for_admin(self.admin_user, force=True)
+        command._create_sample_files_for_admin(self.admin_user)
 
         # 创建新用户
         new_user = User.objects.create_user(
@@ -189,7 +189,7 @@ class SampleFilesTestCase(TransactionTestCase):
 
         # 为 admin 创建案例文件
         command = Command()
-        command._create_sample_files_for_admin(self.admin_user, force=True)
+        command._create_sample_files_for_admin(self.admin_user)
 
         # 获取 admin 的文件
         admin_files = File.objects.filter(
