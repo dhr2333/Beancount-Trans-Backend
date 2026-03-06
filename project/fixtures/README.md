@@ -91,35 +91,41 @@ pipenv run python manage.py init_official_templates --force
 
 1. **用途**：用于新用户初始化的案例账单文件，帮助用户快速了解系统功能
 2. **加载方式**：通过 `init_official_templates` 管理命令自动加载到 admin 用户
-3. **新用户**：新用户注册时会自动获得这些文件的引用
-4. **更新流程**：如需更新案例文件，替换对应文件并重新运行初始化命令：
+3. **案例文件默认强制初始化**：每次执行 `init_official_templates` 时，案例文件都会按当前 fixtures 强制覆盖（与是否使用 `--force` 无关）。若 admin 已有案例文件，会先按「删除文件」语义清理：从 trans/main.bean 移除 include、删除对应 .bean 文件；若无其他用户引用同一 OSS 对象则一并删除 OSS 文件；再删除数据库记录；最后按 fixtures 重新上传并建记录。
+4. **新用户**：新用户注册时会自动获得这些文件的引用（同一 OSS 对象，不重复上传）
+5. **更新流程**：更新案例文件时，替换 `sample_files/` 下对应文件后，直接重新运行初始化即可（无需 `--force`）：
 
 ```bash
-pipenv run python manage.py init_official_templates --force
+pipenv run python manage.py init_official_templates
 ```
 
-1. **内容要求**：
+6. **内容要求**：
    - 文件内容应保持真实性和代表性，便于用户理解系统功能
    - 文件大小应适中，避免影响系统性能
 
 ## 完整初始化流程
 
-更新所有模板和案例文件后，执行完整初始化：
+**首次部署或仅更新案例文件**（案例文件每次都会按 fixtures 覆盖）：
 
 ```bash
-# 强制重建所有官方模板和案例文件
+pipenv run python manage.py init_official_templates
+```
+
+**已修改官方模板 JSON、需要强制重建账户/映射模板时**：
+
+```bash
 pipenv run python manage.py init_official_templates --force
 ```
 
 此命令会：
 
 1. 创建或更新 admin 用户（id=1）
-2. 加载官方账户模板
+2. 加载官方账户模板（存在且无 `--force` 时跳过）
 3. 应用账户模板到 admin 用户
-4. 加载官方映射模板
+4. 加载官方映射模板（存在且无 `--force` 时跳过）
 5. 应用映射模板到 admin 用户
 6. 创建格式化配置
-7. 创建案例文件
+7. **始终**按 fixtures 重建 admin 的案例文件（删除旧文件时无引用则同步删除 OSS 对象）
 
 ## 注意事项
 
