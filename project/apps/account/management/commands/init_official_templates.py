@@ -128,6 +128,7 @@ class Command(BaseCommand):
                     enable=item.get("enable", True),
                     reconciliation_cycle_unit=item.get("reconciliation_cycle_unit"),
                     reconciliation_cycle_interval=item.get("reconciliation_cycle_interval"),
+                    description=(item.get("description") or "").strip() or "",
                 )
 
             self.stdout.write(self.style.SUCCESS(
