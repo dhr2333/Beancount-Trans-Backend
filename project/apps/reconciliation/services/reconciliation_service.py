@@ -11,10 +11,14 @@ from typing import List, Dict, Optional, Any
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 
+from beancount import loader
+from beancount.core.data import Transaction, Pad, Balance
+
 from project.utils.file import BeanFileManager
 from .balance_calculation_service import BalanceCalculationService
 from .cycle_calculator import CycleCalculator
 from .account_currency_service import AccountCurrencyService
+from .entry_matcher import EntryMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -163,14 +167,18 @@ class ReconciliationService:
         
         # 8-9. 在事务中更新数据库（如果失败会自动回滚数据库，但需要手动回滚文件）
         try:
-            # 8. 更新待办状态
+            # 8. 解析文件、提取当次条目、存入 reconciliation_entries（用于撤销时内容匹配）
+            task.reconciliation_entries = ReconciliationService._extract_and_serialize_entries(
+                task.content_object.owner, directives, as_of_date
+            )
+            # 9. 更新待办状态
             today = date.today()
             task.status = 'completed'
             task.completed_date = today
             task.as_of_date = as_of_date  # 保存账本对账日期，用于防止重复对账
             task.save()
             
-            # 9. 创建下一个待办
+            # 10. 创建下一个待办
             next_task = None
             if account.reconciliation_cycle_unit and account.reconciliation_cycle_interval:
                 try:
@@ -215,6 +223,209 @@ class ReconciliationService:
             
             # 重新抛出原始异常
             raise
+    
+    @staticmethod
+    def _serialize_entry_for_storage(normalized: Dict) -> Dict:
+        """将标准化条目转为 JSON 可存储格式（date -> isoformat, Decimal -> str）"""
+        result = {}
+        for k, v in normalized.items():
+            if k == '_original_entry':
+                continue
+            if isinstance(v, date):
+                result[k] = v.isoformat()
+            elif isinstance(v, Decimal):
+                result[k] = str(v)
+            elif isinstance(v, list):
+                new_list = []
+                for item in v:
+                    if isinstance(item, dict):
+                        new_item = {}
+                        for kk, vv in item.items():
+                            if isinstance(vv, Decimal):
+                                new_item[kk] = str(vv)
+                            elif isinstance(vv, date):
+                                new_item[kk] = vv.isoformat()
+                            else:
+                                new_item[kk] = vv
+                        new_list.append(new_item)
+                    else:
+                        new_list.append(item)
+                result[k] = new_list
+            else:
+                result[k] = v
+        return result
+    
+    @staticmethod
+    def _extract_and_serialize_entries(user, directives: List[str], as_of_date: date) -> Optional[List[Dict]]:
+        """
+        解析 trans/reconciliation.bean，提取本次写入的条目，转为 JSON 可存储格式。
+        
+        Args:
+            user: 用户对象
+            directives: 本次写入的指令列表（用于确定条目数量）
+            as_of_date: 对账截止日期
+            
+        Returns:
+            JSON 可序列化的条目列表，失败时返回 None
+        """
+        reconciliation_path = BeanFileManager.get_reconciliation_bean_path(user)
+        if not os.path.exists(reconciliation_path):
+            return None
+        try:
+            entries, errors, options = loader.load_file(reconciliation_path)
+            if errors:
+                logger.warning(f"解析对账文件时有 {len(errors)} 个错误")
+            # 筛选 Transaction、Pad、Balance，且日期在 as_of_date 或 as_of_date+1
+            balance_date = as_of_date + timedelta(days=1)
+            valid_dates = (as_of_date, balance_date)
+            our_entries = []
+            for entry in entries:
+                if not isinstance(entry, (Transaction, Pad, Balance)):
+                    continue
+                entry_date = getattr(entry, 'date', None)
+                if entry_date not in valid_dates:
+                    continue
+                # 对账条目：Transaction 有 "Beancount-Trans" 和 "对账调整"，Pad/Balance 按日期
+                if isinstance(entry, Transaction):
+                    if (getattr(entry, 'payee', None) != 'Beancount-Trans' or
+                            getattr(entry, 'narration', None) != '对账调整'):
+                        continue
+                normalized = EntryMatcher.normalize_entry(entry)
+                if normalized:
+                    our_entries.append(normalized)
+            # 取最后 N 条（本次写入的指令数 = 条目数）
+            n = len(directives)
+            if len(our_entries) >= n:
+                our_entries = our_entries[-n:]
+            serialized = []
+            for norm in our_entries:
+                ser = ReconciliationService._serialize_entry_for_storage(norm)
+                serialized.append(ser)
+            return serialized if serialized else None
+        except Exception as e:
+            logger.warning(f"提取对账条目失败: {e}", exc_info=True)
+            return None
+    
+    @staticmethod
+    def _deserialize_entry_for_match(stored: Dict) -> Dict:
+        """将存储的条目转为可与 Beancount 解析结果匹配的格式"""
+        from datetime import datetime
+        result = {}
+        for k, v in stored.items():
+            if k in ('date',) and isinstance(v, str):
+                try:
+                    result[k] = datetime.strptime(v, '%Y-%m-%d').date()
+                except (ValueError, TypeError):
+                    result[k] = v
+            elif k == 'postings' and isinstance(v, list):
+                new_postings = []
+                for p in v:
+                    if isinstance(p, dict):
+                        np = {}
+                        for pk, pv in p.items():
+                            if pk in ('amount',) and isinstance(pv, str):
+                                try:
+                                    np[pk] = Decimal(pv)
+                                except Exception:
+                                    np[pk] = pv
+                            else:
+                                np[pk] = pv
+                        new_postings.append(np)
+                    else:
+                        new_postings.append(p)
+                result[k] = new_postings
+            elif k == 'amount' and isinstance(v, str):
+                try:
+                    result[k] = Decimal(v)
+                except Exception:
+                    result[k] = v
+            else:
+                result[k] = v
+        return result
+    
+    @staticmethod
+    def revoke_reconciliation(task) -> Dict[str, Any]:
+        """
+        撤销对账：注释账本中的当次条目、更新任务状态、更新或新建待办。
+        
+        Args:
+            task: 已完成的 ScheduledTask（对账类型）
+            
+        Returns:
+            {'new_task_id': int, 'entries_commented': int, 'message': str}
+        """
+        from project.apps.reconciliation.models import ScheduledTask
+        from project.apps.account.models import Account
+        from .reconciliation_comment_service import ReconciliationCommentService
+        
+        account = task.content_object
+        if not isinstance(account, Account):
+            raise ValueError("待办任务关联的对象不是 Account 类型")
+        if task.task_type != 'reconciliation' or task.status != 'completed':
+            raise ValueError("只能撤销已完成的对账任务")
+        
+        user = account.owner
+        today = date.today()
+        entries_commented = 0
+        message = ""
+        
+        # 1. 注释账本（基于内容匹配）
+        if task.reconciliation_entries:
+            platform_entries, entry_to_lines = ReconciliationCommentService._parse_reconciliation_bean(user)
+            stored_entries = [
+                ReconciliationService._deserialize_entry_for_match(e)
+                for e in task.reconciliation_entries
+            ]
+            matched_pairs = EntryMatcher.match_entry_lists(stored_entries, platform_entries)
+            all_line_numbers = []
+            for _stored, platform_entry in matched_pairs:
+                try:
+                    idx = platform_entries.index(platform_entry)
+                    line_numbers = entry_to_lines.get(idx, [])
+                    all_line_numbers.extend(line_numbers)
+                except ValueError:
+                    continue
+            unique_lines = sorted(set(all_line_numbers))
+            reconciliation_path = BeanFileManager.get_reconciliation_bean_path(user)
+            entries_commented = ReconciliationCommentService._comment_lines_in_file(
+                reconciliation_path, unique_lines
+            )
+            message = f"已注释 {entries_commented} 行"
+        else:
+            message = "该记录未存储条目信息，无法自动注释账本，请手动检查 trans/reconciliation.bean"
+        
+        # 2. 更新任务状态
+        task.status = 'revoked'
+        task.save(update_fields=['status', 'modified'])
+        
+        # 3. 更新或新建待办：保证永远只有一个 pending 待办且 scheduled_date 为当天
+        content_type = ContentType.objects.get_for_model(Account)
+        existing_pending = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            status='pending'
+        ).first()
+        
+        if existing_pending:
+            existing_pending.scheduled_date = today
+            existing_pending.save(update_fields=['scheduled_date', 'modified'])
+            new_task_id = existing_pending.id
+        else:
+            new_task = ScheduledTask.objects.create(
+                task_type='reconciliation',
+                content_type=content_type,
+                object_id=account.id,
+                scheduled_date=today,
+                status='pending'
+            )
+            new_task_id = new_task.id
+        
+        return {
+            'new_task_id': new_task_id,
+            'entries_commented': entries_commented,
+            'message': message
+        }
     
     @staticmethod
     def _generate_transaction_directive(

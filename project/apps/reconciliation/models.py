@@ -34,6 +34,7 @@ class ScheduledTask(BaseModel):
         ('pending', '待执行'),
         ('completed', '已完成'),
         ('cancelled', '已取消'),
+        ('revoked', '已撤销'),
     ]
     
     task_type = models.CharField(
@@ -56,6 +57,9 @@ class ScheduledTask(BaseModel):
     
     # as_of_date：对账截止日期（仅对 reconciliation 任务有效，用于防止重复对账）
     as_of_date = models.DateField(null=True, blank=True, verbose_name="账本对账日期")
+    
+    # reconciliation_entries：当次对账写入的条目的标准化表示（JSON），用于撤销时基于内容匹配并注释
+    reconciliation_entries = models.JSONField(null=True, blank=True, verbose_name="对账条目")
     
     status = models.CharField(
         max_length=16,

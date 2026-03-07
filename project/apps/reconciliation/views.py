@@ -214,6 +214,38 @@ class ScheduledTaskViewSet(ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['post'])
+    def revoke_reconciliation(self, request, pk=None):
+        """撤销对账：注释当次条目、更新任务状态、更新或新建待办"""
+        task = self.get_object()
+        
+        if task.task_type != 'reconciliation':
+            return Response(
+                {'error': '该待办不是对账任务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if task.status != 'completed':
+            return Response(
+                {'error': '只能撤销已完成的对账任务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            result = ReconciliationService.revoke_reconciliation(task)
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"撤销对账失败: {e}", exc_info=True)
+            return Response(
+                {'error': f'撤销对账失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     # @action(detail=False, methods=['get'])
     # def check_duplicates(self, request):
     #     """检测重复条目（GET）
