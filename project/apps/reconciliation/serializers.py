@@ -174,6 +174,17 @@ class ReconciliationStartSerializer(serializers.Serializer):
         allow_null=True,
         help_text="上一次对账日期（如果存在，transaction_items 的日期必须在此日期之后）"
     )
+    last_completed_task_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="该账户最近一条已完成对账任务 id，用于撤销入口"
+    )
+    last_reconciliation_transaction_items = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        allow_null=True,
+        help_text="撤销后预填的差额分配条目（来自被撤销任务的 reconciliation_transaction_items）"
+    )
 
 
 class ReconciliationExecuteSerializer(serializers.Serializer):

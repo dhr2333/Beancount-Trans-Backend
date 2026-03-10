@@ -245,26 +245,35 @@ class EntryMatcher:
             return False
     
     @staticmethod
-    def match_entry_lists(entries1: List[Dict], entries2: List[Dict]) -> List[Tuple[Dict, Dict]]:
+    def match_entry_lists(
+        entries1: List[Dict],
+        entries2: List[Dict],
+    ) -> List[Tuple[Dict, int, Dict, int]]:
         """匹配两组条目，返回匹配对列表
         
+        撤销对账时，entries1 为本次写入的条目，entries2 为文件中所有条目。
+        同一账户可能有多组历史条目，需匹配到最近写入的（即文件末尾的）那组。
+        因此从后向前匹配，确保匹配到本次写入的条目而非历史重复条目。
+        
         Args:
-            entries1: 第一组标准化条目
-            entries2: 第二组标准化条目
+            entries1: 第一组标准化条目（如 stored_entries）
+            entries2: 第二组标准化条目（如 platform_entries）
             
         Returns:
-            匹配对列表，每个元素是 (entry1, entry2) 元组
+            匹配对列表，每个元素是 (entry1, idx1, entry2, idx2) 元组
         """
-        matched_pairs = []
-        used_indices = set()
+        matched_pairs: List[Tuple[Dict, int, Dict, int]] = []
+        used_indices_2 = set()
         
-        for entry1 in entries1:
-            for idx, entry2 in enumerate(entries2):
-                if idx in used_indices:
+        for idx1, entry1 in enumerate(entries1):
+            # 从后向前遍历，优先匹配文件末尾的条目（最近写入的）
+            for idx in reversed(range(len(entries2))):
+                if idx in used_indices_2:
                     continue
+                entry2 = entries2[idx]
                 if EntryMatcher.match_entries(entry1, entry2):
-                    matched_pairs.append((entry1, entry2))
-                    used_indices.add(idx)
+                    matched_pairs.append((entry1, idx1, entry2, idx))
+                    used_indices_2.add(idx)
                     break
         
         return matched_pairs

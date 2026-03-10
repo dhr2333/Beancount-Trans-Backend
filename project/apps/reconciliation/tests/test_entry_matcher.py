@@ -201,6 +201,8 @@ class TestEntryMatcher:
             matched = EntryMatcher.match_entry_lists(entries1, entries2)
             
             assert len(matched) == 2  # Transaction 和 Balance 都匹配
+            # 返回结构为 (entry1, idx1, entry2, idx2)
+            assert all(len(t) == 4 for t in matched)
         finally:
             os.unlink(temp_path1)
             os.unlink(temp_path2)

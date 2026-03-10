@@ -157,14 +157,24 @@ class ScheduledTaskViewSet(ModelViewSet):
         ).exclude(id=task.id).order_by('-as_of_date').first()
         
         last_reconciliation_date = last_reconciliation.as_of_date if last_reconciliation else None
-        
+        last_completed_task_id = last_reconciliation.id if last_reconciliation else None
+
+        # 若当前任务来自撤销（revoked_task 指向被撤销任务），返回该任务的 transaction_items 用于预填
+        last_reconciliation_transaction_items = None
+        if getattr(task, 'revoked_task_id', None) and task.revoked_task_id:
+            revoked = task.revoked_task
+            if revoked and getattr(revoked, 'reconciliation_transaction_items', None):
+                last_reconciliation_transaction_items = revoked.reconciliation_transaction_items
+
         data = {
             'balances': non_zero_balances,
             'account_name': account.account,
             'as_of_date': date.today(),
             'default_currency': default_currency,
             'is_first_reconciliation': account.is_first_reconciliation(),
-            'last_reconciliation_date': last_reconciliation_date
+            'last_reconciliation_date': last_reconciliation_date,
+            'last_completed_task_id': last_completed_task_id,
+            'last_reconciliation_transaction_items': last_reconciliation_transaction_items or [],
         }
         
         serializer = ReconciliationStartSerializer(data)
@@ -211,6 +221,38 @@ class ScheduledTaskViewSet(ModelViewSet):
             logger.error(f"执行对账失败: {e}", exc_info=True)
             return Response(
                 {'error': f'执行对账失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'])
+    def revoke_reconciliation(self, request, pk=None):
+        """撤销对账：注释当次条目、更新任务状态、更新或新建待办"""
+        task = self.get_object()
+        
+        if task.task_type != 'reconciliation':
+            return Response(
+                {'error': '该待办不是对账任务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if task.status != 'completed':
+            return Response(
+                {'error': '只能撤销已完成的对账任务'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            result = ReconciliationService.revoke_reconciliation(task)
+            return Response(result)
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"撤销对账失败: {e}", exc_info=True)
+            return Response(
+                {'error': f'撤销对账失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     

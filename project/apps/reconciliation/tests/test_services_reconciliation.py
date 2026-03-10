@@ -90,6 +90,57 @@ class TestReconciliationService:
         assert '200.00 CNY' in result['directives'][0]
         assert 'balance' in result['directives'][1]
         assert '1200.00 CNY' in result['directives'][1]
+
+    def test_execute_reconciliation_transaction_date_before_as_of_date_is_stored(
+        self,
+        user,
+        account,
+        scheduled_task_pending,
+        mock_bean_file_path,
+        mock_reconciliation_bean_path,
+        mock_ensure_reconciliation_included,
+    ):
+        """测试 transaction_items.date 早于 as_of_date 仍能被提取存储（避免撤销时部分遗漏）"""
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+2025-01-01 open Expenses:Food CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+
+        as_of = date.today()
+        item_date = as_of - timedelta(days=1)
+        transaction_items = [
+            {
+                'account': 'Expenses:Food',
+                'amount': Decimal('-200.00'),
+                'is_auto': False,
+                'date': item_date,
+            }
+        ]
+
+        ReconciliationService.execute_reconciliation(
+            task=scheduled_task_pending,
+            actual_balance=Decimal('1200.00'),
+            currency='CNY',
+            transaction_items=transaction_items,
+            as_of_date=as_of,
+        )
+
+        scheduled_task_pending.refresh_from_db()
+        assert scheduled_task_pending.reconciliation_entries is not None
+        assert isinstance(scheduled_task_pending.reconciliation_entries, list)
+        # 本次写入 directives = transaction + balance，因此应至少包含 2 条
+        assert len(scheduled_task_pending.reconciliation_entries) >= 2
+        # 应包含该交易日期的 Transaction
+        assert any(
+            e.get('type') == 'Transaction' and e.get('date') == item_date.isoformat()
+            for e in scheduled_task_pending.reconciliation_entries
+        )
     
     def test_execute_reconciliation_with_pad_only(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
         """测试有差额场景 - 仅 pad：用户未添加 transaction，由 pad 账户兜底"""
