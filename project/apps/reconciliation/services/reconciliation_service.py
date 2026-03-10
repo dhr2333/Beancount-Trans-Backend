@@ -169,7 +169,11 @@ class ReconciliationService:
         try:
             # 8. 解析文件、提取当次条目、存入 reconciliation_entries（用于撤销时内容匹配）
             task.reconciliation_entries = ReconciliationService._extract_and_serialize_entries(
-                task.content_object.owner, directives, as_of_date
+                task.content_object.owner, directives, as_of_date, account.account
+            )
+            # 8b. 序列化并存入 reconciliation_transaction_items（用于撤销后预填）
+            task.reconciliation_transaction_items = ReconciliationService._serialize_transaction_items(
+                transaction_items
             )
             # 9. 更新待办状态
             today = date.today()
@@ -225,6 +229,27 @@ class ReconciliationService:
             raise
     
     @staticmethod
+    def _serialize_transaction_items(transaction_items: Optional[List[Dict]]) -> Optional[List[Dict]]:
+        """将 transaction_items 转为可 JSON 存储的格式（amount/date 转为 str）。"""
+        if not transaction_items:
+            return []
+        result = []
+        for item in transaction_items:
+            row = {
+                'account': item.get('account', ''),
+                'is_auto': item.get('is_auto', False),
+            }
+            amount = item.get('amount')
+            row['amount'] = str(amount) if amount is not None else None
+            d = item.get('date')
+            if hasattr(d, 'isoformat'):
+                row['date'] = d.isoformat()
+            else:
+                row['date'] = d
+            result.append(row)
+        return result
+
+    @staticmethod
     def _serialize_entry_for_storage(normalized: Dict) -> Dict:
         """将标准化条目转为 JSON 可存储格式（date -> isoformat, Decimal -> str）"""
         result = {}
@@ -256,7 +281,12 @@ class ReconciliationService:
         return result
     
     @staticmethod
-    def _extract_and_serialize_entries(user, directives: List[str], as_of_date: date) -> Optional[List[Dict]]:
+    def _extract_and_serialize_entries(
+        user,
+        directives: List[str],
+        as_of_date: date,
+        reconciliation_account: str,
+    ) -> Optional[List[Dict]]:
         """
         解析 trans/reconciliation.bean，提取本次写入的条目，转为 JSON 可存储格式。
         
@@ -275,17 +305,47 @@ class ReconciliationService:
             entries, errors, options = loader.load_file(reconciliation_path)
             if errors:
                 logger.warning(f"解析对账文件时有 {len(errors)} 个错误")
-            # 筛选 Transaction、Pad、Balance，且日期在 as_of_date 或 as_of_date+1
+            # 筛选 Transaction、Pad、Balance，且日期在本次写入的指令日期集合中
+            # （前端允许 transaction_items 的 date <= as_of_date，因此不能只限定为 as_of_date/as_of_date+1）
+            from datetime import datetime
+
+            directive_dates = set()
+            for d in directives:
+                # 指令通常以 YYYY-MM-DD 开头
+                if not d:
+                    continue
+                prefix = d.strip()[:10]
+                try:
+                    directive_dates.add(datetime.strptime(prefix, '%Y-%m-%d').date())
+                except Exception:
+                    continue
+
+            # 兜底：至少包含 as_of_date 与 balance_date，避免解析异常导致空集合
             balance_date = as_of_date + timedelta(days=1)
-            valid_dates = (as_of_date, balance_date)
+            directive_dates.add(as_of_date)
+            directive_dates.add(balance_date)
+
             our_entries = []
             for entry in entries:
                 if not isinstance(entry, (Transaction, Pad, Balance)):
                     continue
                 entry_date = getattr(entry, 'date', None)
-                if entry_date not in valid_dates:
+                if entry_date not in directive_dates:
                     continue
-                # 对账条目：Transaction 有 "Beancount-Trans" 和 "对账调整"，Pad/Balance 按日期
+                # 账户过滤：只提取本账户相关条目，避免同用户多账户同日对账导致混入
+                if isinstance(entry, (Pad, Balance)):
+                    if getattr(entry, 'account', None) != reconciliation_account:
+                        continue
+                elif isinstance(entry, Transaction):
+                    # 对账条目：Transaction 有 "Beancount-Trans" 和 "对账调整"
+                    # 且 postings 中必须包含对账账户（from_account）
+                    has_reconciliation_account = any(
+                        getattr(p, 'account', None) == reconciliation_account for p in getattr(entry, 'postings', []) or []
+                    )
+                    if not has_reconciliation_account:
+                        continue
+
+                # 对账条目：Transaction 需标识来自平台写入
                 if isinstance(entry, Transaction):
                     if (getattr(entry, 'payee', None) != 'Beancount-Trans' or
                             getattr(entry, 'narration', None) != '对账调整'):
@@ -363,7 +423,19 @@ class ReconciliationService:
             raise ValueError("待办任务关联的对象不是 Account 类型")
         if task.task_type != 'reconciliation' or task.status != 'completed':
             raise ValueError("只能撤销已完成的对账任务")
-        
+
+        # 只允许撤销最近一次：该账户下按 as_of_date 降序的第一条 completed 必须是当前 task
+        content_type = ContentType.objects.get_for_model(Account)
+        latest_completed = ScheduledTask.objects.filter(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            status='completed',
+            as_of_date__isnull=False
+        ).order_by('-as_of_date').first()
+        if latest_completed and latest_completed.id != task.id:
+            raise ValueError("仅支持撤销最近一次对账，更早的对账请在 Fava 中处理")
+
         user = account.owner
         today = date.today()
         entries_commented = 0
@@ -378,13 +450,9 @@ class ReconciliationService:
             ]
             matched_pairs = EntryMatcher.match_entry_lists(stored_entries, platform_entries)
             all_line_numbers = []
-            for _stored, platform_entry in matched_pairs:
-                try:
-                    idx = platform_entries.index(platform_entry)
-                    line_numbers = entry_to_lines.get(idx, [])
-                    all_line_numbers.extend(line_numbers)
-                except ValueError:
-                    continue
+            for _stored, _stored_idx, _platform_entry, platform_idx in matched_pairs:
+                line_numbers = entry_to_lines.get(platform_idx, [])
+                all_line_numbers.extend(line_numbers)
             unique_lines = sorted(set(all_line_numbers))
             reconciliation_path = BeanFileManager.get_reconciliation_bean_path(user)
             entries_commented = ReconciliationCommentService._comment_lines_in_file(
@@ -398,18 +466,18 @@ class ReconciliationService:
         task.status = 'revoked'
         task.save(update_fields=['status', 'modified'])
         
-        # 3. 更新或新建待办：保证永远只有一个 pending 待办且 scheduled_date 为当天
-        content_type = ContentType.objects.get_for_model(Account)
+        # 3. 更新或新建待办：保证永远只有一个 pending 待办且 scheduled_date 为当天，并关联被撤销任务
         existing_pending = ScheduledTask.objects.filter(
             task_type='reconciliation',
             content_type=content_type,
             object_id=account.id,
             status='pending'
         ).first()
-        
+
         if existing_pending:
             existing_pending.scheduled_date = today
-            existing_pending.save(update_fields=['scheduled_date', 'modified'])
+            existing_pending.revoked_task = task
+            existing_pending.save(update_fields=['scheduled_date', 'revoked_task', 'modified'])
             new_task_id = existing_pending.id
         else:
             new_task = ScheduledTask.objects.create(
@@ -417,7 +485,8 @@ class ReconciliationService:
                 content_type=content_type,
                 object_id=account.id,
                 scheduled_date=today,
-                status='pending'
+                status='pending',
+                revoked_task=task
             )
             new_task_id = new_task.id
         

@@ -157,14 +157,24 @@ class ScheduledTaskViewSet(ModelViewSet):
         ).exclude(id=task.id).order_by('-as_of_date').first()
         
         last_reconciliation_date = last_reconciliation.as_of_date if last_reconciliation else None
-        
+        last_completed_task_id = last_reconciliation.id if last_reconciliation else None
+
+        # 若当前任务来自撤销（revoked_task 指向被撤销任务），返回该任务的 transaction_items 用于预填
+        last_reconciliation_transaction_items = None
+        if getattr(task, 'revoked_task_id', None) and task.revoked_task_id:
+            revoked = task.revoked_task
+            if revoked and getattr(revoked, 'reconciliation_transaction_items', None):
+                last_reconciliation_transaction_items = revoked.reconciliation_transaction_items
+
         data = {
             'balances': non_zero_balances,
             'account_name': account.account,
             'as_of_date': date.today(),
             'default_currency': default_currency,
             'is_first_reconciliation': account.is_first_reconciliation(),
-            'last_reconciliation_date': last_reconciliation_date
+            'last_reconciliation_date': last_reconciliation_date,
+            'last_completed_task_id': last_completed_task_id,
+            'last_reconciliation_transaction_items': last_reconciliation_transaction_items or [],
         }
         
         serializer = ReconciliationStartSerializer(data)

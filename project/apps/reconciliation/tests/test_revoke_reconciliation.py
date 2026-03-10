@@ -97,6 +97,56 @@ class TestRevokeReconciliationAPI:
         assert new_task.status == 'pending'
         assert new_task.scheduled_date == date.today()
 
+    def test_revoke_reconciliation_when_entries_already_commented_is_idempotent(
+        self,
+        user,
+        account_with_cycle,
+        mock_reconciliation_paths,
+        mock_main_bean_and_ensure,
+    ):
+        """测试撤销时目标条目已被注释（Git/手动注释）也应成功且不重复注释"""
+        from django.contrib.contenttypes.models import ContentType
+
+        content_type = ContentType.objects.get_for_model(Account)
+        task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account_with_cycle.id,
+            scheduled_date=date.today() - timedelta(days=1),
+            completed_date=date.today(),
+            as_of_date=date.today(),
+            status='completed',
+            reconciliation_entries=[
+                {
+                    'type': 'Balance',
+                    'date': (date.today() + timedelta(days=1)).isoformat(),
+                    'account': account_with_cycle.account,
+                    'amount': '1000.00',
+                    'currency': 'CNY',
+                }
+            ],
+        )
+
+        # 文件中已是注释状态
+        with open(mock_reconciliation_paths, 'w', encoding='utf-8') as f:
+            f.write("; Auto-generated\n\n")
+            balance_date = (date.today() + timedelta(days=1)).isoformat()
+            f.write(
+                f'; {balance_date} balance {account_with_cycle.account} 1000.00 CNY\n\n'
+            )
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            f'/api/reconciliation/tasks/{task.id}/revoke_reconciliation/'
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data.get('entries_commented') == 0
+        task.refresh_from_db()
+        assert task.status == 'revoked'
+
     def test_revoke_reconciliation_updates_existing_pending(
         self,
         user,
@@ -236,6 +286,98 @@ class TestRevokeReconciliationAPI:
 
         assert execute_resp.status_code == status.HTTP_200_OK, execute_resp.data
         assert execute_resp.data['status'] == 'success'
+
+    def test_revoke_reconciliation_only_latest_returns_400(
+        self,
+        user,
+        account_with_cycle,
+        mock_reconciliation_paths,
+    ):
+        """测试仅允许撤销最近一次对账，撤销更早的返回 400"""
+        from django.contrib.contenttypes.models import ContentType
+
+        content_type = ContentType.objects.get_for_model(Account)
+        # 较早完成的对账
+        older = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account_with_cycle.id,
+            scheduled_date=date.today() - timedelta(days=10),
+            completed_date=date.today() - timedelta(days=9),
+            as_of_date=date.today() - timedelta(days=9),
+            status='completed',
+            reconciliation_entries=[],
+        )
+        # 最近完成的对账
+        latest = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account_with_cycle.id,
+            scheduled_date=date.today() - timedelta(days=2),
+            completed_date=date.today(),
+            as_of_date=date.today(),
+            status='completed',
+            reconciliation_entries=[],
+        )
+
+        with open(mock_reconciliation_paths, 'w', encoding='utf-8') as f:
+            f.write("; test\n\n")
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(
+            f'/api/reconciliation/tasks/{older.id}/revoke_reconciliation/'
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '最近一次' in str(response.data.get('error', response.data))
+        older.refresh_from_db()
+        assert older.status == 'completed'
+        latest.refresh_from_db()
+        assert latest.status == 'completed'
+
+    def test_start_returns_prefill_after_revoke(
+        self,
+        user,
+        account_with_cycle,
+        mock_reconciliation_paths,
+    ):
+        """测试撤销后对新待办调用 start 返回被撤销任务的 transaction_items 用于预填"""
+        from django.contrib.contenttypes.models import ContentType
+
+        content_type = ContentType.objects.get_for_model(Account)
+        completed = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account_with_cycle.id,
+            scheduled_date=date.today(),
+            completed_date=date.today(),
+            as_of_date=date.today(),
+            status='completed',
+            reconciliation_entries=[],
+            reconciliation_transaction_items=[
+                {'account': 'Equity:Adjustments', 'amount': '100.00', 'is_auto': False, 'date': date.today().isoformat()},
+            ],
+        )
+        with open(mock_reconciliation_paths, 'w', encoding='utf-8') as f:
+            f.write("; test\n\n")
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        revoke_resp = client.post(
+            f'/api/reconciliation/tasks/{completed.id}/revoke_reconciliation/'
+        )
+        assert revoke_resp.status_code == status.HTTP_200_OK
+        new_task_id = revoke_resp.data['new_task_id']
+
+        start_resp = client.post(f'/api/reconciliation/tasks/{new_task_id}/start/')
+        assert start_resp.status_code == status.HTTP_200_OK
+        assert start_resp.data.get('last_reconciliation_transaction_items') == [
+            {'account': 'Equity:Adjustments', 'amount': '100.00', 'is_auto': False, 'date': date.today().isoformat()},
+        ]
+        assert start_resp.data.get('last_completed_task_id') is None
 
 
 @pytest.mark.django_db

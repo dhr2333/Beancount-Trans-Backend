@@ -113,11 +113,11 @@ class ReconciliationCommentService:
             filename = entry.meta.get('filename')
             lineno = entry.meta.get('lineno')
             
-            # 检查文件名是否匹配（处理相对路径）
+            # 检查文件名是否匹配（处理相对路径、符号链接）
             if filename and lineno:
                 # 标准化路径进行比较
-                abs_filename = os.path.abspath(filename)
-                abs_file_path = os.path.abspath(file_path)
+                abs_filename = os.path.abspath(os.path.realpath(filename))
+                abs_file_path = os.path.abspath(os.path.realpath(file_path))
                 
                 if abs_filename == abs_file_path:
                     # 读取文件内容，确定条目的实际行数
@@ -184,10 +184,16 @@ class ReconciliationCommentService:
             normalized_entries = []
             entry_to_lines = {}
             
+            abs_reconciliation_path = os.path.abspath(os.path.realpath(reconciliation_path))
             for entry in entries:
                 # 只处理 Transaction、Pad、Balance
                 if not isinstance(entry, (Transaction, Pad, Balance)):
                     continue
+                # 只处理来自 reconciliation.bean 的条目（避免 include 导致路径不一致时遗漏行号）
+                if hasattr(entry, 'meta') and entry.meta:
+                    entry_filename = entry.meta.get('filename')
+                    if entry_filename and os.path.abspath(os.path.realpath(entry_filename)) != abs_reconciliation_path:
+                        continue
                 
                 # 跳过已注释的条目（使用原始文件内容）
                 if ReconciliationCommentService._is_entry_commented(entry, reconciliation_path, original_file_lines):
@@ -303,15 +309,8 @@ class ReconciliationCommentService:
         matched_pairs = EntryMatcher.match_entry_lists(platform_entries, git_entries)
         
         duplicates = []
-        for platform_entry, git_entry in matched_pairs:
-            # 找到 platform_entry 在 platform_entries 中的索引
-            try:
-                entry_index = platform_entries.index(platform_entry)
-                line_numbers = entry_to_lines.get(entry_index, [])
-            except ValueError:
-                # 如果找不到索引（理论上不应该发生），跳过
-                logger.warning("无法找到条目索引，跳过")
-                continue
+        for platform_entry, platform_idx, _git_entry, _git_idx in matched_pairs:
+            line_numbers = entry_to_lines.get(platform_idx, [])
                 
             # 格式化日期
             entry_date = platform_entry['date']
@@ -530,15 +529,8 @@ class ReconciliationCommentService:
         all_line_numbers = []
         matched_entry_info = []
         
-        for platform_entry, git_entry in matched_pairs:
-            # 找到 platform_entry 在 platform_entries 中的索引
-            try:
-                entry_index = platform_entries.index(platform_entry)
-                line_numbers = entry_to_lines.get(entry_index, [])
-            except ValueError:
-                # 如果找不到索引（理论上不应该发生），跳过
-                logger.warning("无法找到条目索引，跳过")
-                continue
+        for platform_entry, platform_idx, _git_entry, _git_idx in matched_pairs:
+            line_numbers = entry_to_lines.get(platform_idx, [])
                 
             if line_numbers:
                 all_line_numbers.extend(line_numbers)
