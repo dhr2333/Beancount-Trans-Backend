@@ -331,27 +331,31 @@ class ExpenseHandler:
         """获取所有候选映射的标签列表"""
         return self.all_candidates_tags
 
-    def _process_income(self, data: Dict, ownerid: int) -> str:
-        """处理收入逻辑"""
+    def _process_income(self, data: Dict, ownerid: int) -> Tuple[str, Optional[str], List[Dict]]:
+        """处理收入逻辑
+
+        Returns:
+            (income_account, selected_key, candidates_with_score)
+        """
         matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        conflict_candidates: List[Tuple[int, object]] = []
         max_order = None
-        income_candidates = []
 
         for matching_key in matching_keys:
             # 从缓存的映射数据中查找
             income_instance = next((m for m in self._income_mappings if m.key == matching_key), None)
             if income_instance and income_instance.income:
                 income_priority = income_instance.income.account.count(":") * 100
-                income_candidates.append(income_instance)
+                conflict_candidates.append((income_priority, income_instance))
                 if max_order is None or income_priority > max_order:
                     max_order = income_priority
                     self.selected_income_instance = income_instance
 
         # 收集所有收入候选的标签
-        if income_candidates:
+        if conflict_candidates:
             try:
                 all_tags = []
-                for instance in income_candidates:
+                for _, instance in conflict_candidates:
                     tags = list(instance.tags.filter(enable=True))
                     all_tags.extend(tags)
                 # 去重
@@ -366,9 +370,38 @@ class ExpenseHandler:
                 logger.error(f"加载收入标签失败: {str(e)}")
                 self.all_candidates_tags = []
 
+        # 构造候选列表与默认选中关键字
+        selected_key: Optional[str] = None
+        candidates_with_score: List[Dict] = []
+
+        if len(conflict_candidates) > 1 and self.model != "None":
+            # 多候选时使用相似度模型解决冲突
+            selected_instance = self._resolve_expense_conflict(
+                conflict_candidates,
+                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
+            )
+            self.selected_income_instance = selected_instance
+            selected_key = selected_instance.key
+            candidates_with_score = self.expense_candidates_with_score
+        else:
+            # 只有一个候选或无候选，直接给分数
+            candidates_with_score = [
+                {"key": inst.key, "score": 1.0}
+                for _, inst in conflict_candidates
+            ]
+            if self.selected_income_instance:
+                selected_key = self.selected_income_instance.key
+
+        # 用户手动选择关键字时覆盖（重解析）
+        if self.selected_key:
+            selected_income_instance = next((m for m in self._income_mappings if m.key == self.selected_key), None)
+            if selected_income_instance and selected_income_instance.income:
+                self.selected_income_instance = selected_income_instance
+                selected_key = self.selected_key
+
         if self.selected_income_instance and self.selected_income_instance.income:
-            return self.selected_income_instance.income.account
-        return self.income
+            return self.selected_income_instance.income.account, selected_key, candidates_with_score
+        return self.income, selected_key, candidates_with_score
 
     def get_expense(self, data: Dict, ownerid: int) -> str:
         """主处理方法"""
@@ -379,8 +412,8 @@ class ExpenseHandler:
             expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
             return expend, selected_expense_key, expense_candidates_with_score
         elif self.balance == "收入":
-            income = self._process_income(data, ownerid)
-            return income, None, []
+            income, selected_income_key, income_candidates_with_score = self._process_income(data, ownerid)
+            return income, selected_income_key, income_candidates_with_score
         elif self.balance in ("/", "不计收支"):
             actual_assets = get_default_assets(ownerid=ownerid)
             if self.bill == BILL_ALI:
