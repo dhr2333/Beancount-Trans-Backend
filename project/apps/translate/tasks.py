@@ -82,14 +82,49 @@ def parse_single_file_task(self, file_id, user_id, args):
         service = AnalyzeService(user=user, config=config)
         result_context = service.analyze_single_file(uploaded_file, args)
 
-        # 根据 write 标志决定处理方式
+        status = result_context.get('status', '')
+        errors = result_context.get('errors', [])
+        formatted_data = result_context.get('formatted_data', [])
+        parsed_data = result_context.get('parsed_data', [])
+
+        # 解析失败（管线内 _error）：不创建空待办，区分解密与不支持/失败
+        if status == 'error':
+            from project.utils.exceptions import DecryptionError
+            errors_text = ' '.join(str(e) for e in errors) if errors else ''
+            # 解密相关：显式关键词 或 加密 PDF 提取失败时的典型错误（NoneType+bytes 等）
+            is_decryption = (
+                any(kw in errors_text for kw in ('解密', 'Decryption', 'PDF解密', 'ZIP 解密', '解密失败'))
+                or ('NoneType' in errors_text and 'bytes' in errors_text and 'unsupported operand' in errors_text)
+            )
+            if is_decryption:
+                raise DecryptionError(errors[-1] if errors else '解密失败，请提供密码后重试')
+            parse_file.status = 'failed'
+            parse_file.error_message = errors[-1] if errors else '解析失败'
+            parse_file.save()
+            cache.set(f'task_status:{task_id}', {
+                'status': 'failed',
+                'file_id': file_id,
+                'error': parse_file.error_message
+            }, timeout=24*3600)
+            return {'status': 'failed', 'file_id': file_id, 'error': parse_file.error_message}
+
+        # 格式与内容均支持但过滤后无有效交易：不创建解析待办
+        if len(formatted_data) == 0:
+            parse_file.status = 'failed'
+            parse_file.error_message = '未解析到有效交易记录'
+            parse_file.save()
+            cache.set(f'task_status:{task_id}', {
+                'status': 'failed',
+                'file_id': file_id,
+                'error': parse_file.error_message
+            }, timeout=24*3600)
+            return {'status': 'failed', 'file_id': file_id, 'error': parse_file.error_message}
+
+        # 根据 write 标志决定处理方式（仅在有有效解析结果时执行）
         should_write = args.get('write', True)
         
         if not should_write:
             # 审核模式：不写入文件，存入缓存，激活待办
-            formatted_data = result_context.get('formatted_data', [])
-            parsed_data = result_context.get('parsed_data', [])
-            
             # 为每条记录补充 uuid 和 original_row
             # 从 parsed_data 中查找对应的记录
             parsed_data_dict = {entry.get('cache_key'): entry for entry in parsed_data}

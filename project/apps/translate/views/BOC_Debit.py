@@ -3,6 +3,7 @@ import re
 # import logging
 import pdfplumber
 
+from project.utils.exceptions import DecryptionError
 from project.apps.maps.models import Assets
 from project.apps.translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
 from project.apps.translate.utils import ASSETS_OTHER
@@ -64,7 +65,10 @@ def boc_debit_pdf_convert_to_string(file, password):
     with pdfplumber.open(file, password=password) as pdf:
         content = []
         for page in pdf.pages:
-            content += page.extract_tables()
+            tables = page.extract_tables()
+            if tables is None:
+                raise DecryptionError("PDF解密失败：无法提取内容，请提供密码后重试")
+            content += tables
     return content
 
 

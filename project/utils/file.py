@@ -99,8 +99,10 @@ def handle_excel(file):
 def handle_pdf(file, password):
     pdf = PyPDF2.PdfReader(file)
     if pdf.is_encrypted:
+        if password is None or (isinstance(password, str) and not password.strip()):
+            raise DecryptionError("PDF 文件已加密，请提供解密密码", 401)
         if not pdf.decrypt(password):
-            raise DecryptionError("PDF解密失败", 401)
+            raise DecryptionError("PDF 解密失败：口令错误或文件已损坏", 401)
 
     content = extract_text_from_pdf(pdf)
 
@@ -114,6 +116,8 @@ def handle_pdf(file, password):
     elif ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER in content:
         card_number = get_card_number(content, ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER)
         return icbc_debit_pdf_convert_to_csv(file, card_number, password).encode()
+    else:
+        raise UnsupportedFileTypeError("该 PDF 不是支持的账单类型（仅支持招商信用卡、中行/工行储蓄卡账单）")
 
 def handle_zip(file, password=None):
     """
