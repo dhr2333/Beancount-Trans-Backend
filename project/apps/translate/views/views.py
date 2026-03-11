@@ -162,12 +162,12 @@ class SingleBillAnalyzeView(APIView):
             "status": "success"
             }
             return Response(response_data, status=status.HTTP_200_OK)
-        # except DecryptionError as e:
-        #     return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        # except UnsupportedFileTypeError as e:
-        #     return Response({'error': str(e)}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
-        # except ValueError as e:
-        #     return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except DecryptionError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except UnsupportedFileTypeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.exception(e)
             return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -275,14 +275,19 @@ class MultiBillAnalyzeView(APIView):
             'write': (parsing_mode == 'direct_write'),
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
-            'password': None,
+            'password': request.data.get('password') or None,
             'balance': False,
             'isCSVOnly': False
-            # 'ignore_level': request.data.get('ignore_level', 'basic')  # 忽略级别
         }
 
         for file_id in file_ids:
-            task = parse_single_file_task.s(file_id, request.user.id, args)
+            # 如果提供了 passwords 字典，为每个文件分配对应的密码
+            passwords = request.data.get('passwords', {})
+            file_args = args.copy()
+            if str(file_id) in passwords:
+                file_args['password'] = passwords[str(file_id)]
+                
+            task = parse_single_file_task.s(file_id, request.user.id, file_args)
             tasks.append(task)
 
         task_group = group(tasks)

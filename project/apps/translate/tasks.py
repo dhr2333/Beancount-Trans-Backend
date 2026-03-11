@@ -176,12 +176,28 @@ def parse_single_file_task(self, file_id, user_id, args):
     except Exception as e:
         logger.error(f"文件解析失败: {file_id}, 错误: {str(e)}")
         parse_file = ParseFile.objects.get(file_id=file_id)
-        parse_file.status = 'failed'
+
+        # 检查是否为密码错误导致的解析失败
+        from project.utils.exceptions import DecryptionError
+        if isinstance(e, DecryptionError) or '解密失败' in str(e):
+            parse_file.status = 'needs_password'
+            cache_status = 'needs_password'
+        else:
+            parse_file.status = 'failed'
+            cache_status = 'failed'
+
         parse_file.error_message = str(e)
         parse_file.save()
+        
+        # 更新 Redis 状态
+        cache.set(f'task_status:{task_id}', {
+            'status': cache_status,
+            'file_id': file_id,
+            'error': str(e)
+        }, timeout=24*3600)
 
         return {
-            'status': 'failed',
+            'status': cache_status,
             'file_id': file_id,
             'error': str(e)
         }

@@ -3,6 +3,7 @@ import io
 import os
 import re
 import tempfile
+import zipfile
 import PyPDF2
 import chardet
 import pandas as pd
@@ -24,7 +25,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf']
+SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf', '.zip']
 
 def create_temporary_file(file_name):
     """Create a temporary file and return its path."""
@@ -47,7 +48,7 @@ def convert_to_csv_bytes(file, password=None) -> bytes:
 
     Args:
         file: 应为 django.core.files.uploadedfile.InMemoryUploadedFile 的实例。
-        password (str): PDF文件的密码，如果文件受保护。
+        password (str): PDF/ZIP 文件的解密密码，若文件受保护。
 
     Returns:
         转换后的文件内容（bytes）。
@@ -67,6 +68,9 @@ def convert_to_csv_bytes(file, password=None) -> bytes:
 
     elif file_extension == '.pdf':
         return handle_pdf(file, password)
+
+    elif file_extension == '.zip':
+        return handle_zip(file, password)
 
 def convert_df_to_csv_bytes(df):
     """将DataFrame转换为CSV字节流"""
@@ -110,6 +114,61 @@ def handle_pdf(file, password):
     elif ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER in content:
         card_number = get_card_number(content, ICBCDebitInitStrategy.SOURCE_FILE_IDENTIFIER)
         return icbc_debit_pdf_convert_to_csv(file, card_number, password).encode()
+
+def handle_zip(file, password=None):
+    """
+    解压 ZIP 文件并提取第一个支持的账单文件（csv/xls/xlsx/pdf），再转换为 CSV 字节。
+
+    Args:
+        file: 上传的 ZIP 文件对象
+        password (str): ZIP 解压密码，若压缩包受保护
+
+    Returns:
+        转换后的文件内容（bytes）
+    """
+    file.seek(0)
+    raw = file.read()
+    pwd = password.encode('utf-8') if password else None
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw), 'r') as zf:
+            # 查找第一个支持的扩展名
+            supported = {ext.lower() for ext in SUPPORTED_EXTENSIONS if ext != '.zip'}
+            target_info = None
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                _, ext = os.path.splitext(info.filename)
+                if ext.lower() in supported:
+                    target_info = info
+                    break
+
+            if not target_info:
+                raise UnsupportedFileTypeError("ZIP 压缩包内未找到支持的账单文件（csv/xls/xlsx/pdf）")
+
+            try:
+                inner_bytes = zf.read(target_info, pwd=pwd)
+            except RuntimeError as e:
+                if 'password' in str(e).lower() or 'bad password' in str(e).lower():
+                    raise DecryptionError("ZIP 解密失败：口令错误或文件已损坏", 401)
+                raise
+            except zipfile.BadZipFile:
+                raise DecryptionError("ZIP 解密失败：口令错误或文件已损坏", 401)
+
+            # 构造类文件对象供 convert_to_csv_bytes 使用
+            inner_name = os.path.basename(target_info.filename)
+            inner_file = io.BytesIO(inner_bytes)
+            inner_file.name = inner_name
+
+            return convert_to_csv_bytes(inner_file, password)
+    except zipfile.BadZipFile as e:
+        logger.warning("ZIP 文件损坏或格式错误")
+        raise UnsupportedFileTypeError("ZIP 文件损坏或格式不正确")
+    except DecryptionError:
+        raise
+    except UnsupportedFileTypeError:
+        raise
+
 
 def extract_text_from_pdf(pdf):
     content = ""
