@@ -4,15 +4,16 @@ from project.apps.translate.models import FormatConfig
 
 
 class AnalyzeSerializer(serializers.Serializer):
-    # cmb_credit_ignore = serializers.CharField(required=False, allow_blank=False)
-    # boc_debit_ignore = serializers.CharField(required=False, allow_blank=False)
     cmb_credit_ignore = serializers.BooleanField(required=False, default=False)
     boc_debit_ignore = serializers.BooleanField(required=False, default=False)
     write = serializers.BooleanField(required=False, default=False)
     password = serializers.CharField(required=False, allow_blank=True)
+    passwords = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False)
     balance = serializers.BooleanField(required=False, default=False)
     isCSVOnly = serializers.BooleanField(required=False, default=False)
     csrfmiddlewaretoken = serializers.CharField(required=False, allow_blank=False)
+    # 加密类型：auto（按扩展名自动识别）、pdf_password、zip_password、none
+    encryption_type = serializers.CharField(required=False, allow_blank=True, default='auto')
 
 
 class FormatConfigSerializer(serializers.ModelSerializer):

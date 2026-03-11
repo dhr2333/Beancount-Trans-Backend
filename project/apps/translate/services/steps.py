@@ -28,6 +28,8 @@ class ConvertToCSVStep(Step):
         try:
             # 转换为CSV字节内容
             csv_bytes = convert_to_csv_bytes(uploaded_file, password)
+            if csv_bytes is None:
+                return self._error(context, "文件转换结果为空，当前账单类型可能不支持")
 
             # 检测编码并转换为UTF-8
             utf8_csv_bytes = convert_to_utf8(csv_bytes)

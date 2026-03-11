@@ -185,15 +185,17 @@ class TestParseSingleFileTask:
         if hasattr(result, 'result'):
             result = result.result
         
-        # 验证返回结果
-        assert result['status'] == 'parsed'
+        # 验证返回结果：空解析结果视为失败，不写入
+        assert result['status'] == 'failed'
         assert result['file_id'] == parse_file.file_id
-        
-        # 验证 ParseFile 状态更新为 parsed
+        assert result.get('error') == '未解析到有效交易记录'
+
+        # 验证 ParseFile 状态更新为 failed
         parse_file.refresh_from_db()
-        assert parse_file.status == 'parsed'
-        
-        # 验证 ScheduledTask 保持 inactive 状态
+        assert parse_file.status == 'failed'
+        assert parse_file.error_message == '未解析到有效交易记录'
+
+        # 验证 ScheduledTask 保持 inactive 状态（未创建解析待办）
         parse_review_task.refresh_from_db()
         assert parse_review_task.status == 'inactive'
     

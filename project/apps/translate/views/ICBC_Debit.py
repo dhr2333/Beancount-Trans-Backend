@@ -2,6 +2,7 @@ import re
 import pdfplumber
 # import logging
 
+from project.utils.exceptions import DecryptionError
 from project.apps.maps.models import Assets
 from project.apps.translate.services.init.strategies.icbc_debit_init_strategy import ICBCDebitInitStrategy
 from project.apps.translate.services.mapping_provider import extract_account_string
