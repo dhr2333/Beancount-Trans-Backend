@@ -40,4 +40,8 @@ class FileSerializer(serializers.ModelSerializer):
 
     def get_error_message(self, obj):
         parse_file = ParseFile.objects.filter(file=obj).first()
-        return parse_file.error_message if parse_file and parse_file.status == 'failed' else None
+        if not parse_file:
+            return None
+        if parse_file.status in ('failed', 'needs_password') and parse_file.error_message:
+            return parse_file.error_message
+        return None
