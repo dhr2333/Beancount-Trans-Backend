@@ -52,6 +52,27 @@ class DirectoryViewSet(ModelViewSet):
         })
 
     @action(detail=False, methods=['get'])
+    def tree(self, request):
+        """返回当前用户的完整目录树，供前端目录选择器使用。"""
+        try:
+            root_dir = Directory.objects.get(owner=request.user, parent__isnull=True)
+        except Directory.DoesNotExist:
+            root_dir = Directory.objects.create(name="Root", owner=request.user, parent=None)
+        except Directory.MultipleObjectsReturned:
+            root_dir = Directory.objects.filter(owner=request.user, parent__isnull=True).first()
+
+        def build_tree(directory):
+            children = Directory.objects.filter(parent=directory, owner=request.user).order_by('name')
+            return {
+                'id': directory.id,
+                'name': directory.name,
+                'children': [build_tree(child) for child in children],
+            }
+
+        tree_data = build_tree(root_dir)
+        return Response(tree_data)
+
+    @action(detail=False, methods=['get'])
     def root_contents(self, request):
         # 获取当前用户的根目录（parent为null的目录）
         try:
@@ -132,6 +153,67 @@ class DirectoryViewSet(ModelViewSet):
         # 递归处理子目录
         for child in directory.children.all():
             self._delete_bean_files_for_directory(user, child)
+
+    def _get_descendant_ids(self, directory):
+        """返回某目录及其所有后代目录的 id 集合（含自身），用于检测循环引用。"""
+        ids = {directory.id}
+        for child in directory.children.all():
+            ids |= self._get_descendant_ids(child)
+        return ids
+
+    @action(detail=False, methods=['post'])
+    def batch_move(self, request):
+        """批量将目录移动到指定目录（目标为同一用户下的另一目录，可为 null 表示根下）。"""
+        directory_ids = request.data.get('directory_ids', [])
+        target_directory_id = request.data.get('target_directory_id')
+
+        if not directory_ids:
+            return Response({'error': '请提供 directory_ids'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if target_directory_id is not None:
+            target_directory = get_object_or_404(Directory, id=target_directory_id)
+            if target_directory.owner_id != request.user.id:
+                return Response({'error': '目标目录不存在或无权访问'}, status=status.HTTP_403_FORBIDDEN)
+            forbidden_ids = set()
+            for d in Directory.objects.filter(id__in=directory_ids, owner=request.user):
+                forbidden_ids |= self._get_descendant_ids(d)
+            if target_directory_id in forbidden_ids:
+                return Response({'error': '不能将目录移动到自身或其子目录下'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            target_directory = None
+
+        dirs = Directory.objects.filter(id__in=directory_ids, owner=request.user)
+        if dirs.count() != len(directory_ids):
+            return Response({'error': '部分目录不存在或无权操作'}, status=status.HTTP_404_NOT_FOUND)
+
+        errors = []
+        moved = []
+        for dir_obj in dirs:
+            if (dir_obj.parent_id if dir_obj.parent_id is not None else None) == target_directory_id:
+                continue
+            if target_directory_id is not None and dir_obj.id == target_directory_id:
+                errors.append({'directory_id': dir_obj.id, 'name': dir_obj.name, 'reason': '不能移动到自身'})
+                continue
+            if target_directory_id is not None and target_directory_id in self._get_descendant_ids(dir_obj):
+                errors.append({'directory_id': dir_obj.id, 'name': dir_obj.name, 'reason': '不能移动到自身或子目录下'})
+                continue
+            if Directory.objects.filter(parent=target_directory, name=dir_obj.name).exclude(id=dir_obj.id).exists():
+                errors.append({'directory_id': dir_obj.id, 'name': dir_obj.name, 'reason': '目标目录下已存在同名目录'})
+                continue
+            dir_obj.parent = target_directory
+            dir_obj.save()
+            moved.append(dir_obj.id)
+
+        if errors and not moved:
+            return Response({
+                'error': '无法移动：存在冲突',
+                'details': errors,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'moved': moved,
+            'errors': errors if errors else None,
+        }, status=status.HTTP_200_OK)
 
 
 class FileViewSet(ModelViewSet):
@@ -249,6 +331,48 @@ class FileViewSet(ModelViewSet):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def batch_move(self, request):
+        """批量将文件移动到指定目录。"""
+        file_ids = request.data.get('file_ids', [])
+        target_directory_id = request.data.get('target_directory_id')
+
+        if not file_ids:
+            return Response({'error': '请提供 file_ids'}, status=status.HTTP_400_BAD_REQUEST)
+        if target_directory_id is None:
+            return Response({'error': '请提供 target_directory_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_directory = get_object_or_404(Directory, id=target_directory_id)
+        if target_directory.owner_id != request.user.id:
+            return Response({'error': '目标目录不存在或无权访问'}, status=status.HTTP_403_FORBIDDEN)
+
+        files = File.objects.filter(id__in=file_ids, owner=request.user).select_related('directory')
+        if files.count() != len(file_ids):
+            return Response({'error': '部分文件不存在或无权操作'}, status=status.HTTP_404_NOT_FOUND)
+
+        errors = []
+        moved = []
+        for file_obj in files:
+            if file_obj.directory_id == target_directory_id:
+                continue
+            if File.objects.filter(directory=target_directory, name=file_obj.name).exclude(id=file_obj.id).exists():
+                errors.append({'file_id': file_obj.id, 'name': file_obj.name, 'reason': '目标目录已存在同名文件'})
+                continue
+            file_obj.directory = target_directory
+            file_obj.save()
+            moved.append(file_obj.id)
+
+        if errors and not moved:
+            return Response({
+                'error': '无法移动：目标目录存在同名文件',
+                'details': errors,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            'moved': moved,
+            'errors': errors if errors else None,
+        }, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'])
     def search(self, request):

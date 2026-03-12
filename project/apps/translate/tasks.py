@@ -297,7 +297,19 @@ def auto_confirm_expired_parse_reviews():
                 is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
                 
                 if not is_valid:
-                    logger.error(f"Beancount 语法错误，跳过自动确认: file_id={parse_file.file_id}, error={error_message}")
+                    # 逐条校验以定位具体错误条目并记录日志
+                    entries_list = [e['formatted'].rstrip() for e in final_entries]
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+                    error_details = [
+                        f"index={idx} uuid={final_entries[idx].get('uuid', '?')}: {msg}"
+                        for idx, msg in error_entries_indices
+                    ]
+                    logger.error(
+                        "Beancount 语法错误，跳过自动确认: file_id=%s, error=%s, 错误条目: %s",
+                        parse_file.file_id,
+                        error_message,
+                        "; ".join(error_details),
+                    )
                     error_count += 1
                     continue
                 
