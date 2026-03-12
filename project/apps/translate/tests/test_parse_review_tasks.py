@@ -261,8 +261,8 @@ class TestAutoConfirmExpiredParseReviews:
     
     @patch('project.apps.translate.utils.beancount_validator.BeancountValidator.validate_entries')
     @patch('project.utils.file.BeanFileManager.get_bean_file_path')
-    def test_auto_confirm_expired_tasks_validation_error(self, mock_get_bean_path, mock_validate, user, parse_review_task, parse_file, tmp_path):
-        """测试自动确认过期任务时 Beancount 语法错误"""
+    def test_auto_confirm_expired_tasks_validation_error(self, mock_get_bean_path, mock_validate, user, parse_review_task, parse_file, tmp_path, caplog):
+        """测试自动确认过期任务时 Beancount 语法错误，日志记录具体错误条目"""
         from datetime import timedelta
         from django.utils import timezone
         
@@ -294,8 +294,9 @@ class TestAutoConfirmExpiredParseReviews:
         bean_file = tmp_path / 'test_file.bean'
         mock_get_bean_path.return_value = str(bean_file)
         
-        # 执行定时任务
-        auto_confirm_expired_parse_reviews()
+        import logging
+        with caplog.at_level(logging.ERROR, logger='project.apps.translate.tasks'):
+            auto_confirm_expired_parse_reviews()
         
         # 验证 ParseFile 状态未更新（因为校验失败）
         parse_file.refresh_from_db()
@@ -304,6 +305,11 @@ class TestAutoConfirmExpiredParseReviews:
         # 验证 ScheduledTask 状态未更新
         parse_review_task.refresh_from_db()
         assert parse_review_task.status == 'pending'  # 保持原状态
+        
+        # 验证日志中包含具体错误条目信息（index、uuid）
+        assert any('错误条目' in rec.message for rec in caplog.records)
+        assert any('index=0' in rec.message for rec in caplog.records)
+        assert any('entry-1' in rec.message for rec in caplog.records)
     
     def test_auto_confirm_expired_tasks_not_expired(self, user, parse_review_task, parse_file):
         """测试未过期的任务不会被处理（基于 created 时间）"""

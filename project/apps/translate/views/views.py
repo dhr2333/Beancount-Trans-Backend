@@ -670,6 +670,7 @@ class ParseReviewEditView(ParseReviewViewSet):
         
         # 更新缓存
         from project.apps.translate.services.parse_review_service import ParseReviewService
+        from project.apps.translate.utils.beancount_validator import BeancountValidator
         success = ParseReviewService.update_entry_edited_formatted(
             parse_file.file_id, uuid, edited_formatted
         )
@@ -688,10 +689,17 @@ class ParseReviewEditView(ParseReviewViewSet):
                 updated_entry = entry
                 break
         
-        return Response({
+        content_to_validate = updated_entry.get('edited_formatted') if updated_entry else edited_formatted
+        response_data = {
             'uuid': uuid,
-            'edited_formatted': updated_entry.get('edited_formatted') if updated_entry else edited_formatted
-        }, status=status.HTTP_200_OK)
+            'edited_formatted': content_to_validate,
+        }
+        # 保存后对单条内容做校验，作为即时反馈（不阻断保存）
+        is_valid, validation_error = BeancountValidator.validate_single_entry(content_to_validate or '')
+        if not is_valid and validation_error:
+            response_data['validation_warning'] = validation_error
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class ParseReviewConfirmView(ParseReviewViewSet):
@@ -734,8 +742,22 @@ class ParseReviewConfirmView(ParseReviewViewSet):
         is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
         
         if not is_valid:
+            # 逐条校验以定位错误条目，返回结构化错误信息
+            entries_list = [entry['formatted'].rstrip() for entry in final_entries]
+            _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+            error_entries = [
+                {
+                    'uuid': final_entries[idx]['uuid'],
+                    'index': idx,
+                    'error_message': msg or error_message,
+                }
+                for idx, msg in error_entries_indices
+            ]
             return Response(
-                {'error': f'Beancount 语法错误: {error_message}'},
+                {
+                    'error': f'Beancount 语法错误: 共 {len(error_entries)} 条格式有误',
+                    'error_entries': error_entries,
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
         

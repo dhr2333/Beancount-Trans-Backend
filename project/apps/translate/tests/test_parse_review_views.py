@@ -251,6 +251,25 @@ class TestParseReviewEditView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '缺少必要参数' in response.data['error']
+    
+    def test_update_entry_edit_validation_warning(self, user, parse_review_task, parse_file, mock_parse_result_data):
+        """测试编辑保存后单条校验失败时返回 validation_warning（不阻断保存）"""
+        self.client.force_authenticate(user=user)
+        
+        ParseReviewService.save_parse_result(parse_file.file_id, mock_parse_result_data)
+        
+        invalid_edited = 'invalid beancount syntax'
+        response = self.client.put(
+            f'/api/translate/parse-review/{parse_review_task.id}/entries/entry-1/edit',
+            {'edited_formatted': invalid_edited},
+            format='json'
+        )
+        
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['uuid'] == 'entry-1'
+        assert response.data['edited_formatted'] == invalid_edited
+        assert 'validation_warning' in response.data
+        assert response.data['validation_warning']
 
 
 @pytest.mark.django_db
@@ -291,7 +310,7 @@ class TestParseReviewConfirmView:
     
     @patch('project.utils.file.BeanFileManager.get_bean_file_path')
     def test_confirm_write_validation_error(self, mock_get_bean_path, user, parse_review_task, parse_file, tmp_path):
-        """测试处理 Beancount 语法错误"""
+        """测试处理 Beancount 语法错误，返回 error_entries 精确定位"""
         self.client.force_authenticate(user=user)
         
         # 创建包含语法错误的数据
@@ -317,6 +336,52 @@ class TestParseReviewConfirmView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert 'Beancount 语法错误' in response.data['error']
+        assert 'error_entries' in response.data
+        error_entries = response.data['error_entries']
+        assert len(error_entries) == 1
+        assert error_entries[0]['uuid'] == 'entry-1'
+        assert error_entries[0]['index'] == 0
+        assert 'error_message' in error_entries[0]
+    
+    @patch('project.utils.file.BeanFileManager.get_bean_file_path')
+    def test_confirm_write_validation_error_multiple_entries(self, mock_get_bean_path, user, parse_review_task, parse_file, tmp_path):
+        """测试多条条目时仅部分有语法错误，返回对应 error_entries"""
+        self.client.force_authenticate(user=user)
+        
+        valid_entry = '2025-01-20 * "Test" "OK"\n    Expenses:Test  100.00 CNY\n    Assets:Test  -100.00 CNY\n'
+        invalid_data = {
+            'file_id': parse_file.file_id,
+            'formatted_data': [
+                {
+                    'uuid': 'entry-ok',
+                    'formatted': valid_entry,
+                    'edited_formatted': valid_entry,
+                    'original_row': {}
+                },
+                {
+                    'uuid': 'entry-bad',
+                    'formatted': 'invalid beancount syntax',
+                    'edited_formatted': 'invalid beancount syntax',
+                    'original_row': {}
+                }
+            ],
+            'created_at': time.time(),
+            'expires_at': time.time() + 86400
+        }
+        ParseReviewService.save_parse_result(parse_file.file_id, invalid_data)
+        
+        bean_file = tmp_path / 'test_file.bean'
+        mock_get_bean_path.return_value = str(bean_file)
+        
+        response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/confirm')
+        
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'error_entries' in response.data
+        error_entries = response.data['error_entries']
+        assert len(error_entries) == 1
+        assert error_entries[0]['uuid'] == 'entry-bad'
+        assert error_entries[0]['index'] == 1
+        assert 'error_message' in error_entries[0]
     
     def test_confirm_write_cache_expired(self, user, parse_review_task, parse_file):
         """测试处理缓存不存在或已过期的情况"""
