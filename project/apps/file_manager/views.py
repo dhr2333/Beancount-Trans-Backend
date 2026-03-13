@@ -245,7 +245,7 @@ class FileViewSet(ModelViewSet):
                 for file in existing_files
             ]
             return Response({
-                "error": "存在同名文件，为避免解析结果冲突，请重命名文件",
+                "error": "存在同名文件，请勿重复上传。",
                 "existing_files": existing_files_info
             }, status=status.HTTP_400_BAD_REQUEST)
         
