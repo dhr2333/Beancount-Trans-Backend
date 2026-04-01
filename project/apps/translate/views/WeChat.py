@@ -195,7 +195,13 @@ def wechatpay_get_status(data):
 
 
 def wechatpay_get_amount(data):
-    return "{:.2f}".format(float(data['amount'][1:]))  # 微信账单格式为"￥10.00"，需要转换
+    """微信金额列：旧版 CSV 多为 ¥/￥ 前缀；新版 xlsx 导出常为纯数字字符串。"""
+    raw = str(data.get("amount", "") or "").strip().strip("\t").strip('"').replace("\ufeff", "")
+    if not raw:
+        return "0.00"
+    if raw[0] in "¥￥":
+        raw = raw[1:].strip()
+    return "{:.2f}".format(float(raw))
 
 
 def wechatpay_get_note(data):

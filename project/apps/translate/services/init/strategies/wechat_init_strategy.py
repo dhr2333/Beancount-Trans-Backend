@@ -20,6 +20,11 @@ class WeChatPayInitStrategy(InitStrategy):
 
         try:
             for row in data_rows:
+                if len(row) < 11:
+                    continue
+                row = [c.strip().strip("\t") if isinstance(c, str) else c for c in row]
+                if row[0] == "交易时间":
+                    continue
                 record = {
                     'transaction_time': row[0],  # 交易时间
                     'transaction_category': row[1],  # 交易类型
@@ -45,5 +50,8 @@ class WeChatPayInitStrategy(InitStrategy):
 
     @classmethod
     def identifier(cls, first_line: str) -> bool:
-        """判断是否为微信账单"""
-        return cls.HEADER_MARKER in first_line
+        """判断是否为微信账单（兼容旧版 CSV 首行多逗号与新版 xlsx 导出首格标题）。"""
+        if cls.HEADER_MARKER in first_line:
+            return True
+        first_cell = first_line.split(",", 1)[0].strip().strip("\ufeff")
+        return first_cell.startswith("微信支付账单明细")
