@@ -7,6 +7,7 @@ from project.apps.authentication.views import (
     AccountBindingViewSet,
     UserProfileViewSet,
     TwoFactorAuthViewSet,
+    AuthPublicConfigAPIView,
 )
 
 router = DefaultRouter()
@@ -18,6 +19,7 @@ router.register(r'profile', UserProfileViewSet, basename='user-profile')
 router.register(r'2fa', TwoFactorAuthViewSet, basename='2fa')
 
 urlpatterns = [
+    path('public-config/', AuthPublicConfigAPIView.as_view(), name='auth-public-config'),
     path('', include(router.urls)),
 ]
 

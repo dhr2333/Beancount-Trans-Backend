@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from project.apps.fava_instances.models import FavaInstance
 from project.apps.fava_instances.services.fava_manager import FavaContainerManager
+from project.utils.fava_static import resolve_static_fava_url
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 import os
@@ -28,6 +29,22 @@ class FavaRedirectView(APIView):
         user = request.user
 
         logger.info(f"User {user.username} is requesting Fava instance.")
+
+        if settings.FAVA_DEPLOY_MODE == 'static':
+            url = resolve_static_fava_url(user, settings.FAVA_STATIC_USER_MAP)
+            if not url:
+                return Response(
+                    {
+                        'error': '未配置静态 Fava 入口：请在环境变量 FAVA_STATIC_USER_MAP 中为该用户或账本目录名设置可访问的 URL',
+                        'code': 'FAVA_STATIC_NOT_CONFIGURED',
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            return Response(
+                status=status.HTTP_200_OK,
+                data={'url': url, 'deploy_mode': 'static'},
+            )
+
         manager = FavaContainerManager()
         
         # 检查现有运行实例
@@ -110,6 +127,12 @@ class FavaStopView(APIView):
         user = request.user
 
         logger.info(f"User {user.username} is requesting to stop Fava instance.")
+
+        if settings.FAVA_DEPLOY_MODE == 'static':
+            return Response(
+                status=status.HTTP_200_OK,
+                data={'message': '静态 Fava 模式无需停止实例', 'stopped_count': 0},
+            )
 
         # 查找用户的所有运行中的Fava实例
         running_instances = FavaInstance.objects.filter(

@@ -1,4 +1,5 @@
 import os
+import secrets
 import shutil
 import tempfile
 import logging
@@ -14,6 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .models import GitRepository
 from .clients import GiteaAPIClient, GiteaAPIException
+from .git_remote import guess_external_full_name_from_ssh
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -25,18 +27,127 @@ class GitServiceException(Exception):
 
 
 class PlatformGitService:
-    """平台托管 Gitea 仓库服务
-
-    职责：
-    - 仓库生命周期管理（创建、删除）
-    - Deploy Key 管理（生成、重新生成）
-    - 仓库同步（pull）
-    - trans/ 目录管理
-    """
+    """Git 同步服务：平台托管 Gitea 与关联外部远程（MVP：用户手动建库 + SSH Deploy Key）。"""
 
     def __init__(self):
-        self.gitea_client = GiteaAPIClient()
+        self._gitea_client: Optional[GiteaAPIClient] = None
         self.assets_base_path = Path(settings.BASE_DIR) / 'Assets'
+
+    def _get_gitea_client(self) -> GiteaAPIClient:
+        if self._gitea_client is None:
+            self._gitea_client = GiteaAPIClient()
+        return self._gitea_client
+
+    def _pick_unique_local_repo_name(self) -> str:
+        import uuid
+        for _ in range(10):
+            name = f"{uuid.uuid4().hex[:6]}-assets"
+            if not GitRepository.objects.filter(repo_name=name).exists():
+                return name
+        raise GitServiceException("无法生成唯一的本地目录名，请稍后重试")
+
+    def _resolve_external_full_name(self, remote_ssh_url: str, external_full_name: str) -> str:
+        name = (external_full_name or '').strip()
+        if not name:
+            name = guess_external_full_name_from_ssh(remote_ssh_url)
+        return name.strip()
+
+    def link_external_repository(
+        self,
+        user: User,
+        remote_ssh_url: str,
+        provider: str,
+        default_branch: str = 'main',
+        external_full_name: str = '',
+    ) -> GitRepository:
+        """关联用户已在托管平台上的远程仓库（仅平台侧生成密钥与 Webhook secret，不调用第三方 API）。"""
+        if hasattr(user, 'git_repo'):
+            raise GitServiceException("用户已有 Git 仓库")
+        remote_ssh_url = (remote_ssh_url or '').strip()
+        if not remote_ssh_url:
+            raise GitServiceException("请提供 remote_ssh_url")
+        full_name = self._resolve_external_full_name(remote_ssh_url, external_full_name)
+        if not full_name:
+            raise GitServiceException("无法解析仓库全名，请填写 external_full_name 或检查 SSH URL 格式")
+        if GitRepository.objects.filter(external_full_name__iexact=full_name).exists():
+            raise GitServiceException("该远程仓库已被其他账号关联")
+
+        repo_name = self._pick_unique_local_repo_name()
+        user_assets_path = self.assets_base_path / user.username
+        user_assets_path.rename(self.assets_base_path / repo_name)
+        private_key, public_key = self._generate_ssh_key_pair()
+        wh_secret = secrets.token_hex(32)
+
+        git_repo = GitRepository.objects.create(
+            owner=user,
+            repo_name=repo_name,
+            setup_mode='link',
+            provider=provider,
+            remote_ssh_url=remote_ssh_url,
+            external_full_name=full_name,
+            default_branch=default_branch or 'main',
+            created_with_template=False,
+            gitea_repo_id=None,
+            deploy_key_id=None,
+            deploy_key_private=private_key,
+            deploy_key_public=public_key,
+            webhook_secret=wh_secret,
+            sync_status='pending',
+        )
+        logger.info(f"Linked external Git repo for user {user.username}: {full_name}")
+        return git_repo
+
+    def bootstrap_external_repository(
+        self,
+        user: User,
+        remote_ssh_url: str,
+        provider: str,
+        use_template: bool,
+        default_branch: str = 'main',
+        external_full_name: str = '',
+    ) -> GitRepository:
+        """用户在托管方已手动创建空仓库后，绑定远程并可选择推送模板（需 Deploy Key 写权限）。
+
+        注意：POST /api/git/repository/ 已不再调用本方法；已有外部远程请走 link_external_repository。
+        本方法保留供扩展、脚本或运维场景使用。
+        """
+        if hasattr(user, 'git_repo'):
+            raise GitServiceException("用户已有 Git 仓库")
+        remote_ssh_url = (remote_ssh_url or '').strip()
+        if not remote_ssh_url:
+            raise GitServiceException("请提供 remote_ssh_url")
+        full_name = self._resolve_external_full_name(remote_ssh_url, external_full_name)
+        if not full_name:
+            raise GitServiceException("无法解析仓库全名，请填写 external_full_name 或检查 SSH URL 格式")
+        if GitRepository.objects.filter(external_full_name__iexact=full_name).exists():
+            raise GitServiceException("该远程仓库已被其他账号关联")
+
+        repo_name = self._pick_unique_local_repo_name()
+        user_assets_path = self.assets_base_path / user.username
+        user_assets_path.rename(self.assets_base_path / repo_name)
+        private_key, public_key = self._generate_ssh_key_pair()
+        wh_secret = secrets.token_hex(32)
+
+        git_repo = GitRepository.objects.create(
+            owner=user,
+            repo_name=repo_name,
+            setup_mode='create',
+            provider=provider,
+            remote_ssh_url=remote_ssh_url,
+            external_full_name=full_name,
+            default_branch=default_branch or 'main',
+            created_with_template=use_template,
+            gitea_repo_id=None,
+            deploy_key_id=None,
+            deploy_key_private=private_key,
+            deploy_key_public=public_key,
+            webhook_secret=wh_secret,
+            sync_status='pending',
+        )
+        if use_template:
+            self._initialize_repository_with_template(git_repo)
+        logger.info(f"Bootstrapped external Git repo for user {user.username}: {full_name}")
+        return git_repo
 
     def create_user_repository(self, user: User, use_template: bool = True) -> GitRepository:
         """为用户创建 Git 仓库
@@ -78,7 +189,7 @@ class PlatformGitService:
                 # 检查 Gitea 上是否已存在
                 try:
                     # 尝试获取仓库信息，如果不存在会抛出异常
-                    self.gitea_client.get_repository(candidate_name)
+                    self._get_gitea_client().get_repository(candidate_name)
                     # 如果成功获取，说明已存在，继续尝试
                     logger.warning(f"Repository {candidate_name} already exists in Gitea, retrying...")
                     continue
@@ -93,7 +204,7 @@ class PlatformGitService:
         try:
             # 1. 创建 Gitea 仓库
             logger.info(f"Creating Gitea repository for user {user.username}: {repo_name}")
-            repo_data = self.gitea_client.create_repository(
+            repo_data = self._get_gitea_client().create_repository(
                 repo_name=repo_name,
                 description=f"Beancount account book for {user.username}",
                 private=True
@@ -107,7 +218,7 @@ class PlatformGitService:
             private_key, public_key = self._generate_ssh_key_pair()
 
             # 3. 添加 Deploy Key
-            deploy_key_data = self.gitea_client.add_deploy_key(
+            deploy_key_data = self._get_gitea_client().add_deploy_key(
                 repo_name=repo_name,
                 title=f"Platform Deploy Key - {user.username}",
                 public_key=public_key,
@@ -118,7 +229,7 @@ class PlatformGitService:
             if settings.GITEA_WEBHOOK_SECRET:
                 try:
                     webhook_url = f"https://{settings.BASE_URL}/api/git/webhook/"
-                    self.gitea_client.create_webhook(
+                    self._get_gitea_client().create_webhook(
                         repo_name=repo_name,
                         webhook_url=webhook_url
                     )
@@ -131,6 +242,9 @@ class PlatformGitService:
             git_repo = GitRepository.objects.create(
                 owner=user,
                 repo_name=repo_name,
+                setup_mode='create',
+                provider='gitea_hosted',
+                default_branch='main',
                 gitea_repo_id=repo_data['id'],
                 created_with_template=use_template,
                 deploy_key_id=deploy_key_data['id'],
@@ -150,7 +264,7 @@ class PlatformGitService:
             logger.error(f"Failed to create repository for user {user.username}: {e}")
             # 清理已创建的资源
             try:
-                self.gitea_client.delete_repository(repo_name)
+                self._get_gitea_client().delete_repository(repo_name)
             except:
                 pass
 
@@ -193,23 +307,48 @@ class PlatformGitService:
             # 1. 备份 trans/ 目录
             trans_backup = None
             trans_path = user_assets_path / 'trans'
-            if trans_path.exists():
+            had_local_trans = trans_path.exists()
+            if had_local_trans:
                 trans_backup = self._backup_trans_directory(trans_path)
                 logger.info(f"Backed up trans/ directory for user {user.username}")
 
             # 2. 检查是否为初次克隆
             git_path = user_assets_path / '.git'
             if not git_path.exists():
-                # 初次克隆 - 确保父目录存在，但不创建目标目录
-                # user_assets_path.parent.mkdir(parents=True, exist_ok=True)
+                # 先克隆到临时目录，成功后再替换用户目录。切勿在 clone 成功前 rmtree 用户路径，
+                # 否则 ls-remote/clone 失败（如未配置 Deploy Key）会导致本地账本被删。
+                self.assets_base_path.mkdir(parents=True, exist_ok=True)
+                tmp_clone = Path(
+                    tempfile.mkdtemp(
+                        prefix=f"clone-{git_repo.repo_name}-",
+                        dir=str(self.assets_base_path),
+                    )
+                )
+                try:
+                    self._clone_repository(git_repo, tmp_clone)
+                except Exception:
+                    shutil.rmtree(tmp_clone, ignore_errors=True)
+                    raise
 
-                # 如果目标目录存在但没有 .git，需要先删除
-                # if user_assets_path.exists():
-                #     import shutil
-                #     shutil.rmtree(user_assets_path)
-
-                # 初次克隆
-                self._clone_repository(git_repo, user_assets_path)
+                if (tmp_clone / '.git').exists():
+                    backup_path: Optional[Path] = None
+                    if user_assets_path.exists():
+                        backup_path = user_assets_path.parent / (
+                            f"{user_assets_path.name}.presync-{secrets.token_hex(6)}"
+                        )
+                        user_assets_path.rename(backup_path)
+                    try:
+                        tmp_clone.rename(user_assets_path)
+                    except Exception:
+                        if backup_path is not None and backup_path.exists():
+                            backup_path.rename(user_assets_path)
+                        shutil.rmtree(tmp_clone, ignore_errors=True)
+                        raise
+                    if backup_path is not None and backup_path.exists():
+                        shutil.rmtree(backup_path, ignore_errors=True)
+                else:
+                    # 远程空仓库：不替换本地，仅清理临时目录
+                    shutil.rmtree(tmp_clone, ignore_errors=True)
             else:
                 # 更新现有仓库 - 确保目录存在
                 # user_assets_path.mkdir(parents=True, exist_ok=True)
@@ -285,25 +424,31 @@ class PlatformGitService:
             # 1. 生成新的密钥对
             private_key, public_key = self._generate_ssh_key_pair()
 
-            # 2. 删除旧的 Deploy Key（如果存在）
-            if git_repo.deploy_key_id:
-                try:
-                    self.gitea_client.delete_deploy_key(git_repo.repo_name, git_repo.deploy_key_id)
-                except GiteaAPIException as e:
-                    logger.warning(f"Failed to delete old deploy key: {e}")
+            new_key_id = None
+            if git_repo.provider == 'gitea_hosted' and git_repo.gitea_repo_id is not None:
+                # 2. 删除旧的 Deploy Key（如果存在）
+                if git_repo.deploy_key_id:
+                    try:
+                        self._get_gitea_client().delete_deploy_key(git_repo.repo_name, git_repo.deploy_key_id)
+                    except GiteaAPIException as e:
+                        logger.warning(f"Failed to delete old deploy key: {e}")
 
-            # 3. 添加新的 Deploy Key
-            deploy_key_data = self.gitea_client.add_deploy_key(
-                repo_name=git_repo.repo_name,
-                title=f"Platform Deploy Key - {user.username} (Regenerated)",
-                public_key=public_key,
-                read_only=False
-            )
+                # 3. 添加新的 Deploy Key
+                deploy_key_data = self._get_gitea_client().add_deploy_key(
+                    repo_name=git_repo.repo_name,
+                    title=f"Platform Deploy Key - {user.username} (Regenerated)",
+                    public_key=public_key,
+                    read_only=False
+                )
+                new_key_id = deploy_key_data['id']
+            else:
+                # 外部远程：请在托管平台手动移除旧 Deploy Key 并添加新公钥
+                git_repo.deploy_key_id = None
 
-            # 4. 更新数据库记录
-            git_repo.deploy_key_id = deploy_key_data['id']
             git_repo.deploy_key_private = private_key
             git_repo.deploy_key_public = public_key
+            if new_key_id is not None:
+                git_repo.deploy_key_id = new_key_id
             git_repo.save()
 
             logger.info(f"Successfully regenerated deploy key for user {user.username}")
@@ -311,7 +456,7 @@ class PlatformGitService:
             return {
                 'private_key': private_key,
                 'public_key': public_key,
-                'key_id': deploy_key_data['id']
+                'key_id': new_key_id
             }
 
         except Exception as e:
@@ -438,15 +583,33 @@ class PlatformGitService:
                 'git', 'ls-remote', '--heads', '--tags', clone_url
             ], env=env, capture_output=True, text=True)
 
-            # 如果 ls-remote 返回空或失败，说明仓库是空的
-            if ls_remote_result.returncode != 0 or not ls_remote_result.stdout.strip():
+            # ls-remote 失败（认证/网络等）与「远程无提交」必须区分：前者应报错，不能当作空仓库静默跳过
+            if ls_remote_result.returncode != 0:
+                err = (ls_remote_result.stderr or "").strip() or (
+                    f"git ls-remote 退出码 {ls_remote_result.returncode}"
+                )
+                logger.error(
+                    "git ls-remote failed for %s: %s",
+                    git_repo.repo_name,
+                    err[:500],
+                )
+                raise GitServiceException(
+                    "无法访问远程仓库，请检查 Deploy Key 是否已添加到托管平台且具备读权限。"
+                    f" 详情: {err[:800]}"
+                )
+
+            if not ls_remote_result.stdout.strip():
                 logger.info(f"Repository {git_repo.repo_name} is empty, skipping clone")
                 return
 
             # 仓库不为空，进行克隆
-            result = subprocess.run([
-                'git', 'clone', clone_url, str(target_path)
-            ], env=env, capture_output=True, text=True, check=True)
+            clone_result = subprocess.run(
+                ['git', 'clone', clone_url, str(target_path)],
+                env=env,
+                capture_output=True,
+                text=True,
+            )
+            clone_result.check_returncode()
 
             logger.info(f"Cloned repository {git_repo.repo_name} to {target_path}")
 
@@ -472,8 +635,8 @@ class PlatformGitService:
                 # fetch 最新内容
                 subprocess.run(['git', 'fetch', 'origin'], env=env, check=True)
 
-                # 强制重置到远程分支
-                subprocess.run(['git', 'reset', '--hard', 'origin/main'], check=True)
+                branch = (git_repo.default_branch or 'main').strip() or 'main'
+                subprocess.run(['git', 'reset', '--hard', f'origin/{branch}'], check=True)
 
                 logger.info(f"Updated repository {git_repo.repo_name}")
 
@@ -592,14 +755,16 @@ class PlatformGitService:
                 logger.warning(f"取消对账条目注释失败: {e}", exc_info=True)
                 # 不阻断删除流程，只记录警告
 
-            # 1. 删除 Gitea 远程仓库
-            logger.info(f"Deleting Gitea repository for user {user.username}: {git_repo.repo_name}")
-            try:
-                self.gitea_client.delete_repository(git_repo.repo_name)
-                cleaned_files.append(f"远程仓库: {git_repo.repo_name}")
-            except GiteaAPIException as e:
-                logger.warning(f"Failed to delete remote repository {git_repo.repo_name}: {e}")
-                # 继续执行，不阻断流程
+            # 1. 删除平台托管的 Gitea 远程仓库（外部远程不调用第三方删库）
+            if git_repo.provider == 'gitea_hosted' and git_repo.gitea_repo_id is not None:
+                logger.info(f"Deleting Gitea repository for user {user.username}: {git_repo.repo_name}")
+                try:
+                    self._get_gitea_client().delete_repository(git_repo.repo_name)
+                    cleaned_files.append(f"远程仓库: {git_repo.repo_name}")
+                except GiteaAPIException as e:
+                    logger.warning(f"Failed to delete remote repository {git_repo.repo_name}: {e}")
+            else:
+                cleaned_files.append('外部远程：未删除托管方仓库（仅解绑平台）')
 
             # 2. 删除用户目录除了 trans/ 外的全部内容，然后重建标准的 main.bean 文件
             user_assets_path = self.assets_base_path / git_repo.repo_name
@@ -718,21 +883,30 @@ class PlatformGitService:
             os.chdir(user_assets_path)
 
             try:
+                branch = (git_repo.default_branch or 'main').strip() or 'main'
                 # 3. 在用户目录中初始化 git 仓库（如果还没有）
                 git_path = user_assets_path / '.git'
                 if not git_path.exists():
-                    # 直接创建 main 分支
-                    subprocess.run(['git', 'init', '-b', 'main'], check=True, capture_output=True, text=True)
+                    subprocess.run(['git', 'init', '-b', branch], check=True, capture_output=True, text=True)
                     logger.info(f"初始化 git 仓库: {user_assets_path}")
 
                 # 4. 配置 git 用户信息
                 subprocess.run(['git', 'config', 'user.name', 'Beancount-Trans Platform'], check=True)
                 subprocess.run(['git', 'config', 'user.email', 'platform@beancount-trans.local'], check=True)
 
-                # 5. 添加 origin 远程仓库
+                # 5. 配置 origin 远程仓库
                 clone_url = git_repo.ssh_clone_url
-                subprocess.run(['git', 'remote', 'add', 'origin', clone_url], 
-                             check=True, capture_output=True, text=True)
+                chk = subprocess.run(['git', 'remote', 'get-url', 'origin'], capture_output=True, text=True)
+                if chk.returncode == 0:
+                    subprocess.run(
+                        ['git', 'remote', 'set-url', 'origin', clone_url],
+                        check=True, capture_output=True, text=True
+                    )
+                else:
+                    subprocess.run(
+                        ['git', 'remote', 'add', 'origin', clone_url],
+                        check=True, capture_output=True, text=True
+                    )
 
                 # 6. 复制模板文件到用户目录（跳过 trans/ 目录）
                 for item in template_dir.iterdir():
@@ -775,7 +949,7 @@ class PlatformGitService:
 
                 # 10. 推送到远程（使用 origin）
                 subprocess.run([
-                    'git', 'push', '-u', 'origin', 'main'
+                    'git', 'push', '-u', 'origin', branch
                 ], env=env, check=True, capture_output=True, text=True)
 
                 logger.info(f"成功推送模板内容到仓库 {git_repo.repo_name}")
