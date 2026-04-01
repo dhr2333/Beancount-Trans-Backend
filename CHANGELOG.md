@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.6](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.5...5.8.6) (2026-04-01)
+
+### Bug Fixes
+
+* 修复微信账单更新导致的解析失败，同时增加兼容性说明文档 ([#81](https://github.com/dhr2333/Beancount-Trans-Backend/issues/81)) ([35be626](https://github.com/dhr2333/Beancount-Trans-Backend/commit/35be6268794b133f90d5cc03612333297d032ba6))
+
 ## [5.8.5](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.4...5.8.5) (2026-03-11)
 
 ### Bug Fixes
