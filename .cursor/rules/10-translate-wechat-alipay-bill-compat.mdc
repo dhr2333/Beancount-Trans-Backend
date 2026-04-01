@@ -1,0 +1,22 @@
+---
+globs: project/apps/translate/**/wechat_init_strategy.py,project/apps/translate/**/alipay_init_strategy.py,project/apps/translate/views/WeChat.py,project/apps/translate/views/AliPay.py,project/apps/translate/tests/test_wechat*.py,project/apps/translate/tests/test_view_alipay.py,project/apps/translate/services/parse/ignore_rules/alipay_rule.py,project/apps/translate/services/parse/ignore_rules/wechat_rule.py,project/utils/file.py,project/fixtures/sample_files/*微信*,project/fixtures/sample_files/*支付宝*,project/fixtures/README.md
+description: 微信/支付宝账单解析 - 各维护两条格式基线（案例 CSV + 当前官方导出）
+---
+
+# 微信与支付宝账单解析：兼容性范围
+
+修改微信或支付宝相关解析（对应 `*InitStrategy`、`WeChat.py` / `AliPay.py`、忽略规则、Excel 入口、`test_wechat*` / `test_view_alipay` 等）时遵守：
+
+**微信**
+
+1. **必须保持** 能正确解析 [`project/fixtures/sample_files/完整测试_微信.csv`](mdc:project/fixtures/sample_files/完整测试_微信.csv)（新用户官方案例）。
+2. **必须保持** 能解析当前微信官方**最新一版**导出（以代码与测试为准）。
+
+**支付宝**
+
+1. **必须保持** 能正确解析 [`project/fixtures/sample_files/完整测试_支付宝.csv`](mdc:project/fixtures/sample_files/完整测试_支付宝.csv)（新用户官方案例）。
+2. **必须保持** 能解析当前支付宝官方**最新一版**导出（以代码与测试为准）。
+
+**不承诺**：兼容两大平台历史上每一个中间版本导出。扩展格式时优先**增加**识别与解析分支，避免无意中断对上述**案例 CSV** 的支持。
+
+完整说明见 [`project/fixtures/README.md`](mdc:project/fixtures/README.md) 案例文件章节中的「微信账单」「支付宝账单」解析兼容性约定。
