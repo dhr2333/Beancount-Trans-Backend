@@ -39,7 +39,7 @@ class SampleFilesTestCase(TransactionTestCase):
         self.admin_user = User.objects.create_superuser(
             username='admin',
             email='admin@example.com',
-            password='admin123456'
+            password='123456'
         )
 
     def test_create_sample_files_for_admin(self):

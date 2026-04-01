@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from project.models import BaseModel
 
@@ -14,6 +15,29 @@ class GitRepository(BaseModel):
     - 用户通过 Deploy Key 进行 Git 操作
     """
 
+    # 模式信息
+    setup_mode = models.CharField(
+        max_length=20,
+        default='create',
+        choices=[
+            ('create', '创建远程'),
+            ('link', '关联远程'),
+        ],
+        help_text="启用 Git 时的模式：create=创建远程，link=关联已有远程"
+    )
+    provider = models.CharField(
+        max_length=20,
+        default='gitea_hosted',
+        choices=[
+            ('gitea_hosted', '平台托管 Gitea'),
+            ('github', 'GitHub'),
+            ('gitlab', 'GitLab'),
+            ('gitea', 'Gitea'),
+            ('other', '其他'),
+        ],
+        help_text="远程代码托管平台"
+    )
+
     # 基本信息
     owner = models.OneToOneField(
         User, 
@@ -25,7 +49,26 @@ class GitRepository(BaseModel):
         max_length=200, 
         help_text="仓库名称，如 {uuid}-assets"
     )
+    remote_ssh_url = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text="远程仓库 SSH 地址（用于 clone/pull）"
+    )
+    external_full_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="外部仓库全名，如 owner/repo，用于 webhook 匹配"
+    )
+    default_branch = models.CharField(
+        max_length=100,
+        default='main',
+        help_text="默认同步分支"
+    )
     gitea_repo_id = models.IntegerField(
+        null=True,
+        blank=True,
         help_text="Gitea 仓库 ID，用于 API 调用"
     )
 
@@ -45,6 +88,12 @@ class GitRepository(BaseModel):
     )
     deploy_key_public = models.TextField(
         help_text="Deploy Key 公钥"
+    )
+    webhook_secret = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text="Webhook 验签密钥（每仓独立）"
     )
 
     # 同步状态
@@ -79,5 +128,11 @@ class GitRepository(BaseModel):
     @property
     def ssh_clone_url(self):
         """获取 SSH clone 地址"""
-        # return f"git@gitea.dhr2333.cn:beancount-trans/{self.repo_name}.git"
-        return f"ssh://git@gitea.dhr2333.cn:30022/beancount-trans/{self.repo_name}.git"
+        if self.remote_ssh_url:
+            return self.remote_ssh_url.strip()
+        gitea_ssh_base = getattr(
+            settings,
+            'GITEA_SSH_BASE',
+            'ssh://git@gitea.dhr2333.cn:30022',
+        ).rstrip('/')
+        return f"{gitea_ssh_base}/beancount-trans/{self.repo_name}.git"

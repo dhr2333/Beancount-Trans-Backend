@@ -1,4 +1,5 @@
 from hashlib import sha256
+from django.conf import settings
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -42,7 +43,7 @@ def authenticateByToken(request):
 
         warnings = []
         phone_binding_required = False
-        if not phone_verified:
+        if settings.PHONE_BINDING_REQUIRED and not phone_verified:
             phone_binding_required = True
             # warnings.append('请尽快绑定手机号，以便使用短信登录等功能。')
 

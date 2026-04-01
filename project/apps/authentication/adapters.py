@@ -1,4 +1,5 @@
 import logging
+from django.conf import settings as django_settings
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.socialaccount import app_settings
 from allauth.exceptions import ImmediateHttpResponse
@@ -82,6 +83,8 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
 
     def get_connect_redirect_url(self, request, socialaccount):
         """当用户连接社交账号时的重定向URL"""
+        if not django_settings.PHONE_BINDING_REQUIRED:
+            return super().get_connect_redirect_url(request, socialaccount)
         try:
             profile = request.user.profile
             if not profile.is_phone_verified():

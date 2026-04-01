@@ -2,9 +2,11 @@ import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -34,6 +36,13 @@ from project.apps.authentication.serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _sms_disabled_response():
+    return Response(
+        {'error': '短信验证码功能未启用', 'code': 'SMS_DISABLED'},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
 class PhoneAuthViewSet(viewsets.GenericViewSet):
     """手机号认证视图集"""
     # 只使用JWT认证，不使用Session认证，避免CSRF检查
@@ -49,6 +58,8 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='send-code')
     def send_code(self, request):
         """发送验证码"""
+        if not settings.SMS_ENABLED:
+            return _sms_disabled_response()
         serializer = PhoneSendCodeSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -79,6 +90,8 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='login-by-code')
     def login_by_code(self, request):
         """验证码登录（如果用户不存在则自动注册）"""
+        if not settings.SMS_ENABLED:
+            return _sms_disabled_response()
         serializer = PhoneLoginByCodeSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -263,6 +276,8 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'])
     def register(self, request):
         """手机号注册（用户名和密码自动生成）"""
+        if not settings.SMS_ENABLED:
+            return _sms_disabled_response()
         serializer = PhoneRegisterSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -581,6 +596,8 @@ class AccountBindingViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='bind-phone')
     def bind_phone(self, request):
         """绑定手机号"""
+        if not settings.SMS_ENABLED:
+            return _sms_disabled_response()
         serializer = PhoneBindingSerializer(data=request.data, context={'request': request})
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1140,5 +1157,22 @@ class TwoFactorAuthViewSet(viewsets.GenericViewSet):
             return Response({
                 'error': f'禁用TOTP失败: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AuthPublicConfigAPIView(APIView):
+    """登录页等使用的公开认证策略（无需登录）"""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response(
+            {
+                'phone_binding_required': settings.PHONE_BINDING_REQUIRED,
+                'sms_enabled': settings.SMS_ENABLED,
+                'fava_deploy_mode': getattr(settings, 'FAVA_DEPLOY_MODE', 'dynamic'),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 

@@ -41,6 +41,12 @@ if not SECRET_KEY:
     raise ValueError("DJANGO_SECRET_KEY environment variable is required")
 
 DEBUG = env_to_bool('DJANGO_DEBUG', False)
+
+# 自托管：未设置时为 True，与现有生产行为一致（用户名/邮箱登录走「需绑定手机」后端链）
+PHONE_BINDING_REQUIRED = env_to_bool('PHONE_BINDING_REQUIRED', True)
+# 关闭后禁用短信验证码发送及相关注册/登录入口（手机验证码、手机注册等）
+SMS_ENABLED = env_to_bool('SMS_ENABLED', True)
+
 REDIS_HOST = os.environ.get("TRANS_REDIS_HOST", "127.0.0.1")
 REDIS_PORT = os.environ.get("TRANS_REDIS_PORT", "6379")
 REDIS_PASSWORD = os.environ.get("TRANS_REDIS_PASSWORD", "root")
@@ -215,21 +221,18 @@ HEADLESS_ADAPTER = "allauth.headless.adapter.DefaultHeadlessAdapter"
 # MFA_SUPPORTED_TYPES = ["totp", "recovery_codes", "webauthn"]
 # MFA_PASSKEY_LOGIN_ENABLED = True
 
-# Authentication Backends
-AUTHENTICATION_BACKENDS = [  # 通过配置不同的认证后端，可以支持多种身份验证方式
-    # Phone number authentication backends (优先级最高)
+# Authentication Backends（PHONE_BINDING_REQUIRED=False 时去掉手机号强制后端，便于自托管无短信场景）
+_auth_backends = [
     'project.apps.authentication.backends.PhonePasswordBackend',
     'project.apps.authentication.backends.PhoneCodeBackend',
-
-    # Username/Email authentication backend (要求已绑定手机号)
-    'project.apps.authentication.backends.PhoneNumberRequiredBackend',
-
-    # Needed to login by username in Django admin, regardless of `allauth`
-    'django.contrib.auth.backends.ModelBackend',
-
-    # `allauth` specific authentication methods, such as login by email
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
+if PHONE_BINDING_REQUIRED:
+    _auth_backends.append('project.apps.authentication.backends.PhoneNumberRequiredBackend')
+_auth_backends.extend([
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+])
+AUTHENTICATION_BACKENDS = _auth_backends
 
 # 配置 Django Allauth
 ACCOUNT_LOGIN_METHODS = {'username'}
@@ -519,13 +522,32 @@ GITEA_ADMIN_TOKEN = os.environ.get('GITEA_ADMIN_TOKEN', '')  # 必填
 GITEA_ORG_NAME = os.environ.get('GITEA_ORG_NAME', 'beancount-trans')
 GITEA_WEBHOOK_SECRET = os.environ.get('GITEA_WEBHOOK_SECRET', '')  # 必填
 
+# 平台托管 Gitea 的 SSH clone 基址（不含组织与仓库名），例如 ssh://git@gitea.example.com:30022
+GITEA_SSH_BASE = os.environ.get('GITEA_SSH_BASE', 'ssh://git@gitea.dhr2333.cn:30022').strip()
+
+# Webhook：生产建议 True。为 True 时，未配置验签密钥的请求将被拒绝（外部仓库须配置 per-repo webhook_secret）
+GIT_WEBHOOK_STRICT = env_to_bool('GIT_WEBHOOK_STRICT', False)
+
 # Git 仓库配置
 GIT_REPO_SIZE_LIMIT = int(os.environ.get('GIT_REPO_SIZE_LIMIT', 20 * 1024 * 1024))  # 20MB
 
+# Git SSH 子进程超时（秒），避免 ls-remote/clone/fetch 无限阻塞导致 sync_status 长期停留在 syncing
+GIT_SSH_LS_REMOTE_TIMEOUT = int(os.environ.get('GIT_SSH_LS_REMOTE_TIMEOUT', '120'))
+GIT_SSH_CLONE_TIMEOUT = int(os.environ.get('GIT_SSH_CLONE_TIMEOUT', '600'))
+GIT_SSH_FETCH_TIMEOUT = int(os.environ.get('GIT_SSH_FETCH_TIMEOUT', '600'))
+
 # Traefik 配置
 TRAEFIK_NETWORK = os.environ.get('TRAEFIK_NETWORK', 'shared-network')
-FAVA_IMAGE = os.environ.get('FAVA_IMAGE', 'harbor.dhr2333.cn/beancount-trans-assets:develop')
+FAVA_IMAGE = os.environ.get('FAVA_IMAGE', 'dhr2333/beancount-trans-assets:latest').strip()
 CERTRESOLVER = os.environ.get('CERTRESOLVER', 'alicloud-dns')
+
+# Fava 部署模式：dynamic（默认，Docker+Traefik 动态容器）| static（自托管多固定容器 + 用户 URL 映射）
+_fava_mode = os.environ.get('FAVA_DEPLOY_MODE', 'dynamic').strip().lower()
+FAVA_DEPLOY_MODE = _fava_mode if _fava_mode in ('dynamic', 'static') else 'dynamic'
+
+from project.utils.fava_static import parse_fava_static_user_map
+
+FAVA_STATIC_USER_MAP = parse_fava_static_user_map(os.environ.get('FAVA_STATIC_USER_MAP', ''))
 
 # 容器生命周期 (1小时)
 FAVA_CONTAINER_LIFETIME = datetime.timedelta(seconds=3600)

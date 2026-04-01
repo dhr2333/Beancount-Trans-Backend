@@ -33,3 +33,4 @@ beancount-trans-backend.tar
 training_data.jsonl
 reports/
 uploads/
+docker-compose-beancount-trans-backend.yaml

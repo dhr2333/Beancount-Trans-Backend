@@ -21,7 +21,7 @@ class TagSummarySerializer(serializers.ModelSerializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    payee = serializers.CharField(allow_blank=True, allow_null=True)
+    payee = serializers.CharField(allow_blank=True, allow_null=True, required=False)
 
     # 读取时显示详细信息
     expend = AccountSummarySerializer(read_only=True)
@@ -42,16 +42,44 @@ class ExpenseSerializer(serializers.ModelSerializer):
         required=False,
         help_text="标签ID列表"
     )
+    expend_account = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=128,
+        help_text="映射账户路径（与 expend_id 二选一，优先 expend_id）",
+    )
 
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Expense
-        fields = ['id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'currency', 'enable', 'tags', 'tag_ids']
+        fields = [
+            'id', 'owner', 'key', 'payee', 'expend', 'expend_id', 'expend_account',
+            'currency', 'enable', 'tags', 'tag_ids',
+        ]
         extra_kwargs = {
             'key': {'required': False}  # 允许更新时不传 key
         }
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return attrs
+        user = request.user
+
+        path_raw = attrs.pop('expend_account', None)
+        path = (path_raw or '').strip()
+        expend = attrs.get('expend')
+
+        if expend is not None:
+            return attrs
+        if path:
+            acc = Account.objects.filter(account=path, owner=user).first()
+            attrs['expend'] = acc if acc else None
+        return attrs
 
     def create(self, validated_data):
         """创建支出映射，处理标签关联"""
@@ -97,13 +125,41 @@ class AssetsSerializer(serializers.ModelSerializer):
         required=False,
         help_text="标签ID列表"
     )
+    assets_account = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=128,
+        help_text="映射账户路径（与 assets_id 二选一，优先 assets_id）",
+    )
 
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Assets
-        fields = ['id', 'owner', 'key', 'full', 'assets', 'assets_id', 'enable', 'tags', 'tag_ids']
+        fields = [
+            'id', 'owner', 'key', 'full', 'assets', 'assets_id', 'assets_account',
+            'enable', 'tags', 'tag_ids',
+        ]
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return attrs
+        user = request.user
+
+        path_raw = attrs.pop('assets_account', None)
+        path = (path_raw or '').strip()
+        assets = attrs.get('assets')
+
+        if assets is not None:
+            return attrs
+        if path:
+            acc = Account.objects.filter(account=path, owner=user).first()
+            attrs['assets'] = acc if acc else None
+        return attrs
 
     def create(self, validated_data):
         """创建资产映射，处理标签关联"""
@@ -149,13 +205,41 @@ class IncomeSerializer(serializers.ModelSerializer):
         required=False,
         help_text="标签ID列表"
     )
+    income_account = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        max_length=128,
+        help_text="映射账户路径（与 income_id 二选一，优先 income_id）",
+    )
 
     owner = serializers.ReadOnlyField(source='owner.username')
     enable = serializers.BooleanField(default=True, help_text="是否启用", required=False)
 
     class Meta:
         model = Income
-        fields = ['id', 'owner', 'key', 'payer', 'income', 'income_id', 'enable', 'tags', 'tag_ids']
+        fields = [
+            'id', 'owner', 'key', 'payer', 'income', 'income_id', 'income_account',
+            'enable', 'tags', 'tag_ids',
+        ]
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return attrs
+        user = request.user
+
+        path_raw = attrs.pop('income_account', None)
+        path = (path_raw or '').strip()
+        income = attrs.get('income')
+
+        if income is not None:
+            return attrs
+        if path:
+            acc = Account.objects.filter(account=path, owner=user).first()
+            attrs['income'] = acc if acc else None
+        return attrs
 
     def create(self, validated_data):
         """创建收入映射，处理标签关联"""

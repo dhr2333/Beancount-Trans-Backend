@@ -76,7 +76,7 @@ class Command(BaseCommand):
             admin_user = User.objects.create_superuser(
                 username='admin',
                 email='admin@example.com',
-                password='admin123456'
+                password='123456'
             )
             # 确保 ID 为 1
             if admin_user.id != 1:

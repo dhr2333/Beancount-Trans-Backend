@@ -1,9 +1,10 @@
 import os
+import json
 import hashlib
 import hmac
 import logging
 from django.conf import settings
-from django.http import Http404, HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.request import Request
@@ -14,10 +15,10 @@ from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 from .models import GitRepository
 from .serializers import (
-    GitRepositorySerializer, CreateRepositorySerializer,
+    GitRepositorySerializer, CreateRepositorySerializer, LinkRepositorySerializer,
     SyncStatusSerializer, SyncResponseSerializer,
     WebhookPayloadSerializer, DeployKeyResponseSerializer,
-    DeleteRepositoryResponseSerializer
+    DeleteRepositoryResponseSerializer,
 )
 from .services import PlatformGitService, GitServiceException
 
@@ -61,7 +62,7 @@ class GitRepositoryViewSet(ViewSet):
         }
     )
     def create(self, request: Request) -> Response:
-        """启用 Git 功能，创建用户仓库"""
+        """启用 Git：仅在平台托管 Gitea 创建仓库。关联已有外部远程请使用 link 接口。"""
         serializer = CreateRepositorySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -70,18 +71,51 @@ class GitRepositoryViewSet(ViewSet):
         try:
             git_service = self.get_git_service()
             git_repo = git_service.create_user_repository(
-                user=request.user, 
-                use_template=use_template
+                user=request.user,
+                use_template=use_template,
             )
 
             response_serializer = GitRepositorySerializer(git_repo)
-            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            payload = dict(response_serializer.data)
+            if git_repo.remote_ssh_url and git_repo.webhook_secret:
+                payload['webhook_secret'] = git_repo.webhook_secret
+            return Response(payload, status=status.HTTP_201_CREATED)
 
         except GitServiceException as e:
             return Response(
-                {'error': str(e)}, 
+                {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+    @extend_schema(
+        summary="关联已有外部远程仓库",
+        request=LinkRepositorySerializer,
+        responses={
+            201: GitRepositorySerializer,
+            400: OpenApiResponse(description="参数错误或已有关联"),
+        }
+    )
+    @action(detail=False, methods=['POST'], url_path='link')
+    def link(self, request: Request) -> Response:
+        serializer = LinkRepositorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            git_service = self.get_git_service()
+            git_repo = git_service.link_external_repository(
+                user=request.user,
+                remote_ssh_url=data['remote_ssh_url'],
+                provider=data['provider'],
+                default_branch=data.get('default_branch') or 'main',
+                external_full_name=data.get('external_full_name') or '',
+            )
+            response_serializer = GitRepositorySerializer(git_repo)
+            payload = dict(response_serializer.data)
+            if git_repo.webhook_secret:
+                payload['webhook_secret'] = git_repo.webhook_secret
+            return Response(payload, status=status.HTTP_201_CREATED)
+        except GitServiceException as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
         summary="下载 Deploy Key",
@@ -246,90 +280,169 @@ class GitSyncStatusView(APIView):
             )
 
 
-class GitWebhookView(APIView):
-    """Git Webhook 视图"""
+def _webhook_secret_for_repo(git_repo: GitRepository) -> str:
+    if git_repo.webhook_secret:
+        return git_repo.webhook_secret
+    if git_repo.provider == 'gitea_hosted':
+        return settings.GITEA_WEBHOOK_SECRET or ''
+    return ''
 
-    permission_classes = []  # 无需认证，通过签名验证
+
+def _ref_matches_branch(ref: str, branch: str) -> bool:
+    if not ref or not branch:
+        return False
+    return ref == f'refs/heads/{branch}'
+
+
+class GitWebhookView(APIView):
+    """Git Webhook：支持 GitHub、GitLab、Gitea（含平台托管 Gitea）。"""
+
+    permission_classes = []
 
     def get_git_service(self):
         return PlatformGitService()
 
     @extend_schema(
-        summary="处理 Gitea Webhook",
+        summary="处理 Git push Webhook",
         request=WebhookPayloadSerializer,
         responses={
             200: OpenApiResponse(description="处理成功"),
             400: OpenApiResponse(description="签名验证失败"),
-            404: OpenApiResponse(description="仓库不存在")
+            404: OpenApiResponse(description="仓库不存在"),
         }
     )
     def post(self, request: Request) -> Response:
-        """处理 Gitea push 事件 Webhook"""
-        # 验证 Webhook 签名
-        if not self._verify_webhook_signature(request):
-            return Response(
-                {'error': 'Invalid signature'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # 解析 payload
+        body = request.body
         try:
-            serializer = WebhookPayloadSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            data = json.loads(body.decode('utf-8'))
+        except (ValueError, UnicodeDecodeError):
+            return Response({'error': 'Invalid JSON'}, status=status.HTTP_400_BAD_REQUEST)
 
-            payload = serializer.validated_data
-            repo_name = payload['repository']['name']
+        if request.headers.get('X-Hub-Signature-256'):
+            return self._handle_github(body, data, request)
+        if request.headers.get('X-Gitlab-Token') is not None:
+            return self._handle_gitlab(body, data, request)
+        if request.headers.get('X-Gitea-Signature'):
+            return self._handle_gitea(body, data, request)
 
-            # 从仓库名查找对应的 Git 仓库
-            # 仓库名格式：{uuid}-assets
-            if not repo_name.endswith('-assets'):
-                return Response({'error': 'Invalid repository name format'})
+        if settings.GIT_WEBHOOK_STRICT:
+            return Response({'error': 'Unknown webhook type'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Unknown webhook type'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # 直接通过仓库名查找，不依赖用户ID解析
+    def _handle_github(self, body: bytes, data: dict, request: Request) -> Response:
+        repo = data.get('repository') or {}
+        full_name = (repo.get('full_name') or '').strip()
+        if not full_name:
+            return Response({'error': 'Missing repository.full_name'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = GitRepository.objects.filter(external_full_name__iexact=full_name)
+        n = qs.count()
+        if n == 0:
+            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
+        if n > 1:
+            logger.error('Multiple GitRepository for external_full_name=%s', full_name)
+            return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
+        git_repo = qs.first()
+
+        secret = _webhook_secret_for_repo(git_repo)
+        if not secret:
+            if settings.GIT_WEBHOOK_STRICT:
+                return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sig_header = request.headers.get('X-Hub-Signature-256', '')
+        if not sig_header.startswith('sha256='):
+            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+        expected = 'sha256=' + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig_header, expected):
+            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ref = data.get('ref') or ''
+        branch = (git_repo.default_branch or 'main').strip() or 'main'
+        if not _ref_matches_branch(ref, branch):
+            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
+
+        return self._sync_and_respond(git_repo, full_name)
+
+    def _handle_gitlab(self, body: bytes, data: dict, request: Request) -> Response:
+        token_header = request.headers.get('X-Gitlab-Token') or ''
+        project = data.get('project') or {}
+        path = (project.get('path_with_namespace') or '').strip()
+        if not path:
+            return Response({'error': 'Missing project.path_with_namespace'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = GitRepository.objects.filter(external_full_name__iexact=path)
+        n = qs.count()
+        if n == 0:
+            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
+        if n > 1:
+            logger.error('Multiple GitRepository for external_full_name=%s', path)
+            return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
+        git_repo = qs.first()
+
+        secret = _webhook_secret_for_repo(git_repo)
+        if not secret or not hmac.compare_digest(token_header, secret):
+            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ref = data.get('ref') or ''
+        branch = (git_repo.default_branch or 'main').strip() or 'main'
+        if not _ref_matches_branch(ref, branch):
+            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
+
+        return self._sync_and_respond(git_repo, path)
+
+    def _handle_gitea(self, body: bytes, data: dict, request: Request) -> Response:
+        repo = data.get('repository') or {}
+        full_name = (repo.get('full_name') or '').strip()
+        short_name = (repo.get('name') or '').strip()
+
+        git_repo = None
+        if full_name:
+            qs = GitRepository.objects.filter(external_full_name__iexact=full_name)
+            if qs.count() == 1:
+                git_repo = qs.first()
+            elif qs.count() > 1:
+                logger.error('Multiple GitRepository for external_full_name=%s', full_name)
+                return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if git_repo is None and short_name.endswith('-assets'):
             try:
-                git_repo = GitRepository.objects.get(repo_name=repo_name)
+                git_repo = GitRepository.objects.get(repo_name=short_name)
             except GitRepository.DoesNotExist:
-                return Response(
-                    {'error': 'Repository not found'}, 
-                    status=status.HTTP_404_NOT_FOUND
-                )
+                pass
 
-            # 触发同步
+        if git_repo is None:
+            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        secret = _webhook_secret_for_repo(git_repo)
+        sig = request.headers.get('X-Gitea-Signature', '')
+        if secret:
+            expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+        elif settings.GIT_WEBHOOK_STRICT:
+            return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ref = data.get('ref') or ''
+        branch = (git_repo.default_branch or 'main').strip() or 'main'
+        if not _ref_matches_branch(ref, branch):
+            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
+
+        label = full_name or short_name
+        return self._sync_and_respond(git_repo, label)
+
+    def _sync_and_respond(self, git_repo: GitRepository, label: str) -> Response:
+        try:
             git_service = self.get_git_service()
             result = git_service.sync_repository(git_repo.owner)
-
-            logger.info(f"Webhook triggered sync for {repo_name}: {result['status']}")
-
+            logger.info('Webhook triggered sync for %s: %s', label, result.get('status'))
             return Response({
                 'message': 'Sync triggered successfully',
-                'status': result['status']
+                'status': result.get('status'),
             })
-
         except Exception as e:
-            logger.error(f"Webhook processing error: {e}")
-            return Response(
-                {'error': 'Processing failed'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    def _verify_webhook_signature(self, request: Request) -> bool:
-        """验证 Webhook 签名"""
-        if not settings.GITEA_WEBHOOK_SECRET:
-            return True  # 如果没有配置密钥，跳过验证
-
-        signature = request.headers.get('X-Gitea-Signature')
-        if not signature:
-            return False
-
-        # 计算期望的签名
-        body = request.body
-        expected_signature = hmac.new(
-            settings.GITEA_WEBHOOK_SECRET.encode(),
-            body,
-            hashlib.sha256
-        ).hexdigest()
-
-        return hmac.compare_digest(signature, expected_signature)
+            logger.error('Webhook processing error: %s', e, exc_info=True)
+            return Response({'error': 'Processing failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class GitTransDownloadView(APIView):
