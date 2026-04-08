@@ -1,14 +1,17 @@
 # project/apps/translate/views/BOC_Debit.py
+import logging
 import re
-# import logging
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+
 import pdfplumber
 
 from project.utils.exceptions import DecryptionError
-from project.apps.maps.models import Assets
 from project.apps.translate.services.init.strategies.boc_debit_init_strategy import BOCDebitInitStrategy
 from project.apps.translate.utils import ASSETS_OTHER
 from project.apps.translate.services.mapping_provider import extract_account_string
 # from project.apps.translate.utils import InitStrategy, IgnoreData, BILL_BOC_DEBIT
+
+logger = logging.getLogger(__name__)
 
 # boc_debit_sourcefile_identifier = "中国银行交易流水明细清单"
 # boc_debit_csvfile_identifier = "中国银行储蓄卡账单明细"
@@ -124,6 +127,89 @@ def boc_debit_get_note(data):
         return data['counterparty_bank']
     else:
         return data['notes']
+
+
+def boc_debit_mapping_match_blob(data: dict) -> str:
+    """拼接用于映射关键字匹配的文本。对方卡号/对手行信息常在附言、对手行等列，而非对方户名列。"""
+    return "|".join(
+        str(x or "")
+        for x in (
+            data.get("counterparty"),
+            data.get("commodity"),
+            data.get("notes"),
+            data.get("counterparty_bank"),
+            data.get("card_number"),
+        )
+    )
+
+
+def boc_debit_filter_keys_in_blob(key_list: List[str], data: dict) -> List[str]:
+    """中行账单：在附言/对手行等拼接文本中匹配映射关键字。"""
+    blob = boc_debit_mapping_match_blob(data)
+    return [k for k in key_list if k and k in blob]
+
+
+class BocIncomePeerResult(NamedTuple):
+    peer_account: str
+    selected_key: str
+    expense_candidates_with_score: List[Dict[str, Any]]
+    mapping_tags: List[Any]
+
+
+def boc_debit_try_income_peer_asset(
+    data: dict,
+    asset_mappings: List,
+    model: str,
+    similarity_model: Any,
+) -> Optional[BocIncomePeerResult]:
+    """收入流水：若附言/对手行等命中非本卡资产映射，对端为资产账户（同名划转），否则返回 None。"""
+    blob = boc_debit_mapping_match_blob(data)
+    pm = data.get("payment_method") or ""
+    conflict_candidates: List[Tuple[int, Any]] = []
+    for m in asset_mappings or []:
+        if not m.key or m.key not in blob:
+            continue
+        if m.full == pm:
+            continue
+        if not m.assets:
+            continue
+        pri = extract_account_string(m.assets).count(":") * 100
+        conflict_candidates.append((pri, m))
+    if not conflict_candidates:
+        return None
+    max_order = max(p for p, _ in conflict_candidates)
+    winners = [m for p, m in conflict_candidates if p == max_order]
+    best = winners[0]
+    if len(winners) > 1 and model != "None":
+        tx = (
+            f"类型：{data['transaction_category']} 商户：{data['counterparty']} "
+            f"商品：{data['commodity']} 金额：{data['amount']}元"
+        )
+        sim_result = similarity_model.calculate_similarity(tx, [m.key for m in winners])
+        bk = sim_result["best_match"]
+        best = next(m for m in winners if m.key == bk)
+        scores = sim_result["scores"]
+        expense_candidates_with_score = [
+            {"key": m.key, "score": round(scores.get(m.key, 0), 4)} for m in winners
+        ]
+    else:
+        if len(winners) > 1:
+            best = max(winners, key=lambda mm: len(mm.key))
+        expense_candidates_with_score = [{"key": m.key, "score": 1.0} for m in winners]
+
+    try:
+        mapping_tags = list(best.tags.filter(enable=True))
+    except Exception as e:
+        logger.error(f"加载资产映射标签失败: {str(e)}")
+        mapping_tags = []
+
+    acc = extract_account_string(best.assets)
+    return BocIncomePeerResult(
+        peer_account=acc,
+        selected_key=best.key,
+        expense_candidates_with_score=expense_candidates_with_score,
+        mapping_tags=mapping_tags,
+    )
 
 
 def boc_debit_init_key(data):

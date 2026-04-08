@@ -16,6 +16,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class AccountHandler:
     def __init__(self, data):
         self.key = None
@@ -233,7 +234,10 @@ class ExpenseHandler:
     def _process_expense(self, data: Dict, ownerid: int) -> str:
         """处理支出逻辑"""
 
-        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        if self.bill == BILL_BOC_DEBIT:
+            matching_keys = boc_debit_filter_keys_in_blob(self.key_list, data)
+        else:
+            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
         conflict_candidates = []
         max_order = None
 
@@ -337,7 +341,10 @@ class ExpenseHandler:
         Returns:
             (income_account, selected_key, candidates_with_score)
         """
-        matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
+        if self.bill == BILL_BOC_DEBIT:
+            matching_keys = boc_debit_filter_keys_in_blob(self.key_list, data)
+        else:
+            matching_keys = [k for k in self.key_list if k in data['counterparty'] or k in data['commodity']]
         conflict_candidates: List[Tuple[int, object]] = []
         max_order = None
 
@@ -412,6 +419,22 @@ class ExpenseHandler:
             expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
             return expend, selected_expense_key, expense_candidates_with_score
         elif self.balance == "收入":
+            if self.bill == BILL_BOC_DEBIT and not self.selected_key:
+                _peer = boc_debit_try_income_peer_asset(
+                    data,
+                    self._asset_mappings or [],
+                    self.model,
+                    self.similarity_model,
+                )
+                if _peer is not None:
+                    self.expense_candidates_with_score = _peer.expense_candidates_with_score
+                    self.mapping_tags = list(_peer.mapping_tags)
+                    self.all_candidates_tags = list(self.mapping_tags)
+                    return (
+                        _peer.peer_account,
+                        _peer.selected_key,
+                        self.expense_candidates_with_score,
+                    )
             income, selected_income_key, income_candidates_with_score = self._process_income(data, ownerid)
             return income, selected_income_key, income_candidates_with_score
         elif self.balance in ("/", "不计收支"):
