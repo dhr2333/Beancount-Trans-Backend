@@ -14,7 +14,6 @@ from project.apps.translate.services.similarity import BertSimilarity, SpacySimi
 from project.apps.translate.services.mapping_provider import get_mapping_provider
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 class AccountHandler:
@@ -90,7 +89,16 @@ class AccountHandler:
         actual_assets = get_default_assets(ownerid=ownerid)
         account = self.account
 
-        if self.balance == "收入":
+        # 银行账单同样使用 transaction_type「收入/支出」，必须先按 bill 分流，否则会落入支付宝/微信分支且无法匹配，保持默认 Assets:Other
+        if self.bill == BILL_BOC_DEBIT:
+            account = boc_debit_get_account(self, ownerid)
+        elif self.bill == BILL_CMB_CREDIT:
+            account = cmb_credit_get_account(self, ownerid)
+        elif self.bill == BILL_ICBC_DEBIT:
+            account = icbc_debit_get_account(self, ownerid)
+        elif self.bill == BILL_CCB_DEBIT:
+            account = ccb_debit_get_account(self, ownerid)
+        elif self.balance == "收入":
             if self.bill == BILL_ALI:
                 account = alipay_get_income_account(self, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
@@ -105,14 +113,6 @@ class AccountHandler:
                 account = alipay_get_balance_account(self, data, actual_assets, ownerid)
             elif self.bill == BILL_WECHAT:
                 account = wechatpay_get_balance_account(self, data, actual_assets, ownerid)
-        elif self.bill == BILL_BOC_DEBIT:
-            account = boc_debit_get_account(self, ownerid)
-        elif self.bill == BILL_CMB_CREDIT:
-            account = cmb_credit_get_account(self, ownerid)
-        elif self.bill == BILL_ICBC_DEBIT:
-            account = icbc_debit_get_account(self, ownerid)
-        elif self.bill == BILL_CCB_DEBIT:
-            account = ccb_debit_get_account(self, ownerid)
 
         # 加载资产标签
         if self.key and self.key in self.key_list:
