@@ -1,6 +1,7 @@
 """
 ParseReviewService 服务层测试
 """
+import hashlib
 import pytest
 import time
 import json
@@ -158,6 +159,36 @@ class TestParseReviewService:
         assert updated_entry['edited_formatted'] == new_edited_formatted
         # formatted 字段应该不受影响
         assert updated_entry['formatted'] != new_edited_formatted
+    
+    def test_update_entry_edited_formatted_migrates_null_uuid(self):
+        """uuid 为 None 的历史缓存：迁移为 md5(str(original_row)) 后可更新（与 ParseStep 一致）"""
+        file_id = 902
+        row = {
+            'transaction_time': '2024-06-01 10:00:00',
+            'bill_identifier': 'BOC_Debit',
+            'amount': '10',
+        }
+        expected_uid = hashlib.md5(str(row).encode()).hexdigest()
+        stale = {
+            'file_id': file_id,
+            'formatted_data': [
+                {
+                    'uuid': None,
+                    'formatted': 'old',
+                    'edited_formatted': 'old',
+                    'original_row': row,
+                }
+            ],
+            'created_at': time.time(),
+            'expires_at': time.time() + 86400,
+        }
+        ParseReviewService.save_parse_result(file_id, stale)
+        assert ParseReviewService.update_entry_edited_formatted(
+            file_id, expected_uid, 'new content'
+        ) is True
+        cached = ParseReviewService.get_parse_result(file_id)
+        assert cached['formatted_data'][0]['uuid'] == expected_uid
+        assert cached['formatted_data'][0]['edited_formatted'] == 'new content'
     
     def test_update_entry_edited_formatted_cache_not_exists(self):
         """测试更新 edited_formatted 时缓存不存在的情况"""
