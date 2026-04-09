@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.8](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.7...5.8.8) (2026-04-09)
+
+### Bug Fixes
+
+* admin 将待办类型与用户进行关联 ([#83](https://github.com/dhr2333/Beancount-Trans-Backend/issues/83)) ([d280f84](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d280f847ba3435a3fef03af05ae5152b0d8df21a))
+
 ## [5.8.7](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.6...5.8.7) (2026-04-09)
 
 ### Bug Fixes
