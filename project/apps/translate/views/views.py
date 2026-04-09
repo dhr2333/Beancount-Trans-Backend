@@ -535,7 +535,7 @@ class ParseReviewResultsView(ParseReviewViewSet):
         
         # 从缓存获取解析结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
-        parse_result = ParseReviewService.get_parse_result(parse_file.file_id)
+        parse_result = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
         
         if parse_result is None:
             return Response(
@@ -578,7 +578,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
         
         # 从缓存获取解析结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
-        parse_result = ParseReviewService.get_parse_result(parse_file.file_id)
+        parse_result = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
         
         if parse_result is None:
             return Response(
@@ -668,11 +668,25 @@ class ParseReviewEditView(ParseReviewViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # 更新缓存
+        # 更新缓存（先迁移 uuid，再解析路径中的占位符）
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
+
+        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        if migrated is None:
+            return Response(
+                {'error': '解析结果不存在或已过期，请重新解析'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        entry_uuid = uuid
+        if uuid in ('null', 'undefined', 'None'):
+            fd = migrated.get('formatted_data') or []
+            if len(fd) == 1 and fd[0].get('uuid'):
+                entry_uuid = fd[0]['uuid']
+
         success = ParseReviewService.update_entry_edited_formatted(
-            parse_file.file_id, uuid, edited_formatted
+            parse_file.file_id, entry_uuid, edited_formatted
         )
         
         if not success:
@@ -685,13 +699,13 @@ class ParseReviewEditView(ParseReviewViewSet):
         updated_result = ParseReviewService.get_parse_result(parse_file.file_id)
         updated_entry = None
         for entry in updated_result.get('formatted_data', []):
-            if entry.get('uuid') == uuid:
+            if entry.get('uuid') == entry_uuid:
                 updated_entry = entry
                 break
         
         content_to_validate = updated_entry.get('edited_formatted') if updated_entry else edited_formatted
         response_data = {
-            'uuid': uuid,
+            'uuid': entry_uuid,
             'edited_formatted': content_to_validate,
         }
         # 保存后对单条内容做校验，作为即时反馈（不阻断保存）

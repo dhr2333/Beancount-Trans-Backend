@@ -1,6 +1,9 @@
+from django.db import IntegrityError
 from rest_framework import serializers
 # from django.contrib.auth.models import User
 from project.apps.account.models import Account, AccountTemplate, AccountTemplateItem
+
+_DUPLICATE_ACCOUNT_MSG = '该账户路径已存在，请勿重复添加'
 
 
 class AccountTreeSerializer(serializers.ModelSerializer):
@@ -137,7 +140,27 @@ class AccountSerializer(serializers.ModelSerializer):
         if root not in valid_roots:
             raise serializers.ValidationError(f"根账户必须是以下之一: {', '.join(valid_roots)}")
 
+        request = self.context.get('request')
+        if request and getattr(request.user, 'is_authenticated', False):
+            qs = Account.objects.filter(account=value, owner=request.user)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(_DUPLICATE_ACCOUNT_MSG)
+
         return value
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({'account': [_DUPLICATE_ACCOUNT_MSG]})
+
+    def update(self, instance, validated_data):
+        try:
+            return super().update(instance, validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({'account': [_DUPLICATE_ACCOUNT_MSG]})
 
 
 class AccountBatchUpdateSerializer(serializers.Serializer):

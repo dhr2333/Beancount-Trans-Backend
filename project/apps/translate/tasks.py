@@ -142,7 +142,8 @@ def parse_single_file_task(self, file_id, user_id, args):
                     original_row = cache_entry_data.get('original_row')
                 
                 enhanced_entry = {
-                    'uuid': parsed_entry.get('uuid', cache_key),
+                    # parsed_entry 中 uuid 键恒存在，无支付宝/微信 uuid 时为 None；.get('uuid', cache_key) 会错误地得到 None
+                    'uuid': parsed_entry.get('uuid') or cache_key,
                     'formatted': entry.get('formatted', ''),
                     'edited_formatted': entry.get('formatted', ''),  # 初始状态默认为 formatted
                     'selected_expense_key': entry.get('selected_expense_key', ''),

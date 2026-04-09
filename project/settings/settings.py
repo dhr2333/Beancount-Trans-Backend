@@ -155,7 +155,7 @@ BASE_URL = os.environ.get('BASE_URL', 'localhost')
 SOCIALACCOUNT_ADAPTER = 'project.apps.authentication.adapters.CustomSocialAccountAdapter'
 SOCIALACCOUNT_AUTO_SIGNUP = True  # 允许OAuth自动注册，登录后再提示绑定手机号
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
-SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_STORE_TOKENS = True
 SOCIALACCOUNT_LOGIN_ON_GET = False
 
@@ -529,7 +529,7 @@ GITEA_SSH_BASE = os.environ.get('GITEA_SSH_BASE', 'ssh://git@gitea.dhr2333.cn:30
 GIT_WEBHOOK_STRICT = env_to_bool('GIT_WEBHOOK_STRICT', False)
 
 # Git 仓库配置
-GIT_REPO_SIZE_LIMIT = int(os.environ.get('GIT_REPO_SIZE_LIMIT', 20 * 1024 * 1024))  # 20MB
+GIT_REPO_SIZE_LIMIT = int(os.environ.get('GIT_REPO_SIZE_LIMIT', 20 * 1024 * 1024))
 
 # Git SSH 子进程超时（秒），避免 ls-remote/clone/fetch 无限阻塞导致 sync_status 长期停留在 syncing
 GIT_SSH_LS_REMOTE_TIMEOUT = int(os.environ.get('GIT_SSH_LS_REMOTE_TIMEOUT', '120'))

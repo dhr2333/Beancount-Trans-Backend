@@ -4,6 +4,7 @@
 
 封装解析结果的 Redis 缓存操作
 """
+import hashlib
 import json
 import logging
 from typing import Dict, List, Optional, Any
@@ -22,6 +23,41 @@ class ParseReviewService:
     def _get_cache_key(cls, file_id: int) -> str:
         """生成缓存键"""
         return f"{cls.CACHE_KEY_PREFIX}:{file_id}"
+
+    @classmethod
+    def _ttl_for_resave(cls, file_id: int) -> int:
+        cache_key = cls._get_cache_key(file_id)
+        try:
+            timeout = cache.ttl(cache_key)
+            if timeout is None or timeout < 0:
+                timeout = cls.DEFAULT_TIMEOUT
+        except (AttributeError, TypeError):
+            timeout = cls.DEFAULT_TIMEOUT
+        return timeout
+
+    @classmethod
+    def normalize_stale_entry_uuids(cls, cached_data: Dict[str, Any]) -> bool:
+        """历史数据：uuid 为 null 时，用与 ParseStep 一致的 md5(original_row) 补齐，便于审核页 PUT 能匹配条目。"""
+        changed = False
+        for entry in cached_data.get("formatted_data") or []:
+            if entry.get("uuid"):
+                continue
+            row = entry.get("original_row")
+            if row is None:
+                continue
+            entry["uuid"] = hashlib.md5(str(row).encode()).hexdigest()
+            changed = True
+        return changed
+
+    @classmethod
+    def get_parse_result_migrated(cls, file_id: int) -> Optional[Dict[str, Any]]:
+        """读取解析缓存；若存在 uuid 为空的条目则就地补齐并写回 Redis。"""
+        data = cls.get_parse_result(file_id)
+        if data is None:
+            return None
+        if cls.normalize_stale_entry_uuids(data):
+            cls.save_parse_result(file_id, data, timeout=cls._ttl_for_resave(file_id))
+        return data
     
     @classmethod
     def get_parse_result(cls, file_id: int) -> Optional[Dict[str, Any]]:
@@ -94,7 +130,7 @@ class ParseReviewService:
             是否更新成功
         """
         cache_key = cls._get_cache_key(file_id)
-        cached_data = cls.get_parse_result(file_id)
+        cached_data = cls.get_parse_result_migrated(file_id)
         
         if cached_data is None:
             logger.warning(f"缓存不存在，无法更新: {cache_key}")
@@ -137,7 +173,7 @@ class ParseReviewService:
             是否更新成功
         """
         cache_key = cls._get_cache_key(file_id)
-        cached_data = cls.get_parse_result(file_id)
+        cached_data = cls.get_parse_result_migrated(file_id)
         
         if cached_data is None:
             logger.warning(f"缓存不存在，无法更新: {cache_key}")
