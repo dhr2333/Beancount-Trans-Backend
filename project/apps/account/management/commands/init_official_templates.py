@@ -317,6 +317,8 @@ class Command(BaseCommand):
         import os
         from project.apps.file_manager.models import Directory, File
         from project.apps.translate.models import ParseFile
+        from project.apps.reconciliation.models import ScheduledTask
+        from django.contrib.contenttypes.models import ContentType
         from project.utils.storage_factory import get_storage_client
         from project.utils.file import BeanFileManager
 
@@ -343,9 +345,16 @@ class Command(BaseCommand):
             name__in=['完整测试_微信.csv', '完整测试_支付宝.csv']
         )
         storage_client = get_storage_client()
+        parse_file_content_type = ContentType.objects.get_for_model(ParseFile)
 
         if existing_files.exists():
             for file_obj in list(existing_files):
+                # 先删除关联待办，避免残留无效 object_id
+                ScheduledTask.objects.filter(
+                    task_type='parse_review',
+                    content_type=parse_file_content_type,
+                    object_id=file_obj.id,
+                ).delete()
                 base_name = os.path.splitext(file_obj.name)[0]
                 bean_filename = f"{base_name}.bean"
                 BeanFileManager.remove_bean_from_trans_main(admin_user, bean_filename)
@@ -431,7 +440,15 @@ class Command(BaseCommand):
             )
 
             # 创建解析记录
-            ParseFile.objects.create(file=file_obj)
+            parse_file = ParseFile.objects.create(file=file_obj)
+            # 初始化解析审核待办（inactive，等待用户触发解析后激活）
+            ScheduledTask.objects.create(
+                task_type='parse_review',
+                content_type=parse_file_content_type,
+                object_id=parse_file.file_id,
+                status='inactive',
+                scheduled_date=None,
+            )
 
             # 创建对应的 .bean 文件
             bean_filename = BeanFileManager.create_bean_file(
