@@ -5,7 +5,7 @@ alwaysApply: true
 
 # 基础设施层：环境变量与配置
 
-- **集中管理**：所有配置项必须通过环境变量或 `.env` 文件注入，由 [`project/settings/settings.py`](mdc:project/settings/settings.py) 读取。新增变量时同步更新 [`docs/ENV_CONFIG.md`](mdc:docs/ENV_CONFIG.md) 及示例文件（`.env.example` / `docker-compose.example.yaml` 如适用）。
+- **集中管理**：所有配置项必须通过环境变量或 `.env` 文件注入，由 [`project/settings/settings.py`](mdc:project/settings/settings.py) 读取。新增变量时同步更新示例文件（`.env.example` / `docker-compose.example.yaml` 如适用）与开发者参考文档（`Beancount-Trans-Docs/docs-dev/02-参考.md`）。
 - **工具函数**：布尔和列表类型应复用 `env_to_bool`、`env_to_list`，避免在其他模块手写解析逻辑。
 - **安全默认值**：生产默认 `DEBUG=False`、`ALLOWED_HOSTS` 不能为空、`SECRET_KEY` 必填。如果配置依赖未提供（如 `CORS_ALLOWED_ORIGINS` 在生产环境），需抛出 `ValueError`，与现有实现保持一致。
 - **多环境设置**：`DJANGO_SETTINGS_MODULE` 仅指向统一的 `project.settings.settings`，具体差异靠环境变量切换；不要再创建新的 settings 文件。
