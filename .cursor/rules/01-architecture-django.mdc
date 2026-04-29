@@ -9,7 +9,7 @@ description: 架构层 - Django 项目结构和组织规范
 - **功能按应用划分**：业务功能必须放在 `project/apps/` 中，每个子目录是独立 Django App（如 `account`、`maps`、`translate`）。新增模块时创建同名目录并包含 `models.py`、`serializers.py`、`views.py`、`urls.py`，遵循 [`README.md`](mdc:README.md) 中的结构说明。
 - **通用能力共享**：跨模块通用逻辑放在 `project/apps/common/`（过滤器、权限、基类视图）或 `project/utils/`（存储、token、工具），避免在业务 App 中复制公共代码；参考 [`project/apps/common/views.py`](mdc:project/apps/common/views.py) 和 [`project/utils/storage_factory.py`](mdc:project/utils/storage_factory.py) 的组织方式。
 - **静态与模板**：静态资源通过 `collectstatic/`，模板统一放在根层 `templates/`（如 `templates/translate/`），确保配置与 [`project/settings/settings.py`](mdc:project/settings/settings.py) 的 `TEMPLATES` 设置一致。
-- **文档与脚本**：环境、部署和流程文档集中在 `docs/`（如 [`docs/QUICK_REFERENCE.md`](mdc:docs/QUICK_REFERENCE.md)、[`docs/ENV_CONFIG.md`](mdc:docs/ENV_CONFIG.md)），运维脚本位于 `bin/` 并在 [`bin/README.md`](mdc:bin/README.md) 中登记。
+- **文档与脚本**：环境、部署和流程文档集中在 `docs/`（如 [`docs/QUICK_REFERENCE.md`](mdc:docs/QUICK_REFERENCE.md)），运维脚本位于 `bin/` 并在 [`bin/README.md`](mdc:bin/README.md) 中登记。环境变量参考统一维护在 `Beancount-Trans-Docs/docs-dev/02-参考.md`，模板源为各仓 `.env.example`。
 
 ## 目录依赖关系
 
