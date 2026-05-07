@@ -82,6 +82,30 @@ pipeline {
             }
         }
 
+        stage('构建测试镜像') {
+            steps {
+                retry(3) {
+                    script {
+                        echo "🐳 构建测试Docker镜像（基于生产镜像叠加 pytest 依赖）..."
+                        sh """
+                            DOCKER_BUILDKIT=1 docker build \
+                                --build-arg BASE_IMAGE=${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
+                                --cache-from ${env.REGISTRY}/${env.IMAGE_NAME}:test-latest \
+                                --build-arg BUILDKIT_INLINE_CACHE=1 \
+                                -f Dockerfile-Backend-Test \
+                                -t ${env.REGISTRY}/${env.IMAGE_NAME}:test-${env.IMAGE_TAG} .
+                        """
+
+                        if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME.startsWith('fix/')) {
+                            sh "docker tag ${env.REGISTRY}/${env.IMAGE_NAME}:test-${env.IMAGE_TAG} ${env.REGISTRY}/${env.IMAGE_NAME}:test-latest"
+                        }
+
+                        echo "✅ 测试镜像构建完成: ${env.REGISTRY}/${env.IMAGE_NAME}:test-${env.IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+
         stage('运行测试') {
             steps {
                 script {
@@ -114,7 +138,7 @@ pipeline {
                             -e TRAEFIK_NETWORK=test-network \
                             -e FAVA_IMAGE=test-fava-image:latest \
                             -e CERTRESOLVER=test-resolver \
-                            ${env.REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG} \
+                            ${env.REGISTRY}/${env.IMAGE_NAME}:test-${env.IMAGE_TAG} \
                             bash -c "
                                 echo '开始运行测试...'
                                 mkdir -p \${REPORTS_DIR}
