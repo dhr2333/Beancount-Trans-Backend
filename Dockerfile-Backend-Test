@@ -1,0 +1,10 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /code/beancount-trans/
+
+COPY requirements-test.txt .
+RUN pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir -r requirements-test.txt
+
