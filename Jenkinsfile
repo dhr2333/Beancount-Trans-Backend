@@ -319,6 +319,21 @@ pipeline {
                             fi
                         done
                     """
+
+                    sh """
+                        # 获取所有test-git-*标签的镜像（测试镜像），按创建时间排序，删除第4个及以后的镜像
+                        docker images ${env.REGISTRY}/${env.IMAGE_NAME} --format "{{.ID}} {{.Tag}} {{.CreatedAt}}" | \
+                        grep " test-git-" | \
+                        sort -k3 -r | \
+                        tail -n +4 | \
+                        awk '{print \$2}' | \
+                        while read tag; do
+                            if [ ! -z "\$tag" ]; then
+                                echo "删除旧测试镜像: \${tag}"
+                                docker rmi ${env.REGISTRY}/${env.IMAGE_NAME}:\${tag} || true
+                            fi
+                        done
+                    """
                     echo "✅ 镜像清理完成"
                 } catch (Exception e) {
                     echo "⚠️ 清理旧镜像时出现警告: ${e.message}"
