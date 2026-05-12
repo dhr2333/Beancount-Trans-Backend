@@ -96,6 +96,56 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
         # 预加载 content_type 以减少查询次数
         queryset = queryset.select_related('content_type')
         return queryset
+
+    def get_search_results(self, request, queryset, search_term):
+        """支持按 object_id 和关联用户名搜索"""
+        base_queryset = queryset
+        queryset, may_have_duplicates = super().get_search_results(
+            request, queryset, search_term
+        )
+
+        search_term = search_term.strip()
+        if not search_term:
+            return queryset, may_have_duplicates
+
+        from project.apps.account.models import Account
+        from project.apps.file_manager.models import File
+        from project.apps.translate.models import ParseFile
+
+        account_content_type = ContentType.objects.get_for_model(Account)
+        parse_file_content_type = ContentType.objects.get_for_model(ParseFile)
+
+        user_search_q = Q()
+        has_user_match_condition = False
+
+        account_ids = list(
+            Account.objects.filter(
+                owner__username__icontains=search_term
+            ).values_list('id', flat=True)
+        )
+        if account_ids:
+            user_search_q |= Q(
+                content_type=account_content_type,
+                object_id__in=account_ids,
+            )
+            has_user_match_condition = True
+
+        file_ids = list(
+            File.objects.filter(
+                owner__username__icontains=search_term
+            ).values_list('id', flat=True)
+        )
+        if file_ids:
+            user_search_q |= Q(
+                content_type=parse_file_content_type,
+                object_id__in=file_ids,
+            )
+            has_user_match_condition = True
+
+        if not has_user_match_condition:
+            return queryset, may_have_duplicates
+
+        return queryset | base_queryset.filter(user_search_q), True
     
     def get_account_name(self, obj):
         """获取关联对象展示名（对账：账户路径；解析审核：文件名）"""
