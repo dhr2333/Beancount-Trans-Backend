@@ -295,7 +295,7 @@ def _ref_matches_branch(ref: str, branch: str) -> bool:
 
 
 class GitWebhookView(APIView):
-    """Git Webhook：支持 GitHub、GitLab、Gitea（含平台托管 Gitea）。"""
+    """Git Webhook：支持 GitHub 与平台托管 Gitea。"""
 
     permission_classes = []
 
@@ -318,12 +318,10 @@ class GitWebhookView(APIView):
         except (ValueError, UnicodeDecodeError):
             return Response({'error': 'Invalid JSON'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if request.headers.get('X-Hub-Signature-256'):
-            return self._handle_github(body, data, request)
-        if request.headers.get('X-Gitlab-Token') is not None:
-            return self._handle_gitlab(body, data, request)
         if request.headers.get('X-Gitea-Signature'):
             return self._handle_gitea(body, data, request)
+        if request.headers.get('X-Hub-Signature-256'):
+            return self._handle_github(body, data, request)
 
         if settings.GIT_WEBHOOK_STRICT:
             return Response({'error': 'Unknown webhook type'}, status=status.HTTP_400_BAD_REQUEST)
@@ -364,33 +362,6 @@ class GitWebhookView(APIView):
 
         return self._sync_and_respond(git_repo, full_name)
 
-    def _handle_gitlab(self, body: bytes, data: dict, request: Request) -> Response:
-        token_header = request.headers.get('X-Gitlab-Token') or ''
-        project = data.get('project') or {}
-        path = (project.get('path_with_namespace') or '').strip()
-        if not path:
-            return Response({'error': 'Missing project.path_with_namespace'}, status=status.HTTP_400_BAD_REQUEST)
-
-        qs = GitRepository.objects.filter(external_full_name__iexact=path)
-        n = qs.count()
-        if n == 0:
-            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
-        if n > 1:
-            logger.error('Multiple GitRepository for external_full_name=%s', path)
-            return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
-        git_repo = qs.first()
-
-        secret = _webhook_secret_for_repo(git_repo)
-        if not secret or not hmac.compare_digest(token_header, secret):
-            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
-
-        ref = data.get('ref') or ''
-        branch = (git_repo.default_branch or 'main').strip() or 'main'
-        if not _ref_matches_branch(ref, branch):
-            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
-
-        return self._sync_and_respond(git_repo, path)
-
     def _handle_gitea(self, body: bytes, data: dict, request: Request) -> Response:
         repo = data.get('repository') or {}
         full_name = (repo.get('full_name') or '').strip()
@@ -412,6 +383,8 @@ class GitWebhookView(APIView):
                 pass
 
         if git_repo is None:
+            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
+        if git_repo.provider != 'gitea_hosted':
             return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
 
         secret = _webhook_secret_for_repo(git_repo)
