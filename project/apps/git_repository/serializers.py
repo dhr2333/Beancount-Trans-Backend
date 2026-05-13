@@ -52,10 +52,6 @@ class GitRepositorySerializer(serializers.ModelSerializer):
         ]
         if obj.provider == 'github':
             lines.insert(0, 'GitHub 账本仓库：Settings → Webhooks → Add webhook')
-        elif obj.provider == 'gitlab':
-            lines.insert(0, 'GitLab：Settings → Webhooks，Secret token 填 webhook_secret')
-        elif obj.provider == 'gitea':
-            lines.insert(0, 'Gitea：仓库设置 → Web 钩子，密钥填 webhook_secret')
         return lines
 
 
@@ -73,7 +69,7 @@ class LinkRepositorySerializer(serializers.Serializer):
 
     remote_ssh_url = serializers.CharField(required=True, max_length=500)
     provider = serializers.ChoiceField(
-        choices=['github', 'gitlab', 'gitea', 'other'],
+        choices=['github'],
         default='github',
     )
     default_branch = serializers.CharField(required=False, default='main', max_length=100)
@@ -113,11 +109,10 @@ class SyncResponseSerializer(serializers.Serializer):
 
 
 class WebhookPayloadSerializer(serializers.Serializer):
-    """Gitea/GitHub 等 push Webhook 载荷（宽松校验，具体分支在视图中比对）。"""
+    """GitHub / 平台托管 Gitea push Webhook 载荷（宽松校验，具体分支在视图中比对）。"""
 
     ref = serializers.CharField(required=False, allow_blank=True)
     repository = serializers.DictField(required=False)
-    project = serializers.DictField(required=False)
     pusher = serializers.DictField(required=False, allow_null=True)
     commits = serializers.ListField(
         child=serializers.DictField(),

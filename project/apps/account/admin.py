@@ -77,7 +77,7 @@ class AccountAdmin(admin.ModelAdmin):
                 '<span style="color: green;">是 ({})</span>',
                 count
             )
-        return format_html('<span style="color: gray;">否</span>')
+        return format_html('<span style="color: gray;">{}</span>', '否')
     has_children_display.short_description = '有子账户'
 
     def mapping_count_display(self, obj):
@@ -101,9 +101,9 @@ class AccountAdmin(admin.ModelAdmin):
                     total, expense_count, assets_count, income_count
                 )
             else:
-                return format_html('<span style="color: gray;">无映射</span>')
+                return format_html('<span style="color: gray;">{}</span>', '无映射')
         except:
-            return format_html('<span style="color: gray;">无法获取</span>')
+            return format_html('<span style="color: gray;">{}</span>', '无法获取')
     mapping_count_display.short_description = '映射统计'
 
     def get_account_type(self, obj):
