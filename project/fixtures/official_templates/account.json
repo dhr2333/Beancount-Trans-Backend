@@ -40,14 +40,14 @@
       "description": ""
     },
     {
-      "account_path": "Assets:Savings:Bank:ICBC",
+      "account_path": "Assets:Savings:Bank:BOC",
       "enable": true,
-      "reconciliation_cycle_unit": null,
+      "rICBeconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
       "description": ""
     },
     {
-      "account_path": "Assets:Savings:Bank:ICBC:C5244",
+      "account_path": "Assets:Savings:Bank:BOC:C0814",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
@@ -62,34 +62,6 @@
     },
     {
       "account_path": "Assets:Savings:Recharge",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Assets:Savings:Recharge:HaLuo",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Assets:Savings:Recharge:LaoPoDaRen",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Assets:Savings:Recharge:LiangLiangJiaDao",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Assets:Savings:Recharge:LiuXianJi",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
@@ -145,7 +117,7 @@
       "description": ""
     },
     {
-      "account_path": "Assets:Savings:Recharge:YiMing",
+      "account_path": "Assets:Savings:Recharge:AliCloud",
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
@@ -168,8 +140,8 @@
     {
       "account_path": "Assets:Savings:Web:AliPay",
       "enable": true,
-      "reconciliation_cycle_unit": "months",
-      "reconciliation_cycle_interval": 1,
+      "reconciliation_cycle_unit": null,
+      "reconciliation_cycle_interval": null,
       "description": "支付宝余额"
     },
     {
@@ -353,13 +325,6 @@
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
       "description": "房租/房贷"
-    },
-    {
-      "account_path": "Expenses:Home:Recharge",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
     },
     {
       "account_path": "Expenses:Home:Utilities",
@@ -562,14 +527,7 @@
       "enable": true,
       "reconciliation_cycle_unit": null,
       "reconciliation_cycle_interval": null,
-      "description": ""
-    },
-    {
-      "account_path": "Liabilities:CreditCard:Web:DouYin",
-      "enable": true,
-      "reconciliation_cycle_unit": null,
-      "reconciliation_cycle_interval": null,
-      "description": ""
+      "description": "支付宝花呗"
     },
     {
       "account_path": "Liabilities:Payables",

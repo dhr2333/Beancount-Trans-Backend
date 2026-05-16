@@ -2969,12 +2969,6 @@
       "currency": ""
     },
     {
-      "key": "抖音生活服务",
-      "payee": "",
-      "account": "Expenses:Food",
-      "currency": ""
-    },
-    {
       "key": "上海拉扎斯信息科技有限公司",
       "payee": "",
       "account": "Expenses:Food",
@@ -3642,6 +3636,330 @@
     },
     {
       "key": "手续费",
+      "payee": "",
+      "account": "Expenses:Finance:Commission",
+      "currency": null
+    },
+    {
+      "key": "中国铁路",
+      "payee": "",
+      "account": "Expenses:TransPort:Public",
+      "currency": null
+    },
+    {
+      "key": "列车补票",
+      "payee": "",
+      "account": "Expenses:TransPort:Public",
+      "currency": null
+    },
+    {
+      "key": "炒货",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "超级吃货卡",
+      "payee": "",
+      "account": "Expenses:Culture:Subscription",
+      "currency": null
+    },
+    {
+      "key": "保湿霜",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": null
+    },
+    {
+      "key": "身体乳",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": null
+    },
+    {
+      "key": "空气炸锅",
+      "payee": "",
+      "account": "Expenses:Shopping:Digital",
+      "currency": null
+    },
+    {
+      "key": "面包",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "电池",
+      "payee": "",
+      "account": "Expenses:Shopping:Daily",
+      "currency": null
+    },
+    {
+      "key": "星星充电",
+      "payee": "",
+      "account": "Expenses:Home:Utilities",
+      "currency": null
+    },
+    {
+      "key": "花",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": null
+    },
+    {
+      "key": "牛排",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "饭馆",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "鸭头",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "鱿鱼",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "监控",
+      "payee": "",
+      "account": "Expenses:Shopping:Digital",
+      "currency": null
+    },
+    {
+      "key": "保证金",
+      "payee": "",
+      "account": "Assets:Receivables:Personal",
+      "currency": null
+    },
+    {
+      "key": "秋冬",
+      "payee": "",
+      "account": "Expenses:Shopping:Clothing",
+      "currency": ""
+    },
+    {
+      "key": "卫衣",
+      "payee": "",
+      "account": "Expenses:Shopping:Clothing",
+      "currency": ""
+    },
+    {
+      "key": "马克杯",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": ""
+    },
+    {
+      "key": "咖啡杯",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": ""
+    },
+    {
+      "key": "坚果",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "腰果",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "礼物",
+      "payee": "",
+      "account": "Expenses:Culture:Relationship",
+      "currency": ""
+    },
+    {
+      "key": "礼盒",
+      "payee": "",
+      "account": "Expenses:Culture:Relationship",
+      "currency": ""
+    },
+    {
+      "key": "伞",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": ""
+    },
+    {
+      "key": "精华乳",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": ""
+    },
+    {
+      "key": "沐浴油",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": ""
+    },
+    {
+      "key": "防晒",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": ""
+    },
+    {
+      "key": "咖啡",
+      "payee": "",
+      "account": "Expenses:Food:DrinkFruit",
+      "currency": ""
+    },
+    {
+      "key": "袁记云饺",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "烤鱼",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "臭豆腐",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "书亦",
+      "payee": "",
+      "account": "Expenses:Food:DrinkFruit",
+      "currency": ""
+    },
+    {
+      "key": "必胜客",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": ""
+    },
+    {
+      "key": "空调服",
+      "payee": "",
+      "account": "Expenses:Shopping:Clothing",
+      "currency": ""
+    },
+    {
+      "key": "王者荣耀",
+      "payee": "",
+      "account": "Expenses:Culture:Entertainment",
+      "currency": ""
+    },
+    {
+      "key": "冈本",
+      "payee": "",
+      "account": "Expenses:Shopping:PersonalCare",
+      "currency": null
+    },
+    {
+      "key": "器材",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": null
+    },
+    {
+      "key": "洗车",
+      "payee": "",
+      "account": "Expenses:Culture",
+      "currency": null
+    },
+    {
+      "key": "宠物",
+      "payee": "",
+      "account": "",
+      "currency": null
+    },
+    {
+      "key": "生活服务",
+      "payee": "",
+      "account": "",
+      "currency": null
+    },
+    {
+      "key": "商店",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": null
+    },
+    {
+      "key": "购物金",
+      "payee": "",
+      "account": "Assets:Savings:Recharge",
+      "currency": "COIN"
+    },
+    {
+      "key": "辅食",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "面条",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null
+    },
+    {
+      "key": "米家",
+      "payee": "",
+      "account": "Expenses:Shopping",
+      "currency": null
+    },
+    {
+      "key": "按摩仪",
+      "payee": "",
+      "account": "Expenses:Health:Equipment",
+      "currency": null
+    },
+    {
+      "key": "吊灯",
+      "payee": "",
+      "account": "Expenses:Home:Decoration",
+      "currency": null
+    },
+    {
+      "key": "游泳裤",
+      "payee": "",
+      "account": "Expenses:Shopping:Clothing",
+      "currency": null
+    },
+    {
+      "key": "胃复春",
+      "payee": "",
+      "account": "Expenses:Health:Medical",
+      "currency": null
+    },
+    {
+      "key": "打赏",
+      "payee": "",
+      "account": "Expenses:Culture:Relationship",
+      "currency": null
+    },
+    {
+      "key": "加工",
+      "payee": "",
+      "account": "Expenses:Culture",
+      "currency": null
+    },
+    {
+      "key": "工本费",
       "payee": "",
       "account": "Expenses:Finance:Commission",
       "currency": null

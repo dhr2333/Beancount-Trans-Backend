@@ -5,6 +5,11 @@
   "update_notes": null,
   "items": [
     {
+      "key": "0814",
+      "full": "中国银行储蓄卡(0814)",
+      "account": "Assets:Savings:Bank:BOC:C0814"
+    },
+    {
       "key": "6428",
       "full": "中信银行信用卡(6428)",
       "account": "Liabilities:CreditCard:Bank:CITIC:C6428"
