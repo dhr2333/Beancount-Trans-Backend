@@ -21,6 +21,7 @@ from project.apps.translate.services.steps import (
 class AnalyzeService:
     def __init__(self, user: object, config):
         # 接收用户实例，可通过该实例获取用户信息，如owner_id、username等
+        self.user = user
         self.owner_id = user.id if hasattr(user, 'id') else None
         self.username = user.username if hasattr(user, 'username') else None
         self.config = config
@@ -30,6 +31,7 @@ class AnalyzeService:
         # 创建初始上下文
         context = {
             "owner_id": self.owner_id,
+            "user": self.user,
             "username": self.username,
             "config": self.config,
             "args": args,

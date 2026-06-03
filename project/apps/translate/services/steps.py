@@ -6,6 +6,12 @@ from project.apps.translate.services.pipeline import Step
 from project.apps.translate.services.init.bill_init_factory import InitFactory
 from project.apps.translate.services.parse.filters import TransactionFilter
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.services.alipay_refund_peer import (
+    build_ledger_index_for_user,
+    build_raw_payment_index,
+    resolve_alipay_refund_peer,
+)
+from project.apps.translate.views.AliPay import alipay_is_refund_row, alipay_parent_uuid
 from project.apps.translate.utils import *
 from project.apps.translate.views.AliPay import *
 from project.apps.translate.views.WeChat import *
@@ -107,21 +113,53 @@ class ParseStep(Step):
         bill_data = context['prefilter_bill']
 
         try:
-            for row in bill_data:
-                # 解析单条交易记录
-                parsed_entry = single_parse_transaction(row, owner_id, config, None)
-                # 存入原始数据
-                parsed_entry['_original_row'] = row
-                # 生成缓存键
-                if parsed_entry['uuid']:
-                    cache_key = parsed_entry['uuid']
-                else:
-                    # 使用哈希值作为唯一标识符
-                    row_str = str(row)
-                    cache_key = hashlib.md5(row_str.encode()).hexdigest()
-                parsed_entry['cache_key'] = cache_key
+            user = context.get('user')
+            if not user:
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                user = User.objects.filter(id=owner_id).first()
 
-                # 添加解析结果到上下文
+            ledger_index = build_ledger_index_for_user(user) if user else {}
+            raw_payment_index = build_raw_payment_index(bill_data)
+            parse_cache: Dict[str, Dict] = {}
+
+            def _lazy_parse_payment(payment_row: Dict) -> Dict:
+                return single_parse_transaction(payment_row, owner_id, config, None)
+
+            for row in bill_data:
+                refund_peer = None
+                if alipay_is_refund_row(row):
+                    refund_peer = resolve_alipay_refund_peer(
+                        alipay_parent_uuid(row),
+                        parse_cache,
+                        raw_payment_index,
+                        ledger_index,
+                        _lazy_parse_payment,
+                    )
+
+                payment_uuid = (row.get('uuid') or '').strip()
+                if (
+                    payment_uuid
+                    and payment_uuid in parse_cache
+                    and not alipay_is_refund_row(row)
+                ):
+                    parsed_entry = dict(parse_cache[payment_uuid])
+                    parsed_entry['_original_row'] = row
+                    parsed_entry['cache_key'] = payment_uuid
+                else:
+                    parsed_entry = single_parse_transaction(
+                        row, owner_id, config, None, refund_peer=refund_peer
+                    )
+                    parsed_entry['_original_row'] = row
+                    if parsed_entry.get('uuid'):
+                        cache_key = parsed_entry['uuid']
+                    else:
+                        row_str = str(row)
+                        cache_key = hashlib.md5(row_str.encode()).hexdigest()
+                    parsed_entry['cache_key'] = cache_key
+                    if payment_uuid and not alipay_is_refund_row(row):
+                        parse_cache[payment_uuid] = parsed_entry
+
                 if 'parsed_data' not in context:
                     context['parsed_data'] = []
                 context['parsed_data'].append(parsed_entry)
@@ -129,7 +167,6 @@ class ParseStep(Step):
             import traceback
             logger.error(f"解析步骤详细错误: {traceback.format_exc()}")
             return self._error(context, f"解析步骤异常: {str(e)}")
-        # logger.info(context['parsed_data'])
         return context
 
 

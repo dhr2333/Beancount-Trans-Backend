@@ -5,6 +5,7 @@ from datetime import datetime
 from project.apps.maps.models import Expense, Income
 from project.apps.translate.utils import *
 from project.apps.translate.views.AliPay import *
+from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.views.WeChat import *
 from project.apps.translate.views.BOC_Debit import *
 from project.apps.translate.views.CMB_Credit import *
@@ -123,7 +124,15 @@ class AccountHandler:
 
 
 class ExpenseHandler:
-    def __init__(self, data: Dict, model: str, api_key: Optional[str] = None, selected_key: Optional[str] = None):
+    def __init__(
+        self,
+        data: Dict,
+        model: str,
+        api_key: Optional[str] = None,
+        selected_key: Optional[str] = None,
+        refund_peer: Optional[RefundPeerSnapshot] = None,
+    ):
+        self.refund_peer = refund_peer
         self.selected_expense_instance = None
         self.selected_income_instance = None
         self.selected_key = selected_key
@@ -415,6 +424,11 @@ class ExpenseHandler:
         self.initialize_key_list(data, ownerid)
         self.initialize_type(data)
 
+        if self.bill == BILL_ALI and alipay_is_refund_row(data) and self.refund_peer:
+            key = self.refund_peer.selected_expense_key
+            candidates = [{"key": key, "score": 1.0}] if key else []
+            return self.refund_peer.expense_account, key, candidates
+
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
             expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
             return expend, selected_expense_key, expense_candidates_with_score
@@ -521,11 +535,15 @@ def get_shouzhi(data): #TODO
     loss = "-"
 
     if shouzhi == "支出":
+        if data.get("bill_identifier") == BILL_ALI and data.get("transaction_status") == "退款成功":
+            return loss, high
         return high, loss
     elif shouzhi == "收入":
         return loss, high
     elif shouzhi in ["/", "不计收支"]:
         if data['bill_identifier'] == BILL_ALI:
+            if data.get("transaction_status") == "退款成功":
+                return loss, high
             if data['commodity'] == "信用卡还款":
                 return high, loss
             elif "亲情卡" in data['payment_method']:
