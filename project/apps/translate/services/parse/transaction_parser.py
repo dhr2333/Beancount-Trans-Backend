@@ -40,13 +40,15 @@ def single_parse_transaction(
         uuid = get_uuid(row)
         status = get_status(row)
         amount = get_amount(row)
-        payee = payee_handler.get_payee(row, owner_id)
         note = get_note(row)
         source_tag = get_tag(row)  # 原始标签
         balance = get_balance(row)
         balance_date = (datetime.strptime(row['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(row)
-        expense,selected_expense_key, expense_candidates_with_score = expense_handler.get_expense(row, owner_id)
+        expense, selected_expense_key, expense_candidates_with_score = expense_handler.get_expense(row, owner_id)
+        payee = payee_handler.get_payee(
+            row, owner_id, selected_mapping_key=selected_expense_key
+        )
         account = account_handler.get_account(row, owner_id)
         commission = get_commission(row)
         installment_granularity = get_installment_granularity(row)
