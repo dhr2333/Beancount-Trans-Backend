@@ -157,7 +157,7 @@ def parse_single_file_task(self, file_id, user_id, args):
                 'file_id': file_id,
                 'formatted_data': enhanced_formatted_data,
                 'created_at': time.time(),
-                'expires_at': time.time() + 86400  # 24小时后过期
+                'expires_at': time.time() + ParseReviewService.DEFAULT_TIMEOUT,
             }
             
             # 保存到 Redis 缓存
