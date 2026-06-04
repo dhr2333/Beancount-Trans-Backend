@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.10](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.9...5.8.10) (2026-06-04)
+
+### Bug Fixes
+
+* defeat repair ([#87](https://github.com/dhr2333/Beancount-Trans-Backend/issues/87)) ([d7da6b3](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d7da6b38af2d4ad696d3adbef1e07916a4061af5))
+
 ## [5.8.9](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.8...5.8.9) (2026-05-13)
 
 ### Bug Fixes
