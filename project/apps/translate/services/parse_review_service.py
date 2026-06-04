@@ -17,7 +17,8 @@ class ParseReviewService:
     """解析结果缓存服务"""
     
     CACHE_KEY_PREFIX = 'parse_result'
-    DEFAULT_TIMEOUT = 86400  # 24小时
+    # 须长于 auto_confirm 的 24h 窗口及 Celery Beat 调度间隔，避免到期确认时缓存已失效
+    DEFAULT_TIMEOUT = 27 * 3600  # 27 小时
     
     @classmethod
     def _get_cache_key(cls, file_id: int) -> str:
@@ -92,7 +93,7 @@ class ParseReviewService:
         Args:
             file_id: 文件ID
             data: 解析结果数据，包含 formatted_data 等
-            timeout: 过期时间（秒），默认24小时
+            timeout: 过期时间（秒），默认 30 小时（见 DEFAULT_TIMEOUT）
             
         Returns:
             是否保存成功

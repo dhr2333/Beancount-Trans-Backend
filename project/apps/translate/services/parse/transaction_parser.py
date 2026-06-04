@@ -1,12 +1,19 @@
 # project/apps/translate/services/parse/transaction_parser.py
 from datetime import timedelta, datetime
-from typing import Dict
+from typing import Dict, Optional
 from project.apps.translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
+from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
 from project.apps.translate.services.tag_merger import merge_tags
 
 
-def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_key: str) -> Dict:
+def single_parse_transaction(
+    row: Dict,
+    owner_id: int,
+    config: Dict,
+    selected_key: str,
+    refund_peer: Optional[RefundPeerSnapshot] = None,
+) -> Dict:
     """解析单条交易记录
 
     Args:
@@ -18,7 +25,13 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         Dict: 解析后的交易记录
     """
     try:
-        expense_handler = ExpenseHandler(row, model=config.ai_model, api_key=config.deepseek_apikey, selected_key=selected_key)
+        expense_handler = ExpenseHandler(
+            row,
+            model=config.ai_model,
+            api_key=config.deepseek_apikey,
+            selected_key=selected_key,
+            refund_peer=refund_peer,
+        )
         account_handler = AccountHandler(row)
         payee_handler = PayeeHandler(row)
         date = datetime.strptime(row['transaction_time'], "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d")
@@ -27,13 +40,15 @@ def single_parse_transaction(row: Dict, owner_id: int, config: Dict, selected_ke
         uuid = get_uuid(row)
         status = get_status(row)
         amount = get_amount(row)
-        payee = payee_handler.get_payee(row, owner_id)
         note = get_note(row)
         source_tag = get_tag(row)  # 原始标签
         balance = get_balance(row)
         balance_date = (datetime.strptime(row['transaction_time'], "%Y-%m-%d %H:%M:%S") + timedelta(days=1)).strftime("%Y-%m-%d")
         expenditure_sign, account_sign = get_shouzhi(row)
-        expense,selected_expense_key, expense_candidates_with_score = expense_handler.get_expense(row, owner_id)
+        expense, selected_expense_key, expense_candidates_with_score = expense_handler.get_expense(row, owner_id)
+        payee = payee_handler.get_payee(
+            row, owner_id, selected_mapping_key=selected_expense_key
+        )
         account = account_handler.get_account(row, owner_id)
         commission = get_commission(row)
         installment_granularity = get_installment_granularity(row)

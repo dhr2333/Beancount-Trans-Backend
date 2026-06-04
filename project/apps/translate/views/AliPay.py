@@ -3,8 +3,43 @@ import re
 # import logging
 
 from project.apps.maps.models import Assets
-from project.apps.translate.utils import ASSETS_OTHER, OPENBALANCE, pattern
+from typing import Dict, Optional
+
+from project.apps.translate.utils import ASSETS_OTHER, BILL_ALI, EXPENSES_OTHER, OPENBALANCE, pattern
 from project.apps.translate.services.mapping_provider import extract_account_string
+
+ALIPAY_PAYMENT_STATUSES = frozenset({
+    "交易成功",
+    "支付成功",
+    "代付成功",
+    "还款成功",
+    "等待确认收货",
+    "缴费中",
+    "冻结成功",
+    "放款成功",
+})
+
+
+def alipay_is_refund_row(row: Dict) -> bool:
+    return (
+        row.get("bill_identifier") == BILL_ALI
+        and row.get("transaction_status") == "退款成功"
+    )
+
+
+def alipay_is_payment_row(row: Dict) -> bool:
+    return (
+        row.get("bill_identifier") == BILL_ALI
+        and row.get("transaction_status") in ALIPAY_PAYMENT_STATUSES
+    )
+
+
+def alipay_parent_uuid(row: Dict) -> Optional[str]:
+    uid = (row.get("uuid") or "").strip()
+    if "_" not in uid:
+        return None
+    return uid.split("_", 1)[0]
+
 
 # alipay_csvfile_identifier = "------------------------------------------------------------------------------------"
 
@@ -143,6 +178,10 @@ def alipay_get_balance_account(self, data, assets, ownerid):
 def alipay_get_balance_expense(self, data, assets, ownerid):
     # expend = "Unknown-Expend"  # 方便排查问题
     expend = self.expend
+    if data.get("transaction_status") == "退款成功" or (
+        isinstance(self.type, str) and "退款" in self.type
+    ):
+        return EXPENSES_OTHER
     if self.type == "转账收款到余额宝":
         expend = assets["ALIFUND"]
     elif self.type == "余额宝-自动转入":

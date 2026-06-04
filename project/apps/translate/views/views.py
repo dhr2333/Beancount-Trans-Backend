@@ -24,6 +24,7 @@ from project.apps.translate.utils import FormatData
 from project.apps.translate.tasks import parse_single_file_task
 from project.apps.translate.services.analyze_service import AnalyzeService
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.services.alipay_refund_peer import resolve_refund_peer_for_row
 from project.apps.reconciliation.models import ScheduledTask
 from django.contrib.contenttypes.models import ContentType
 from project.apps.translate.utils import FormatData
@@ -203,10 +204,16 @@ class ReparseEntryView(APIView):
 
         original_row = cache_data['original_row']
         owner_id = get_token_user_id(request)
-        config = get_user_config(User.objects.get(id=owner_id))
+        user = User.objects.get(id=owner_id)
+        config = get_user_config(user)
         # 重新解析交易记录
         try:
-            parsed_entry = single_parse_transaction(original_row, owner_id, config, selected_key)
+            refund_peer = resolve_refund_peer_for_row(
+                original_row, user, owner_id, config, selected_key
+            )
+            parsed_entry = single_parse_transaction(
+                original_row, owner_id, config, selected_key, refund_peer=refund_peer
+            )
 
             formatted = FormatData.format_instance(parsed_entry, config=config)
 
@@ -612,7 +619,12 @@ class ParseReviewReparseView(ParseReviewViewSet):
         try:
             owner_id = request.user.id
             config = get_user_config(request.user)
-            parsed_entry = single_parse_transaction(original_row, owner_id, config, selected_key)
+            refund_peer = resolve_refund_peer_for_row(
+                original_row, request.user, owner_id, config, selected_key
+            )
+            parsed_entry = single_parse_transaction(
+                original_row, owner_id, config, selected_key, refund_peer=refund_peer
+            )
             formatted = FormatData.format_instance(parsed_entry, config=config)
             
             # 更新缓存

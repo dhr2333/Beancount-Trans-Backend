@@ -5,6 +5,7 @@ from datetime import datetime
 from project.apps.maps.models import Expense, Income
 from project.apps.translate.utils import *
 from project.apps.translate.views.AliPay import *
+from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.views.WeChat import *
 from project.apps.translate.views.BOC_Debit import *
 from project.apps.translate.views.CMB_Credit import *
@@ -123,7 +124,15 @@ class AccountHandler:
 
 
 class ExpenseHandler:
-    def __init__(self, data: Dict, model: str, api_key: Optional[str] = None, selected_key: Optional[str] = None):
+    def __init__(
+        self,
+        data: Dict,
+        model: str,
+        api_key: Optional[str] = None,
+        selected_key: Optional[str] = None,
+        refund_peer: Optional[RefundPeerSnapshot] = None,
+    ):
+        self.refund_peer = refund_peer
         self.selected_expense_instance = None
         self.selected_income_instance = None
         self.selected_key = selected_key
@@ -415,6 +424,11 @@ class ExpenseHandler:
         self.initialize_key_list(data, ownerid)
         self.initialize_type(data)
 
+        if self.bill == BILL_ALI and alipay_is_refund_row(data) and self.refund_peer:
+            key = self.refund_peer.selected_expense_key
+            candidates = [{"key": key, "score": 1.0}] if key else []
+            return self.refund_peer.expense_account, key, candidates
+
         if self.balance == "支出" or "亲情卡" in data['payment_method']:
             expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
             return expend, selected_expense_key, expense_candidates_with_score
@@ -460,59 +474,87 @@ class PayeeHandler:
         self.bill = data['bill_identifier']
         self._expense_mappings = []  # 缓存映射数据
 
-    def get_payee(self, data, ownerid): #TODO
-        # 使用映射数据提供者
+    def _finalize_payee(self, data: Dict, payee: str) -> str:
+        if data['bill_identifier'] == BILL_ALI and payee == "":
+            return data['counterparty']
+        if data['bill_identifier'] == BILL_WECHAT and payee == "":
+            payee = data['counterparty']
+            if payee == "/":
+                return data['transaction_time']
+        return payee
+
+    def _payee_from_mapping_key(
+        self, selected_mapping_key: str, data: Dict, ownerid: int
+    ) -> Optional[str]:
+        """按 selected_expense_key 查支出 payee 或收入 payer；无有效字段时返回 None。"""
+        provider = get_mapping_provider(ownerid)
+        if data.get('transaction_type') == '收入':
+            income_mappings = provider.get_income_mappings(enable_only=True)
+            instance = next(
+                (m for m in income_mappings if m.key == selected_mapping_key), None
+            )
+            if instance and instance.payer:
+                return instance.payer
+            return None
+        expense_mappings = self._expense_mappings or provider.get_expense_mappings(
+            enable_only=True
+        )
+        instance = next(
+            (m for m in expense_mappings if m.key == selected_mapping_key), None
+        )
+        if instance and instance.payee:
+            return instance.payee
+        return None
+
+    def get_payee(
+        self, data, ownerid, selected_mapping_key: Optional[str] = None
+    ):
         provider = get_mapping_provider(ownerid)
         expense_mappings = provider.get_expense_mappings(enable_only=True)
         self.key_list = [m.key for m in expense_mappings]
         self._expense_mappings = expense_mappings
         if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/" and data['transaction_category'] == "信用卡还款":
             return data['counterparty']
-        elif data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":  # 一般微信好友转账，如妈妈->我
+        if data['bill_identifier'] == BILL_WECHAT and data['transaction_type'] == "/":
             return data['payment_method'][:4]
-        elif data['transaction_category'] == "微信红包（单发）":
+        if data['transaction_category'] == "微信红包（单发）":
             return self.payee[2:]
-        elif data['transaction_category'] == "转账-退款" or data['transaction_category'] == "微信红包-退款":
+        if data['transaction_category'] == "转账-退款" or data['transaction_category'] == "微信红包-退款":
             return "退款"
-        elif '(' in self.payee and ')' in self.payee and self.notes == "Transfer":
-            match = re.search(r'\((.*?)\)', self.payee)  # 提取 account 中的数字部分
+        if '(' in self.payee and ')' in self.payee and self.notes == "Transfer":
+            match = re.search(r'\((.*?)\)', self.payee)
             if match:
                 return match.group(1)
-        else:
-            return self.general_payee(data, ownerid)
+        if selected_mapping_key:
+            mapped = self._payee_from_mapping_key(selected_mapping_key, data, ownerid)
+            if mapped:
+                return self._finalize_payee(data, mapped)
+            return self._finalize_payee(data, self.payee)
+        return self.general_payee(data, ownerid)
 
     def general_payee(self, data, ownerid):
         payee = self.payee
-        matching_keys = [k for k in self.key_list if k in self.payee or k in self.notes]  # 通过列表推导式获取所有匹配的key形成新的列表
+        matching_keys = [k for k in self.key_list if k in self.payee or k in self.notes]
         max_order = None
-        for matching_key in matching_keys:  # 遍历所有匹配的key，获取最大的优先级
-            # 从缓存的映射数据中查找
+        for matching_key in matching_keys:
             expense_instance = next((m for m in self._expense_mappings if m.key == matching_key), None)
-            matching_max_order = None  # 每次循环初始化
-            if expense_instance and expense_instance.expend:  # 通过Expenses及Payee计算优先级
+            matching_max_order = None
+            if expense_instance and expense_instance.expend:
                 expend_instance_priority = expense_instance.expend.account.count(":") * 100
                 payee_instance_priority = 50 if expense_instance.payee else 0
                 matching_max_order = expend_instance_priority + payee_instance_priority
 
             if matching_max_order is not None and (
-                    max_order is None or matching_max_order > max_order):  # 如果匹配到的key的matching_max_order大于max_order，则更新max_order
+                    max_order is None or matching_max_order > max_order):
                 max_order = matching_max_order
 
                 if expense_instance is not None and expense_instance.payee is not None and expense_instance.payee != '':
                     payee = expense_instance.payee
 
-            # 如果匹配到的key的matching_max_order等于max_order，则取原始payee。这样做的目的是为了防止多个key的matching_max_order相同，但payee不同的情况
-            # 原本是想要多个payee一起展示方便选择，但是实际发现实现较复杂。如果最大优先级冲突，则将payee更新为原始payee.
             elif matching_max_order is not None and (max_order is None or matching_max_order == max_order):
                 payee = self.payee
 
-        if data['bill_identifier'] == BILL_ALI and payee == "":
-            return data['counterparty']
-        elif data['bill_identifier'] == BILL_WECHAT and payee == "":
-            payee = data['counterparty']
-            if payee == "/":
-                return data['transaction_time']
-        return payee
+        return self._finalize_payee(data, payee)
 
 
 def get_shouzhi(data): #TODO
@@ -521,11 +563,15 @@ def get_shouzhi(data): #TODO
     loss = "-"
 
     if shouzhi == "支出":
+        if data.get("bill_identifier") == BILL_ALI and data.get("transaction_status") == "退款成功":
+            return loss, high
         return high, loss
     elif shouzhi == "收入":
         return loss, high
     elif shouzhi in ["/", "不计收支"]:
         if data['bill_identifier'] == BILL_ALI:
+            if data.get("transaction_status") == "退款成功":
+                return loss, high
             if data['commodity'] == "信用卡还款":
                 return high, loss
             elif "亲情卡" in data['payment_method']:

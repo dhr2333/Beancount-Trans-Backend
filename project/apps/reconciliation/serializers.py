@@ -167,7 +167,11 @@ class ReconciliationStartSerializer(serializers.Serializer):
         help_text="默认币种（如果存在CNY则返回CNY，否则返回第一个币种）"
     )
     is_first_reconciliation = serializers.BooleanField(
-        help_text="是否首次对账（True=首次，使用 Equity:Opening-Balances；False=后续，使用 Equity:Adjustments）"
+        help_text="是否首次对账（True=首次固定 Equity:Opening-Balances；False=后续使用 default_allocation_account）"
+    )
+    default_allocation_account = serializers.CharField(
+        max_length=128,
+        help_text="差额分配默认账户（首次为 Equity:Opening-Balances，非首次为用户配置的对账兜底账户）"
     )
     last_reconciliation_date = serializers.DateField(
         required=False,
