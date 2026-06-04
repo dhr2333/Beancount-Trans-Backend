@@ -45,7 +45,58 @@ class TestReconciliationAPI:
         assert isinstance(response.data['is_first_reconciliation'], bool)
         # 首次对账应该返回 True（该账户还没有完成过对账任务）
         assert response.data['is_first_reconciliation'] is True
+        assert response.data['default_allocation_account'] == 'Equity:Opening-Balances'
     
+    def test_start_reconciliation_default_allocation_account_from_config(
+        self, user, account, scheduled_task_pending, mock_bean_file_path,
+        mock_reconciliation_bean_path, mock_ensure_reconciliation_included
+    ):
+        """测试非首次对账时 default_allocation_account 来自用户 FormatConfig"""
+        from django.contrib.contenttypes.models import ContentType
+        from project.apps.translate.models import FormatConfig
+
+        bean_content = """
+2025-01-01 open Assets:Savings:Bank:ICBC CNY
+
+2025-01-15 * "测试交易"
+    Assets:Savings:Bank:ICBC 1000.00 CNY
+    Income:Salary -1000.00 CNY
+"""
+        with open(mock_bean_file_path, 'w', encoding='utf-8') as f:
+            f.write(bean_content)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        execute_response = client.post(
+            f'/api/reconciliation/tasks/{scheduled_task_pending.id}/execute/',
+            {
+                'actual_balance': '1000.00',
+                'currency': 'CNY',
+                'as_of_date': str(date.today())
+            },
+            format='json'
+        )
+        assert execute_response.status_code == status.HTTP_200_OK
+
+        config = FormatConfig.get_user_config(user)
+        config.reconciliation_fallback_account = 'Equity:Custom-Adjustments'
+        config.save()
+
+        content_type = ContentType.objects.get_for_model(Account)
+        second_task = ScheduledTask.objects.create(
+            task_type='reconciliation',
+            content_type=content_type,
+            object_id=account.id,
+            scheduled_date=date.today(),
+            status='pending'
+        )
+
+        response = client.post(f'/api/reconciliation/tasks/{second_task.id}/start/')
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['is_first_reconciliation'] is False
+        assert response.data['default_allocation_account'] == 'Equity:Custom-Adjustments'
+
     def test_start_reconciliation_is_first_reconciliation_logic(self, user, account, scheduled_task_pending, mock_bean_file_path, mock_reconciliation_bean_path, mock_ensure_reconciliation_included):
         """测试 is_first_reconciliation 逻辑：首次对账返回 True，后续对账返回 False"""
         from django.contrib.contenttypes.models import ContentType
@@ -94,6 +145,7 @@ class TestReconciliationAPI:
         response2 = client.post(f'/api/reconciliation/tasks/{second_task.id}/start/')
         assert response2.status_code == status.HTTP_200_OK
         assert response2.data['is_first_reconciliation'] is False
+        assert response2.data['default_allocation_account'] == 'Equity:Adjustments'
     
     def test_start_reconciliation_task_not_exists_returns_404(self, user):
         """测试待办不存在时返回 404"""

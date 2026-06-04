@@ -15,6 +15,13 @@ class FormatConfig(models.Model):
     show_discount = models.BooleanField(default=True)
     income_template = models.CharField(max_length=50,default='Income:Discount',null=True, blank=True)
     commission_template = models.CharField(max_length=50,default='Expenses:Finance:Commission', null=True, blank=True)
+    reconciliation_fallback_account = models.CharField(
+        max_length=128,
+        default='Equity:Adjustments',
+        null=True,
+        blank=True,
+        help_text="非首次对账时差额分配的默认兜底账户"
+    )
     owner = models.ForeignKey(User, related_name='format', on_delete=models.CASCADE)
     currency = models.CharField(
         max_length=24,
@@ -85,6 +92,7 @@ class FormatConfig(models.Model):
                 'show_discount': True,
                 'income_template': 'Income:Discount',
                 'commission_template': 'Expenses:Finance:Commission',
+                'reconciliation_fallback_account': 'Equity:Adjustments',
                 'currency': 'CNY',
                 'ai_model': 'BERT',
                 'parsing_mode_preference': 'review'

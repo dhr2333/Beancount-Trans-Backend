@@ -14,6 +14,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
 from project.apps.common.filters import ScheduledTaskUserFilterBackend
+from project.apps.translate.models import FormatConfig
 
 from .models import ScheduledTask
 from .serializers import (
@@ -166,12 +167,22 @@ class ScheduledTaskViewSet(ModelViewSet):
             if revoked and getattr(revoked, 'reconciliation_transaction_items', None):
                 last_reconciliation_transaction_items = revoked.reconciliation_transaction_items
 
+        config = FormatConfig.get_user_config(request.user)
+        is_first_reconciliation = account.is_first_reconciliation()
+        if is_first_reconciliation:
+            default_allocation_account = 'Equity:Opening-Balances'
+        else:
+            default_allocation_account = (
+                config.reconciliation_fallback_account or 'Equity:Adjustments'
+            )
+
         data = {
             'balances': non_zero_balances,
             'account_name': account.account,
             'as_of_date': date.today(),
             'default_currency': default_currency,
-            'is_first_reconciliation': account.is_first_reconciliation(),
+            'is_first_reconciliation': is_first_reconciliation,
+            'default_allocation_account': default_allocation_account,
             'last_reconciliation_date': last_reconciliation_date,
             'last_completed_task_id': last_completed_task_id,
             'last_reconciliation_transaction_items': last_reconciliation_transaction_items or [],
