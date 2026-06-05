@@ -83,7 +83,10 @@ class AccountHandler:
         """获取资产映射的标签列表"""
         return self.asset_tags
 
-    def get_account(self, data, ownerid):
+    def get_account(self, data, ownerid, fallback_account=None):
+        from project.apps.translate.utils import DEFAULT_FALLBACK_ACCOUNT
+        if fallback_account is None:
+            fallback_account = DEFAULT_FALLBACK_ACCOUNT
         self.initialize_key(data)
         self.initialize_key_list(ownerid)  # 根据收支情况获取数据库中key的所有值，将其处理为列表
         self.initialize_type(data)
@@ -112,7 +115,7 @@ class AccountHandler:
                 account = wechatpay_get_expense_account(self, actual_assets, ownerid)
         elif self.balance == "/" or self.balance == "不计收支":  # 收/支栏 值为/
             if self.bill == BILL_ALI:
-                account = alipay_get_balance_account(self, data, actual_assets, ownerid)
+                account = alipay_get_balance_account(self, data, actual_assets, ownerid, fallback_account)
             elif self.bill == BILL_WECHAT:
                 account = wechatpay_get_balance_account(self, data, actual_assets, ownerid)
 

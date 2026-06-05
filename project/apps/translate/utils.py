@@ -15,7 +15,14 @@ BILL_CCB_DEBIT = "CCB_Debit"
 ASSETS_OTHER = "Assets:Other"
 EXPENSES_OTHER = "Expenses:Other"  # 无法分类的支出
 INCOME_OTHER = "Income:Other"
-OPENBALANCE = "Equity:OpenBalance"  #TODO，取消硬编码
+DEFAULT_FALLBACK_ACCOUNT = "Equity:Adjustments"
+
+
+def get_fallback_account(config) -> str:
+    if config is None:
+        return DEFAULT_FALLBACK_ACCOUNT
+    return getattr(config, 'reconciliation_fallback_account', None) or DEFAULT_FALLBACK_ACCOUNT
+
 
 TIME_BREAKFAST_START = time(6)
 TIME_BREAKFAST_END = time(10)

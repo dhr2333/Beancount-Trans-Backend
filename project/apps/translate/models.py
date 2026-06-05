@@ -20,7 +20,7 @@ class FormatConfig(models.Model):
         default='Equity:Adjustments',
         null=True,
         blank=True,
-        help_text="非首次对账时差额分配的默认兜底账户"
+        help_text="无法匹配资产账户时的默认兜底账户，也用于非首次对账差额分配"
     )
     owner = models.ForeignKey(User, related_name='format', on_delete=models.CASCADE)
     currency = models.CharField(

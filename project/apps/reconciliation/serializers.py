@@ -171,7 +171,7 @@ class ReconciliationStartSerializer(serializers.Serializer):
     )
     default_allocation_account = serializers.CharField(
         max_length=128,
-        help_text="差额分配默认账户（首次为 Equity:Opening-Balances，非首次为用户配置的对账兜底账户）"
+        help_text="差额分配默认账户（首次为 Equity:Opening-Balances，非首次为用户配置的兜底账户）"
     )
     last_reconciliation_date = serializers.DateField(
         required=False,

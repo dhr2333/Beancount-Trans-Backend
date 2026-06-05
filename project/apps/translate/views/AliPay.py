@@ -5,7 +5,7 @@ import re
 from project.apps.maps.models import Assets
 from typing import Dict, Optional
 
-from project.apps.translate.utils import ASSETS_OTHER, BILL_ALI, EXPENSES_OTHER, OPENBALANCE, pattern
+from project.apps.translate.utils import ASSETS_OTHER, BILL_ALI, EXPENSES_OTHER, pattern
 from project.apps.translate.services.mapping_provider import extract_account_string
 
 ALIPAY_PAYMENT_STATUSES = frozenset({
@@ -134,7 +134,7 @@ def alipay_get_income_account(self, assets, ownerid):
             return ASSETS_OTHER  # 提取到的数字不在列表中，说明该账户不在数据库中，需要手动对账
 
 
-def alipay_get_balance_account(self, data, assets, ownerid):
+def alipay_get_balance_account(self, data, assets, ownerid, fallback_account='Equity:Adjustments'):
     # account = "Unknown-Account"  # 方便排查问题
     account = self.account
     if self.type == "转账收款到余额宝":
@@ -160,7 +160,7 @@ def alipay_get_balance_account(self, data, assets, ownerid):
     elif self.type == "提现-实时提现" or self.type == "提现-快速提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
         account = assets["ALIPAY"]
     elif "亲情卡" in data['payment_method']:
-        account = OPENBALANCE
+        account = fallback_account
     else:
         result = data['payment_method']
         for key in self.key_list:

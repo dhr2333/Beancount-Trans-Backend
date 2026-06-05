@@ -5,6 +5,7 @@ from project.apps.translate.services.handlers import AccountHandler, ExpenseHand
 from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
 from project.apps.translate.services.tag_merger import merge_tags
+from project.apps.translate.utils import get_fallback_account
 
 
 def single_parse_transaction(
@@ -49,7 +50,8 @@ def single_parse_transaction(
         payee = payee_handler.get_payee(
             row, owner_id, selected_mapping_key=selected_expense_key
         )
-        account = account_handler.get_account(row, owner_id)
+        fallback_account = get_fallback_account(config)
+        account = account_handler.get_account(row, owner_id, fallback_account=fallback_account)
         commission = get_commission(row)
         installment_granularity = get_installment_granularity(row)
         installment_cycle = get_installment_cycle(row)

@@ -40,5 +40,6 @@ def get_user_config(user=None):
         show_discount = True,
         income_template = None,
         commission_template = None,
+        reconciliation_fallback_account = 'Equity:Adjustments',
         currency = 'CNY'
     )
