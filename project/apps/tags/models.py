@@ -57,56 +57,58 @@ class Tag(BaseModel):
             except Tag.DoesNotExist:
                 pass
 
-        # 如果没有父标签，但name中包含斜杠，自动创建父标签
-        if not self.parent and '/' in self.name:
+        # 根据标签路径计算父标签：仅当提交完整路径或显式重命名为根标签时更新 parent
+        if '/' in self.name:
             parent_tag_path = '/'.join(self.name.split('/')[:-1])
-            # 提取最后一个部分作为实际的name
             self.name = self.name.split('/')[-1]
             try:
-                # 尝试获取已存在的父标签
-                self.parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
+                new_parent = self._get_tag_by_path(parent_tag_path)
+                if new_parent.pk == self.pk:
+                    raise ValidationError("标签不能成为自己的父标签")
+                if self.parent != new_parent:
+                    self.parent = new_parent
             except Tag.DoesNotExist:
-                # 自动创建父标签
                 self.parent = self._create_parent_tag(parent_tag_path)
+        elif name_changed:
+            self.parent = None
 
         super().save(*args, **kwargs)
 
-        # 如果enable状态发生变化，同步更新子标签状态
-        if enable_changed and not self.enable:
-            self._disable_children()
+        if enable_changed:
+            if self.enable:
+                self._enable_ancestors()
+            else:
+                self._disable_children()
+
+    def _get_tag_by_path(self, path):
+        """根据完整路径查找标签"""
+        if '/' in path:
+            parent_path = '/'.join(path.split('/')[:-1])
+            leaf_name = path.split('/')[-1]
+            parent_tag = self._get_tag_by_path(parent_path)
+            return Tag.objects.get(name=leaf_name, parent=parent_tag, owner=self.owner)
+        return Tag.objects.get(name=path, parent__isnull=True, owner=self.owner)
 
     def _create_parent_tag(self, parent_tag_path):
         """递归创建父标签（参考 Account 的实现）"""
         try:
-            # 尝试获取父标签
-            parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
-            return parent
+            return self._get_tag_by_path(parent_tag_path)
         except Tag.DoesNotExist:
-            # 如果父标签不存在，递归创建
-            if '/' in parent_tag_path:
-                # 还有更上级的父标签，先创建上级父标签
-                grandparent_path = '/'.join(parent_tag_path.split('/')[:-1])
-                grandparent = self._create_parent_tag(grandparent_path)
-
-                # 提取当前层级的标签名
-                current_name = parent_tag_path.split('/')[-1]
-
-                # 创建当前父标签
-                parent = Tag.objects.create(
-                    name=current_name,
-                    owner=self.owner,
-                    parent=grandparent,
-                    enable=True
-                )
-            else:
-                # 这是根级标签，直接创建
-                parent = Tag.objects.create(
-                    name=parent_tag_path,
-                    owner=self.owner,
-                    enable=True
-                )
-
+            parent = Tag(
+                name=parent_tag_path,
+                owner=self.owner,
+                enable=True
+            )
+            parent.save()
             return parent
+
+    def _enable_ancestors(self):
+        """启用所有祖先标签"""
+        current = self.parent
+        while current:
+            if Tag.objects.filter(pk=current.pk, enable=False).update(enable=True):
+                current.enable = True
+            current = current.parent
 
     def _disable_children(self):
         """递归禁用所有子标签"""

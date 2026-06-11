@@ -1,5 +1,9 @@
+from django.db import IntegrityError
 from rest_framework import serializers
+
 from project.apps.tags.models import Tag
+
+_DUPLICATE_TAG_MSG = '该标签已存在，请勿重复添加'
 
 
 class TagTreeSerializer(serializers.ModelSerializer):
@@ -151,7 +155,33 @@ class TagSerializer(serializers.ModelSerializer):
             if char in value:
                 raise serializers.ValidationError(f"标签名称不能包含字符: '{char}'")
 
-        return value.strip()
+        path = value.strip()
+        request = self.context.get('request')
+        if request and getattr(request.user, 'is_authenticated', False):
+            if self._tag_with_path_exists(path, request.user):
+                raise serializers.ValidationError(_DUPLICATE_TAG_MSG)
+
+        return path
+
+    def _tag_with_path_exists(self, path, owner):
+        """检查指定完整路径的标签是否已存在"""
+        leaf_name = path.split('/')[-1] if '/' in path else path
+        qs = Tag.objects.filter(name=leaf_name, owner=owner)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        return any(tag.get_full_path() == path for tag in qs)
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
+
+    def update(self, instance, validated_data):
+        try:
+            return super().update(instance, validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
 
     def validate(self, data):
         """验证整体数据"""
