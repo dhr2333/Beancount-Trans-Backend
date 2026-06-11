@@ -324,39 +324,51 @@ class TemplateDetailSerializer(serializers.ModelSerializer):
 
 
 class ExpenseBatchUpdateSerializer(serializers.Serializer):
-    """支出映射批量更新序列化器"""
+    """支出映射批量更新账户序列化器"""
     expense_ids = serializers.ListField(
         child=serializers.IntegerField(),
         help_text="要更新的支出映射ID列表"
     )
     expend_id = serializers.IntegerField(
-        required=False,
-        allow_null=True,
         help_text="新的支出账户ID"
-    )
-    currency = serializers.CharField(
-        required=False,
-        allow_null=True,
-        allow_blank=True,
-        max_length=24,
-        help_text="新的货币代码"
     )
 
     def validate_expense_ids(self, value):
-        """验证支出映射ID列表"""
         if not value:
             raise serializers.ValidationError("支出映射ID列表不能为空")
         return value
 
-    def validate(self, data):
-        """验证整体数据"""
-        expend_id = data.get('expend_id')
-        currency = data.get('currency')
 
-        if expend_id is None and currency is None:
-            raise serializers.ValidationError("至少需要指定一个要更新的字段")
+class IncomeBatchUpdateSerializer(serializers.Serializer):
+    """收入映射批量更新账户序列化器"""
+    income_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text="要更新的收入映射ID列表"
+    )
+    income_id = serializers.IntegerField(
+        help_text="新的收入账户ID"
+    )
 
-        return data
+    def validate_income_ids(self, value):
+        if not value:
+            raise serializers.ValidationError("收入映射ID列表不能为空")
+        return value
+
+
+class AssetsBatchUpdateSerializer(serializers.Serializer):
+    """资产映射批量更新账户序列化器"""
+    assets_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        help_text="要更新的资产映射ID列表"
+    )
+    assets_id = serializers.IntegerField(
+        help_text="新的资产账户ID"
+    )
+
+    def validate_assets_ids(self, value):
+        if not value:
+            raise serializers.ValidationError("资产映射ID列表不能为空")
+        return value
 
 
 class TemplateApplySerializer(serializers.Serializer):

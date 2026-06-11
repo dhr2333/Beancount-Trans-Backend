@@ -8,10 +8,12 @@ from project.apps.maps.models import Expense, Assets, Income, Template, Template
 from project.apps.account.models import Account
 from project.apps.common.permissions import TemplatePermission, IsOwnerOrAdminReadWriteOnly
 from project.apps.common.views import BaseMappingViewSet
+from project.apps.maps.batch_update import BatchUpdateMappingError, batch_update_mapping_accounts
 from project.apps.maps.serializers import (
-    AssetsSerializer, ExpenseSerializer, IncomeSerializer, 
+    AssetsSerializer, ExpenseSerializer, IncomeSerializer,
     TemplateItemSerializer, TemplateListSerializer, TemplateDetailSerializer,
-    TemplateApplySerializer, ExpenseBatchUpdateSerializer
+    TemplateApplySerializer, ExpenseBatchUpdateSerializer,
+    IncomeBatchUpdateSerializer, AssetsBatchUpdateSerializer,
 )
 from django.shortcuts import get_object_or_404
 
@@ -123,38 +125,17 @@ class ExpenseViewSet(BaseMappingViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        expense_ids = data['expense_ids']
-        expend_id = data.get('expend_id')
-        currency = data.get('currency')
-
-        # 验证支出映射是否属于当前用户
-        expenses = Expense.objects.filter(id__in=expense_ids, owner=request.user)
-        if len(expenses) != len(expense_ids):
-            return Response(
-                {"error": "部分支出映射不存在或无权限访问"}, 
-                status=status.HTTP_400_BAD_REQUEST
+        try:
+            updated_count = batch_update_mapping_accounts(
+                user=request.user,
+                model=Expense,
+                mapping_ids=data['expense_ids'],
+                account_id=data['expend_id'],
+                account_fk_name='expend_id',
+                mapping_label='支出映射',
             )
-
-        # 验证账户是否存在
-        if expend_id:
-            from project.apps.account.models import Account
-            try:
-                account = Account.objects.get(id=expend_id, owner=request.user)
-            except Account.DoesNotExist:
-                return Response(
-                    {"error": "指定的支出账户不存在或无权限访问"}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        # 批量更新
-        updated_count = 0
-        for expense in expenses:
-            if expend_id is not None:
-                expense.expend_id = expend_id
-            if currency is not None:
-                expense.currency = currency
-            expense.save()
-            updated_count += 1
+        except BatchUpdateMappingError as exc:
+            return Response({"error": exc.message}, status=exc.status_code)
 
         return Response({
             "message": f"成功更新 {updated_count} 个支出映射",
@@ -249,6 +230,34 @@ class AssetsViewSet(BaseMappingViewSet):
     #         'tags': serializer.data
     #     })
 
+    @action(detail=False, methods=['post'])
+    def batch_update_account(self, request):
+        """批量更新资产映射的账户"""
+        if request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
+        serializer = AssetsBatchUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        try:
+            updated_count = batch_update_mapping_accounts(
+                user=request.user,
+                model=Assets,
+                mapping_ids=data['assets_ids'],
+                account_id=data['assets_id'],
+                account_fk_name='assets_id',
+                mapping_label='资产映射',
+            )
+        except BatchUpdateMappingError as exc:
+            return Response({"error": exc.message}, status=exc.status_code)
+
+        return Response({
+            "message": f"成功更新 {updated_count} 个资产映射",
+            "updated_count": updated_count
+        })
+
 
 class IncomeViewSet(BaseMappingViewSet):
     """收入映射管理视图集"""
@@ -336,6 +345,34 @@ class IncomeViewSet(BaseMappingViewSet):
     #         'message': f'成功移除 {len(tag_ids)} 个标签',
     #         'tags': serializer.data
     #     })
+
+    @action(detail=False, methods=['post'])
+    def batch_update_account(self, request):
+        """批量更新收入映射的账户"""
+        if request.user.is_anonymous:
+            raise PermissionDenied("Permission denied. Please log in.")
+
+        serializer = IncomeBatchUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        try:
+            updated_count = batch_update_mapping_accounts(
+                user=request.user,
+                model=Income,
+                mapping_ids=data['income_ids'],
+                account_id=data['income_id'],
+                account_fk_name='income_id',
+                mapping_label='收入映射',
+            )
+        except BatchUpdateMappingError as exc:
+            return Response({"error": exc.message}, status=exc.status_code)
+
+        return Response({
+            "message": f"成功更新 {updated_count} 个收入映射",
+            "updated_count": updated_count
+        })
 
 
 class TemplateViewSet(ModelViewSet):
