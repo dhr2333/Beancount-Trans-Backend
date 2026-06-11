@@ -85,7 +85,7 @@ class TestTagRename:
         assert tag.parent is None
 
 
-class TestTagEnableSync:
+class TestTagEnableIndependent:
     def test_toggle_enable_keeps_path(self, user):
         """仅切换启用状态时不应改变标签路径。"""
         tag = Tag(name='Property/Discretionary', owner=user)
@@ -107,7 +107,7 @@ class TestTagEnableSync:
         assert tag.get_full_path() == 'Property/Discretionary'
         assert tag.parent_id == parent.id
 
-    def test_disable_parent_disables_children(self, user):
+    def test_disable_parent_does_not_affect_children(self, user):
         parent = Tag(name='Property', owner=user, enable=True)
         parent.save()
         child = Tag(name='Discretionary', owner=user, parent=parent, enable=True)
@@ -118,9 +118,9 @@ class TestTagEnableSync:
 
         child.refresh_from_db()
         assert parent.enable is False
-        assert child.enable is False
+        assert child.enable is True
 
-    def test_enable_child_enables_ancestors(self, user):
+    def test_enable_child_does_not_affect_ancestors(self, user):
         root = Tag(name='Property', owner=user, enable=False)
         root.save()
         child = Tag(name='Discretionary', owner=user, parent=root, enable=False)
@@ -132,21 +132,4 @@ class TestTagEnableSync:
         root.refresh_from_db()
         child.refresh_from_db()
         assert child.enable is True
-        assert root.enable is True
-
-    def test_enable_nested_child_enables_all_ancestors(self, user):
-        tag = Tag(name='A/B/C', owner=user)
-        tag.save()
-        root = tag.parent.parent
-        mid = tag.parent
-        Tag.objects.filter(pk__in=[root.pk, mid.pk, tag.pk]).update(enable=False)
-
-        tag.enable = True
-        tag.save()
-
-        root.refresh_from_db()
-        mid.refresh_from_db()
-        tag.refresh_from_db()
-        assert root.enable is True
-        assert mid.enable is True
-        assert tag.enable is True
+        assert root.enable is False

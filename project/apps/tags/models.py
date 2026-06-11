@@ -41,19 +41,13 @@ class Tag(BaseModel):
                 current = current.parent
 
     def save(self, *args, **kwargs):
-        """保存标签时自动创建父标签，并同步状态"""
-        # 检查enable字段是否发生变化
-        enable_changed = False
+        """保存标签时自动创建父标签"""
         name_changed = False
-        old_name = None
 
         if self.pk:
             try:
                 old_instance = Tag.objects.get(pk=self.pk)
-                enable_changed = old_instance.enable != self.enable
                 name_changed = old_instance.name != self.name
-                if name_changed:
-                    old_name = old_instance.name
             except Tag.DoesNotExist:
                 pass
 
@@ -73,12 +67,6 @@ class Tag(BaseModel):
             self.parent = None
 
         super().save(*args, **kwargs)
-
-        if enable_changed:
-            if self.enable:
-                self._enable_ancestors()
-            else:
-                self._disable_children()
 
     def _get_tag_by_path(self, path):
         """根据完整路径查找标签"""
@@ -101,21 +89,6 @@ class Tag(BaseModel):
             )
             parent.save()
             return parent
-
-    def _enable_ancestors(self):
-        """启用所有祖先标签"""
-        current = self.parent
-        while current:
-            if Tag.objects.filter(pk=current.pk, enable=False).update(enable=True):
-                current.enable = True
-            current = current.parent
-
-    def _disable_children(self):
-        """递归禁用所有子标签"""
-        for child in self.children.all():
-            if child.enable:
-                child.enable = False
-                child.save()
 
     def has_children(self):
         """检查是否存在子标签"""
