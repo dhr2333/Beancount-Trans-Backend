@@ -148,6 +148,8 @@ class SingleBillAnalyzeView(APIView):
                         "formatted": formatted_data.get("formatted"),
                         "ai_choose": formatted_data.get("selected_expense_key"),
                         "ai_candidates": formatted_data.get("expense_candidates_with_score", []),
+                        "counterparty": formatted_data.get("counterparty", ""),
+                        "commodity": formatted_data.get("commodity", ""),
                     })
                 else:
                     results.append({
@@ -226,7 +228,9 @@ class ReparseEntryView(APIView):
                 "id": entry_id,
                 "formatted": formatted,
                 "ai_choose": selected_key,
-                "ai_candidates": parsed_entry['expense_candidates_with_score']
+                "ai_candidates": parsed_entry['expense_candidates_with_score'],
+                "counterparty": original_row.get("counterparty", ""),
+                "commodity": original_row.get("commodity", ""),
             }, status=status.HTTP_200_OK)
         except Exception as e:
             logger.exception(e)

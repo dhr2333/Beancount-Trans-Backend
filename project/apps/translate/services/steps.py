@@ -198,6 +198,8 @@ class CacheStep(Step):
         for entry in parsed_data:
             cache_key = entry['cache_key']
             original_row = entry.pop('_original_row')
+            entry['counterparty'] = original_row.get('counterparty') or ''
+            entry['commodity'] = original_row.get('commodity') or ''
             cache_data = {
                 "parsed_entry": entry,
                 "original_row": original_row,
@@ -225,6 +227,8 @@ class FormatStep(Step):
                 "formatted": formatted,
                 "selected_expense_key": entry.get("selected_expense_key"),
                 "expense_candidates_with_score": entry.get("expense_candidates_with_score", []),
+                "counterparty": entry.get("counterparty", ""),
+                "commodity": entry.get("commodity", ""),
                 # "uuid": entry.get("uuid"),
                 "id": entry.get("cache_key"),
             }
