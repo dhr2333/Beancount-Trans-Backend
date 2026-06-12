@@ -325,7 +325,7 @@ class TestParseReviewConfirmView:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, invalid_data)
         
@@ -366,7 +366,7 @@ class TestParseReviewConfirmView:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, invalid_data)
         
@@ -406,6 +406,30 @@ class TestParseReviewConfirmView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '已完成或已取消' in response.data['error']
+
+    def test_confirm_write_review_expired(self, user, parse_review_task, parse_file):
+        """测试审核截止时间已过后拒绝确认写入"""
+        self.client.force_authenticate(user=user)
+
+        expired_data = {
+            'file_id': parse_file.file_id,
+            'formatted_data': [
+                {
+                    'uuid': 'entry-1',
+                    'formatted': '2025-01-20 * "Test" "Transaction"\n    Expenses:Test  100.00 CNY\n    Assets:Test  -100.00 CNY\n',
+                    'edited_formatted': '2025-01-20 * "Test" "Transaction"\n    Expenses:Test  100.00 CNY\n    Assets:Test  -100.00 CNY\n',
+                    'original_row': {},
+                }
+            ],
+            'created_at': time.time() - 86400,
+            'review_expires_at': time.time() - 3600,
+        }
+        ParseReviewService.save_parse_result(parse_file.file_id, expired_data)
+
+        response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/confirm')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '已过期' in response.data['error']
 
 
 @pytest.mark.django_db
@@ -482,7 +506,7 @@ class TestCancelParseView:
             'file_id': parse_file.file_id,
             'formatted_data': [],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, mock_data)
         

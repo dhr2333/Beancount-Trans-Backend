@@ -58,7 +58,7 @@ def mock_parse_result_data_for_serializer(parse_file_for_serializer):
             }
         ],
         'created_at': current_time,
-        'expires_at': current_time + 86400  # 24小时后
+        'review_expires_at': current_time + 86400  # 24小时后
     }
 
 
@@ -66,56 +66,45 @@ def mock_parse_result_data_for_serializer(parse_file_for_serializer):
 class TestScheduledTaskListSerializerParseReview:
     """ScheduledTaskListSerializer 解析审核相关测试"""
     
-    def test_expires_at_for_parse_review(self, user, parse_review_task_for_serializer, parse_file_for_serializer, mock_parse_result_data_for_serializer):
-        """测试解析待办任务返回 expires_at 字段"""
-        # 保存解析结果到缓存
+    def test_review_expires_at_for_parse_review(self, user, parse_review_task_for_serializer, parse_file_for_serializer, mock_parse_result_data_for_serializer):
+        """测试解析待办任务返回 review_expires_at 字段"""
         ParseReviewService.save_parse_result(parse_file_for_serializer.file_id, mock_parse_result_data_for_serializer)
         
-        # 序列化任务
         serializer = ScheduledTaskListSerializer(parse_review_task_for_serializer)
         data = serializer.data
         
-        # 验证返回 expires_at 字段
-        assert 'expires_at' in data
-        assert data['expires_at'] == mock_parse_result_data_for_serializer['expires_at']
+        assert 'review_expires_at' in data
+        assert data['review_expires_at'] == mock_parse_result_data_for_serializer['review_expires_at']
     
-    def test_expires_at_for_parse_review_cache_not_exists(self, user, parse_review_task_for_serializer, parse_file_for_serializer):
-        """测试缓存不存在时返回 None"""
-        # 确保缓存不存在
-        from project.apps.translate.services.parse_review_service import ParseReviewService
+    def test_review_expires_at_for_parse_review_cache_not_exists(self, user, parse_review_task_for_serializer, parse_file_for_serializer):
+        """测试缓存不存在时回退到 task.created + 24h"""
         ParseReviewService.delete_parse_result(parse_file_for_serializer.file_id)
         
-        # 序列化任务（没有缓存数据）
         serializer = ScheduledTaskListSerializer(parse_review_task_for_serializer)
         data = serializer.data
         
-        # 验证 expires_at 为 None
-        assert 'expires_at' in data
-        assert data['expires_at'] is None
+        assert 'review_expires_at' in data
+        expected = parse_review_task_for_serializer.created.timestamp() + ParseReviewService.REVIEW_DEADLINE_SECONDS
+        assert data['review_expires_at'] == pytest.approx(expected, abs=1)
     
-    def test_expires_at_for_reconciliation(self, user, scheduled_task_pending):
-        """测试对账待办任务不返回 expires_at 字段（或返回 None）"""
-        # 序列化对账任务
+    def test_review_expires_at_for_reconciliation(self, user, scheduled_task_pending):
+        """测试对账待办任务不返回 review_expires_at"""
         serializer = ScheduledTaskListSerializer(scheduled_task_pending)
         data = serializer.data
         
-        # 验证 expires_at 为 None（对账任务不应该有 expires_at）
-        assert 'expires_at' in data
-        assert data['expires_at'] is None
+        assert 'review_expires_at' in data
+        assert data['review_expires_at'] is None
     
     def test_file_name_and_file_id_for_parse_review(self, user, parse_review_task_for_serializer, parse_file_for_serializer):
         """测试解析待办任务返回 file_name 和 file_id"""
-        # 序列化任务
         serializer = ScheduledTaskListSerializer(parse_review_task_for_serializer)
         data = serializer.data
         
-        # 验证返回 file_name 和 file_id
         assert 'file_name' in data
         assert 'file_id' in data
         assert data['file_name'] == parse_file_for_serializer.file.name
         assert data['file_id'] == parse_file_for_serializer.file_id
         
-        # 验证不返回 account_name 和 account_type
         assert 'account_name' in data
         assert 'account_type' in data
         assert data['account_name'] is None
@@ -123,42 +112,33 @@ class TestScheduledTaskListSerializerParseReview:
     
     def test_account_name_and_account_type_for_reconciliation(self, user, scheduled_task_pending, account):
         """测试对账待办任务返回 account_name 和 account_type"""
-        # 序列化对账任务
         serializer = ScheduledTaskListSerializer(scheduled_task_pending)
         data = serializer.data
         
-        # 验证返回 account_name 和 account_type
         assert 'account_name' in data
         assert 'account_type' in data
         assert data['account_name'] == account.account
         assert data['account_type'] == account.get_account_type()
         
-        # 验证不返回 file_name 和 file_id
         assert 'file_name' in data
         assert 'file_id' in data
         assert data['file_name'] is None
         assert data['file_id'] is None
     
-    def test_expires_at_updates_after_reparse(self, user, parse_review_task_for_serializer, parse_file_for_serializer, mock_parse_result_data_for_serializer):
-        """测试重新解析后 expires_at 更新"""
-        # 保存初始解析结果
+    def test_review_expires_at_updates_after_reparse(self, user, parse_review_task_for_serializer, parse_file_for_serializer, mock_parse_result_data_for_serializer):
+        """测试重新解析后 review_expires_at 更新"""
         ParseReviewService.save_parse_result(parse_file_for_serializer.file_id, mock_parse_result_data_for_serializer)
         
-        # 序列化任务，获取初始 expires_at
         serializer = ScheduledTaskListSerializer(parse_review_task_for_serializer)
-        initial_expires_at = serializer.data['expires_at']
+        initial_review_expires_at = serializer.data['review_expires_at']
         
-        # 更新缓存数据（模拟重新解析）
-        new_expires_at = time.time() + 86400  # 新的过期时间
+        new_review_expires_at = time.time() + 86400
         updated_data = mock_parse_result_data_for_serializer.copy()
-        updated_data['expires_at'] = new_expires_at
+        updated_data['review_expires_at'] = new_review_expires_at
         ParseReviewService.save_parse_result(parse_file_for_serializer.file_id, updated_data)
         
-        # 重新序列化任务
         serializer = ScheduledTaskListSerializer(parse_review_task_for_serializer)
-        updated_expires_at = serializer.data['expires_at']
+        updated_review_expires_at = serializer.data['review_expires_at']
         
-        # 验证 expires_at 已更新
-        assert updated_expires_at == new_expires_at
-        assert updated_expires_at != initial_expires_at
-
+        assert updated_review_expires_at == new_review_expires_at
+        assert updated_review_expires_at != initial_review_expires_at

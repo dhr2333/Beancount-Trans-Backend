@@ -118,8 +118,8 @@ class TestParseSingleFileTask:
         assert cached_data is not None
         assert cached_data['file_id'] == parse_file.file_id
         assert len(cached_data['formatted_data']) == 1
-        assert 'expires_at' in cached_data
-        assert cached_data['expires_at'] > time.time()
+        assert 'review_expires_at' in cached_data
+        assert cached_data['review_expires_at'] > time.time()
         
         # 验证缓存数据包含必要的字段
         entry = cached_data['formatted_data'][0]
@@ -212,16 +212,7 @@ class TestAutoConfirmExpiredParseReviews:
     @patch('project.apps.translate.utils.beancount_validator.BeancountValidator.validate_entries')
     @patch('project.utils.file.BeanFileManager.get_bean_file_path')
     def test_auto_confirm_expired_tasks(self, mock_get_bean_path, mock_validate, user, parse_review_task, parse_file, tmp_path):
-        """测试自动确认过期任务（基于 created 时间，超过24小时）"""
-        from datetime import timedelta
-        from django.utils import timezone
-        
-        # 设置任务的创建时间为25小时前（已过期）
-        expired_time = timezone.now() - timedelta(hours=25)
-        parse_review_task.created = expired_time
-        parse_review_task.save()
-        
-        # 创建缓存数据
+        """测试自动确认过期任务（基于 review_expires_at）"""
         expired_data = {
             'file_id': parse_file.file_id,
             'formatted_data': [
@@ -233,7 +224,7 @@ class TestAutoConfirmExpiredParseReviews:
                 }
             ],
             'created_at': time.time() - 86400,
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() - 3600,
         }
         ParseReviewService.save_parse_result(parse_file.file_id, expired_data)
         
@@ -263,15 +254,6 @@ class TestAutoConfirmExpiredParseReviews:
     @patch('project.utils.file.BeanFileManager.get_bean_file_path')
     def test_auto_confirm_expired_tasks_validation_error(self, mock_get_bean_path, mock_validate, user, parse_review_task, parse_file, tmp_path, caplog):
         """测试自动确认过期任务时 Beancount 语法错误，日志记录具体错误条目"""
-        from datetime import timedelta
-        from django.utils import timezone
-        
-        # 设置任务的创建时间为25小时前（已过期）
-        expired_time = timezone.now() - timedelta(hours=25)
-        parse_review_task.created = expired_time
-        parse_review_task.save()
-        
-        # 创建缓存数据（包含语法错误）
         expired_data = {
             'file_id': parse_file.file_id,
             'formatted_data': [
@@ -283,7 +265,7 @@ class TestAutoConfirmExpiredParseReviews:
                 }
             ],
             'created_at': time.time() - 86400,
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() - 3600,
         }
         ParseReviewService.save_parse_result(parse_file.file_id, expired_data)
         
@@ -312,16 +294,7 @@ class TestAutoConfirmExpiredParseReviews:
         assert any('entry-1' in rec.message for rec in caplog.records)
     
     def test_auto_confirm_expired_tasks_not_expired(self, user, parse_review_task, parse_file):
-        """测试未过期的任务不会被处理（基于 created 时间）"""
-        from datetime import timedelta
-        from django.utils import timezone
-        
-        # 设置任务的创建时间为23小时前（未过期）
-        recent_time = timezone.now() - timedelta(hours=23)
-        parse_review_task.created = recent_time
-        parse_review_task.save()
-        
-        # 创建缓存数据
+        """测试未过期的任务不会被处理（基于 review_expires_at）"""
         future_data = {
             'file_id': parse_file.file_id,
             'formatted_data': [
@@ -333,7 +306,7 @@ class TestAutoConfirmExpiredParseReviews:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400,
         }
         ParseReviewService.save_parse_result(parse_file.file_id, future_data)
         

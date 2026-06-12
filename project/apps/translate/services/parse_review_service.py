@@ -7,8 +7,12 @@
 import hashlib
 import json
 import logging
-from typing import Dict, List, Optional, Any
+import time
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from django.core.cache import cache
+
+if TYPE_CHECKING:
+    from project.apps.reconciliation.models import ScheduledTask
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +21,42 @@ class ParseReviewService:
     """解析结果缓存服务"""
     
     CACHE_KEY_PREFIX = 'parse_result'
-    # 须长于 auto_confirm 的 24h 窗口及 Celery Beat 调度间隔，避免到期确认时缓存已失效
-    DEFAULT_TIMEOUT = 27 * 3600  # 27 小时
+    REVIEW_DEADLINE_SECONDS = 24 * 3600  # 用户审核截止（对外）
+    # 须长于 REVIEW_DEADLINE 及 Celery Beat 调度间隔，避免到期自动写入时缓存已失效
+    DEFAULT_CACHE_TIMEOUT = 25 * 3600  # Redis TTL（对内）
+
+    @classmethod
+    def get_review_expires_at(
+        cls,
+        cached_data: Optional[Dict[str, Any]],
+        task: Optional['ScheduledTask'] = None,
+    ) -> Optional[float]:
+        """获取用户审核截止时间（Unix 时间戳，秒）。"""
+        if cached_data:
+            review_expires_at = cached_data.get('review_expires_at')
+            if review_expires_at is not None:
+                return float(review_expires_at)
+            created_at = cached_data.get('created_at')
+            if created_at is not None:
+                return float(created_at) + cls.REVIEW_DEADLINE_SECONDS
+        if task is not None and task.created is not None:
+            return task.created.timestamp() + cls.REVIEW_DEADLINE_SECONDS
+        return None
+
+    @classmethod
+    def is_review_expired(
+        cls,
+        cached_data: Optional[Dict[str, Any]],
+        task: Optional['ScheduledTask'] = None,
+        now: Optional[float] = None,
+    ) -> bool:
+        """判断解析待办是否已过用户审核截止时间。"""
+        expires_at = cls.get_review_expires_at(cached_data, task)
+        if expires_at is None:
+            return False
+        if now is None:
+            now = time.time()
+        return now >= expires_at
     
     @classmethod
     def _get_cache_key(cls, file_id: int) -> str:
@@ -31,9 +69,9 @@ class ParseReviewService:
         try:
             timeout = cache.ttl(cache_key)
             if timeout is None or timeout < 0:
-                timeout = cls.DEFAULT_TIMEOUT
+                timeout = cls.DEFAULT_CACHE_TIMEOUT
         except (AttributeError, TypeError):
-            timeout = cls.DEFAULT_TIMEOUT
+            timeout = cls.DEFAULT_CACHE_TIMEOUT
         return timeout
 
     @classmethod
@@ -93,13 +131,13 @@ class ParseReviewService:
         Args:
             file_id: 文件ID
             data: 解析结果数据，包含 formatted_data 等
-            timeout: 过期时间（秒），默认 30 小时（见 DEFAULT_TIMEOUT）
+            timeout: Redis 缓存 TTL（秒），默认见 DEFAULT_CACHE_TIMEOUT
             
         Returns:
             是否保存成功
         """
         if timeout is None:
-            timeout = cls.DEFAULT_TIMEOUT
+            timeout = cls.DEFAULT_CACHE_TIMEOUT
         
         cache_key = cls._get_cache_key(file_id)
         
@@ -154,10 +192,10 @@ class ParseReviewService:
         try:
             timeout = cache.ttl(cache_key)
             if timeout is None or timeout < 0:
-                timeout = cls.DEFAULT_TIMEOUT
+                timeout = cls.DEFAULT_CACHE_TIMEOUT
         except (AttributeError, TypeError):
             # RedisCache 后端可能不支持 ttl 方法，使用默认值
-            timeout = cls.DEFAULT_TIMEOUT
+            timeout = cls.DEFAULT_CACHE_TIMEOUT
         
         return cls.save_parse_result(file_id, cached_data, timeout=timeout)
     
@@ -195,10 +233,10 @@ class ParseReviewService:
         try:
             timeout = cache.ttl(cache_key)
             if timeout is None or timeout < 0:
-                timeout = cls.DEFAULT_TIMEOUT
+                timeout = cls.DEFAULT_CACHE_TIMEOUT
         except (AttributeError, TypeError):
             # RedisCache 后端可能不支持 ttl 方法，使用默认值
-            timeout = cls.DEFAULT_TIMEOUT
+            timeout = cls.DEFAULT_CACHE_TIMEOUT
         
         return cls.save_parse_result(file_id, cached_data, timeout=timeout)
     
