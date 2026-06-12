@@ -8,6 +8,18 @@ from typing import Dict, Optional
 from project.apps.translate.utils import ASSETS_OTHER, BILL_ALI, EXPENSES_OTHER, pattern
 from project.apps.translate.services.mapping_provider import extract_account_string
 
+ALIPAY_FALLBACK_PAYMENT_MARKERS = (
+    "亲情卡",
+    "他人代付账户",
+    "已购买商品抵扣",
+)
+
+
+def alipay_uses_fallback_payment_method(payment_method: str) -> bool:
+    pm = payment_method or ""
+    return any(marker in pm for marker in ALIPAY_FALLBACK_PAYMENT_MARKERS)
+
+
 ALIPAY_PAYMENT_STATUSES = frozenset({
     "交易成功",
     "支付成功",
@@ -159,7 +171,7 @@ def alipay_get_balance_account(self, data, assets, ownerid, fallback_account='Eq
         account = ASSETS_OTHER  # 支付宝账单中银行卡充值到余额时没有任何银行的信息，需要手动对账
     elif self.type == "提现-实时提现" or self.type == "提现-快速提现":  # 利用账单中的"交易对方"与数据库中的"full"进行对比，若被包含可直接匹配assets
         account = assets["ALIPAY"]
-    elif "亲情卡" in data['payment_method']:
+    elif alipay_uses_fallback_payment_method(data['payment_method']):
         account = fallback_account
     else:
         result = data['payment_method']

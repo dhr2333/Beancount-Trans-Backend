@@ -54,8 +54,16 @@ class TestGetFallbackAccount:
 
 
 class TestAlipayGetBalanceAccount:
-    def test_family_card_uses_fallback_account(self):
-        data = _family_card_row()
+    @pytest.mark.parametrize(
+        "payment_method",
+        [
+            "亲情卡(凯义(王凯义))",
+            "他人代付账户",
+            "已购买商品抵扣",
+        ],
+    )
+    def test_special_payment_method_uses_fallback_account(self, payment_method):
+        data = _family_card_row(payment_method=payment_method)
         handler = AccountHandler(data)
         handler.type = data["commodity"]
 
@@ -95,6 +103,38 @@ class TestFamilyCardParseUsesFallbackAccount:
 
         parsed = single_parse_transaction(
             _family_card_row(),
+            user.id,
+            _parse_config(reconciliation_fallback_account="Equity:Custom-Fallback"),
+            None,
+        )
+        assert parsed["account"] == "Equity:Custom-Fallback"
+
+    @pytest.mark.parametrize(
+        "payment_method",
+        ["他人代付账户", "已购买商品抵扣"],
+    )
+    @patch("project.apps.translate.services.handlers.get_default_assets")
+    @patch("project.apps.translate.services.handlers.get_mapping_provider")
+    def test_special_payment_method_parse_uses_fallback_account(
+        self, mock_provider, mock_assets, user, payment_method
+    ):
+        mock_assets.return_value = {
+            "ALIPAY": "Assets:Digital:Alipay",
+            "WECHATPAY": "Assets:Digital:WeChat",
+            "WECHATFUND": "Assets:Digital:WeChatFund",
+            "ALIFUND": "Assets:Digital:Alifund",
+            "HUABEI": "Liabilities:Huabei",
+            "JIEBEI": "Liabilities:Jiebei",
+            "BEIYONGJIN": "Liabilities:Beiyongjin",
+        }
+        provider = MagicMock()
+        provider.get_expense_mappings.return_value = []
+        provider.get_income_mappings.return_value = []
+        provider.get_asset_mappings.return_value = []
+        mock_provider.return_value = provider
+
+        parsed = single_parse_transaction(
+            _family_card_row(payment_method=payment_method),
             user.id,
             _parse_config(reconciliation_fallback_account="Equity:Custom-Fallback"),
             None,

@@ -94,6 +94,9 @@ class AccountHandler:
         actual_assets = get_default_assets(ownerid=ownerid)
         account = self.account
 
+        if self.bill == BILL_ALI and alipay_uses_fallback_payment_method(data.get('payment_method')):
+            return fallback_account
+
         # 银行账单同样使用 transaction_type「收入/支出」，必须先按 bill 分流，否则会落入支付宝/微信分支且无法匹配，保持默认 Assets:Other
         if self.bill == BILL_BOC_DEBIT:
             account = boc_debit_get_account(self, ownerid)
@@ -188,7 +191,7 @@ class ExpenseHandler:
         """初始化关键字列表"""
         provider = get_mapping_provider(ownerid)
 
-        if self.balance == "支出" or "亲情卡" in data['payment_method']:
+        if self.balance == "支出" or alipay_uses_fallback_payment_method(data.get('payment_method')):
             expense_mappings = provider.get_expense_mappings(enable_only=True)
             self.key_list = [m.key for m in expense_mappings]
             self._expense_mappings = expense_mappings  # 缓存
@@ -432,7 +435,7 @@ class ExpenseHandler:
             candidates = [{"key": key, "score": 1.0}] if key else []
             return self.refund_peer.expense_account, key, candidates
 
-        if self.balance == "支出" or "亲情卡" in data['payment_method']:
+        if self.balance == "支出" or alipay_uses_fallback_payment_method(data.get('payment_method')):
             expend, selected_expense_key, expense_candidates_with_score = self._process_expense(data, ownerid)
             return expend, selected_expense_key, expense_candidates_with_score
         elif self.balance == "收入":
@@ -577,7 +580,7 @@ def get_shouzhi(data): #TODO
                 return loss, high
             if data['commodity'] == "信用卡还款":
                 return high, loss
-            elif "亲情卡" in data['payment_method']:
+            elif alipay_uses_fallback_payment_method(data.get('payment_method')):
                 return high, loss
             elif (re.match(pattern["花呗自动还款"], data['commodity'])) or (re.match(pattern["花呗主动还款"], data['commodity'])):
                     return high, loss
