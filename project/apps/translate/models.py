@@ -13,7 +13,7 @@ class FormatConfig(models.Model):
     show_uuid = models.BooleanField(default=True)
     show_status = models.BooleanField(default=True)
     show_discount = models.BooleanField(default=True)
-    income_template = models.CharField(max_length=50,default='Income:Discount',null=True, blank=True)
+    income_template = models.CharField(max_length=50,default='Income:Transfer:Organizational',null=True, blank=True)
     commission_template = models.CharField(max_length=50,default='Expenses:Finance:Commission', null=True, blank=True)
     reconciliation_fallback_account = models.CharField(
         max_length=128,
@@ -90,7 +90,7 @@ class FormatConfig(models.Model):
                 'show_uuid': True,
                 'show_status': True,
                 'show_discount': True,
-                'income_template': 'Income:Discount',
+                'income_template': 'Income:Transfer:Organizational',
                 'commission_template': 'Expenses:Finance:Commission',
                 'reconciliation_fallback_account': 'Equity:Adjustments',
                 'currency': 'CNY',

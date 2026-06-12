@@ -230,7 +230,7 @@ class Command(BaseCommand):
                     show_uuid=True,
                     show_status=True,
                     show_discount=True,
-                    income_template='Income:Discount',
+                    income_template='Income:Transfer:Organizational',
                     commission_template='Expenses:Finance:Commission',
                     reconciliation_fallback_account='Equity:Adjustments',
                     currency='CNY',
