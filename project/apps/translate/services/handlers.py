@@ -209,32 +209,58 @@ class ExpenseHandler:
             self._asset_mappings = provider.get_asset_mappings(enable_only=True)
         self.full_list = [m.full for m in self._asset_mappings]
 
-    def _resolve_expense_conflict(self, conflict_candidates: List[Tuple[int, object]], transaction_text: str):
+    def _mapping_has_account(self, instance, account_attr: str = "expend") -> bool:
+        """映射是否配置了账户（expend / income）。"""
+        return bool(instance and getattr(instance, account_attr, None))
+
+    def _build_candidates_with_score(
+        self,
+        conflict_candidates: List[Tuple[int, object]],
+        scores: Optional[Dict] = None,
+        account_attr: str = "expend",
+    ) -> List[Dict]:
+        """构建候选关键字分数列表；无映射账户的关键字语义相似度默认为 0。"""
+        result = []
+        for _, inst in conflict_candidates:
+            if not self._mapping_has_account(inst, account_attr):
+                score = 0.0
+            elif scores is None:
+                score = 1.0
+            else:
+                score = round(scores.get(inst.key, 0), 4)
+            result.append({"key": inst.key, "score": score})
+        return result
+
+    def _resolve_expense_conflict(
+        self,
+        conflict_candidates: List[Tuple[int, object]],
+        transaction_text: str,
+        account_attr: str = "expend",
+    ):
+        account_candidates = [
+            (order, inst) for order, inst in conflict_candidates
+            if self._mapping_has_account(inst, account_attr)
+        ]
+
+        if not account_candidates:
+            self.expense_candidates_with_score = self._build_candidates_with_score(
+                conflict_candidates, account_attr=account_attr
+            )
+            return max(conflict_candidates, key=lambda x: x[0])[1]
+
         try:
-            keys = [inst.key for _, inst in conflict_candidates]
-            sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)  # 使用相似度模型计算相似度
+            keys = [inst.key for _, inst in account_candidates]
+            sim_result = self.similarity_model.calculate_similarity(transaction_text, keys)
             selected_key = sim_result["best_match"]
-            # self.similarity_model.collect_training_data(transaction_text, keys, selected_key)  # AI反馈数据收集
             scores = sim_result["scores"]
-            # logger.info(f"AI选择结果: 选中关键字 '{selected_key}'，候选列表: {conflict_candidates}")
             self.selected_expense_key = selected_key
-            # 将候选项和分数存储到实例变量中
-            # 生成候选项列表，包含分数
-            # 这里的分数是相似度分数，保留四位小数
-            self.expense_candidates_with_score = [
-                {
-                    "key": inst.key,
-                    "score": round(scores.get(inst.key, 0), 4)
-                }
-                for _, inst in conflict_candidates
-            ]
-            return next(inst for _, inst in conflict_candidates if inst.key == selected_key)
+            self.expense_candidates_with_score = self._build_candidates_with_score(
+                conflict_candidates, scores=scores, account_attr=account_attr
+            )
+            return next(inst for _, inst in account_candidates if inst.key == selected_key)
         except Exception as e:
             logger.error(f"AI处理失败：{str(e)}")
             raise e
-            # 按优先级排序后取第一个
-            # sorted_candidates = sorted(conflict_candidates, key=lambda x: (-x[0], len(x[1].key)))
-            # return sorted_candidates[0][1]
 
     def _determine_food_category(self, foodtime: datetime.time) -> str:
         """根据时间确定餐饮类别"""
@@ -245,6 +271,29 @@ class ExpenseHandler:
         elif TIME_DINNER_START <= foodtime <= TIME_DINNER_END:
             return ":Dinner"
         return ""
+
+    def _expense_mapping_priority(self, expense_instance) -> int:
+        """计算支出映射优先级；无映射账户时使用较低优先级。"""
+        if expense_instance.expend:
+            expend_priority = expense_instance.expend.account.count(":") * 100
+            payee_priority = 50 if expense_instance.payee else 0
+            return expend_priority + payee_priority
+        return 0
+
+    def _income_mapping_priority(self, income_instance) -> int:
+        """计算收入映射优先级；无映射账户时使用较低优先级。"""
+        if income_instance.income:
+            return income_instance.income.account.count(":") * 100
+        return 0
+
+    def _resolve_expense_account(self, expense_instance) -> Optional[str]:
+        """从支出映射实例解析账户路径；无映射账户时返回 None。"""
+        if not expense_instance or not expense_instance.expend:
+            return None
+        expend = expense_instance.expend.account
+        if expend == "Expenses:Food":
+            expend += self._determine_food_category(self.time)
+        return expend
 
     def _process_expense(self, data: Dict, ownerid: int) -> str:
         """处理支出逻辑"""
@@ -259,10 +308,8 @@ class ExpenseHandler:
         for matching_key in matching_keys:
             # 从缓存的映射数据中查找
             expense_instance = next((m for m in self._expense_mappings if m.key == matching_key), None)
-            if expense_instance and expense_instance.expend:
-                expend_priority = expense_instance.expend.account.count(":") * 100
-                payee_priority = 50 if expense_instance.payee else 0
-                current_order = expend_priority + payee_priority
+            if expense_instance:
+                current_order = self._expense_mapping_priority(expense_instance)
                 conflict_candidates.append((current_order, expense_instance))
 
                 if max_order is None or current_order > max_order:
@@ -280,13 +327,7 @@ class ExpenseHandler:
             self.selected_expense_key = selected_instance.key
         else:
             # 只有一个候选或无候选，直接给分数
-            self.expense_candidates_with_score = [
-                {
-                    "key": inst.key,
-                    "score": 1.0
-                }
-                for _, inst in conflict_candidates
-            ]
+            self.expense_candidates_with_score = self._build_candidates_with_score(conflict_candidates)
             if self.selected_expense_instance:
                 self.selected_expense_key = self.selected_expense_instance.key
 
@@ -299,19 +340,17 @@ class ExpenseHandler:
                 self.selected_expense_instance = next((m for m in self._expense_mappings if m.key == self.selected_key), None)
                 if self.selected_expense_instance:
                     self._load_mapping_tags(self.selected_expense_instance)
-                    if self.selected_expense_instance.expend:
-                        expend = self.selected_expense_instance.expend.account
-                        if expend == "Expenses:Food":
-                            expend += self._determine_food_category(self.time)
+                    expend = self._resolve_expense_account(self.selected_expense_instance)
+                    if expend:
                         self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
                         return expend, self.selected_key, self.expense_candidates_with_score
+                    return self.expend, self.selected_key, self.expense_candidates_with_score
             elif self.selected_key is None:
-                if self.selected_expense_instance and self.selected_expense_instance.expend:
-                    expend = self.selected_expense_instance.expend.account
-                    if expend == "Expenses:Food":
-                        expend += self._determine_food_category(self.time)
-                    self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
-                    return expend, self.selected_expense_key, self.expense_candidates_with_score
+                if self.selected_expense_instance:
+                    expend = self._resolve_expense_account(self.selected_expense_instance)
+                    if expend:
+                        self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
+                        return expend, self.selected_expense_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
 
@@ -366,8 +405,8 @@ class ExpenseHandler:
         for matching_key in matching_keys:
             # 从缓存的映射数据中查找
             income_instance = next((m for m in self._income_mappings if m.key == matching_key), None)
-            if income_instance and income_instance.income:
-                income_priority = income_instance.income.account.count(":") * 100
+            if income_instance:
+                income_priority = self._income_mapping_priority(income_instance)
                 conflict_candidates.append((income_priority, income_instance))
                 if max_order is None or income_priority > max_order:
                     max_order = income_priority
@@ -375,22 +414,7 @@ class ExpenseHandler:
 
         # 收集所有收入候选的标签
         if conflict_candidates:
-            try:
-                all_tags = []
-                for _, instance in conflict_candidates:
-                    tags = list(instance.tags.filter(enable=True))
-                    all_tags.extend(tags)
-                # 去重
-                seen_tag_ids = set()
-                unique_tags = []
-                for tag in all_tags:
-                    if tag.id not in seen_tag_ids:
-                        seen_tag_ids.add(tag.id)
-                        unique_tags.append(tag)
-                self.all_candidates_tags = unique_tags
-            except Exception as e:
-                logger.error(f"加载收入标签失败: {str(e)}")
-                self.all_candidates_tags = []
+            self._load_all_candidates_tags(conflict_candidates)
 
         # 构造候选列表与默认选中关键字
         selected_key: Optional[str] = None
@@ -400,26 +424,27 @@ class ExpenseHandler:
             # 多候选时使用相似度模型解决冲突
             selected_instance = self._resolve_expense_conflict(
                 conflict_candidates,
-                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元"
+                f"类型：{data['transaction_category']} 商户：{data['counterparty']} 商品：{data['commodity']} 金额：{data['amount']}元",
+                account_attr="income",
             )
             self.selected_income_instance = selected_instance
             selected_key = selected_instance.key
             candidates_with_score = self.expense_candidates_with_score
         else:
             # 只有一个候选或无候选，直接给分数
-            candidates_with_score = [
-                {"key": inst.key, "score": 1.0}
-                for _, inst in conflict_candidates
-            ]
+            candidates_with_score = self._build_candidates_with_score(
+                conflict_candidates, account_attr="income"
+            )
             if self.selected_income_instance:
                 selected_key = self.selected_income_instance.key
 
         # 用户手动选择关键字时覆盖（重解析）
         if self.selected_key:
             selected_income_instance = next((m for m in self._income_mappings if m.key == self.selected_key), None)
-            if selected_income_instance and selected_income_instance.income:
+            if selected_income_instance:
                 self.selected_income_instance = selected_income_instance
                 selected_key = self.selected_key
+                self._load_mapping_tags(selected_income_instance)
 
         if self.selected_income_instance and self.selected_income_instance.income:
             return self.selected_income_instance.income.account, selected_key, candidates_with_score
@@ -549,6 +574,8 @@ class PayeeHandler:
                 expend_instance_priority = expense_instance.expend.account.count(":") * 100
                 payee_instance_priority = 50 if expense_instance.payee else 0
                 matching_max_order = expend_instance_priority + payee_instance_priority
+            elif expense_instance and expense_instance.payee:
+                matching_max_order = 50
 
             if matching_max_order is not None and (
                     max_order is None or matching_max_order > max_order):
