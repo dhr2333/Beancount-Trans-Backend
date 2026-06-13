@@ -1,8 +1,10 @@
 """标签路径解析与重命名测试。"""
 import pytest
 from django.contrib.auth import get_user_model
+from rest_framework.test import APIRequestFactory
 
 from project.apps.tags.models import Tag
+from project.apps.tags.serializers import TagSerializer
 
 User = get_user_model()
 
@@ -78,10 +80,33 @@ class TestTagRename:
         tag.save()
 
         tag.name = 'RootOnly'
+        tag.parent = None
         tag.save()
         tag.refresh_from_db()
 
         assert tag.get_full_path() == 'RootOnly'
+        assert tag.parent is None
+
+    def test_promote_to_root_via_serializer_same_leaf_name(self, user):
+        """Channel/Offline 改为 Offline 时应提升为根标签，而非保持原路径。"""
+        tag = Tag(name='Channel/Offline', owner=user)
+        tag.save()
+
+        factory = APIRequestFactory()
+        request = factory.patch('/')
+        request.user = user
+
+        serializer = TagSerializer(
+            instance=tag,
+            data={'name': 'Offline'},
+            partial=True,
+            context={'request': request},
+        )
+        assert serializer.is_valid(), serializer.errors
+        serializer.save()
+        tag.refresh_from_db()
+
+        assert tag.get_full_path() == 'Offline'
         assert tag.parent is None
 
 

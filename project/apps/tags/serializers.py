@@ -171,6 +171,27 @@ class TagSerializer(serializers.ModelSerializer):
             qs = qs.exclude(pk=self.instance.pk)
         return any(tag.get_full_path() == path for tag in qs)
 
+    def _get_or_create_parent_by_path(self, owner, parent_path):
+        """根据完整路径查找或创建父标签"""
+        helper = Tag(owner=owner, name='__helper__')
+        try:
+            return helper._get_tag_by_path(parent_path)
+        except Tag.DoesNotExist:
+            return helper._create_parent_tag(parent_path)
+
+    def _apply_path_to_instance(self, instance, path):
+        """将完整路径解析为叶子名称与父标签"""
+        if '/' in path:
+            instance.name = path.split('/')[-1]
+            parent_path = '/'.join(path.split('/')[:-1])
+            parent = self._get_or_create_parent_by_path(instance.owner, parent_path)
+            if parent.pk == instance.pk:
+                raise serializers.ValidationError({'name': '标签不能成为自己的父标签'})
+            instance.parent = parent
+        else:
+            instance.name = path
+            instance.parent = None
+
     def create(self, validated_data):
         try:
             return super().create(validated_data)
@@ -178,10 +199,20 @@ class TagSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
 
     def update(self, instance, validated_data):
+        name_input = validated_data.pop('name', None)
+        if name_input is not None:
+            new_path = name_input.strip()
+            if new_path != instance.get_full_path():
+                self._apply_path_to_instance(instance, new_path)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
         try:
-            return super().update(instance, validated_data)
+            instance.save()
         except IntegrityError:
             raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
+        return instance
 
     def validate(self, data):
         """验证整体数据"""

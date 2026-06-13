@@ -41,17 +41,7 @@ class Tag(BaseModel):
                 current = current.parent
 
     def save(self, *args, **kwargs):
-        """保存标签时自动创建父标签"""
-        name_changed = False
-
-        if self.pk:
-            try:
-                old_instance = Tag.objects.get(pk=self.pk)
-                name_changed = old_instance.name != self.name
-            except Tag.DoesNotExist:
-                pass
-
-        # 根据标签路径计算父标签：仅当提交完整路径或显式重命名为根标签时更新 parent
+        """保存标签时自动创建父标签（仅处理含斜杠的完整路径输入）"""
         if '/' in self.name:
             parent_tag_path = '/'.join(self.name.split('/')[:-1])
             self.name = self.name.split('/')[-1]
@@ -59,12 +49,9 @@ class Tag(BaseModel):
                 new_parent = self._get_tag_by_path(parent_tag_path)
                 if new_parent.pk == self.pk:
                     raise ValidationError("标签不能成为自己的父标签")
-                if self.parent != new_parent:
-                    self.parent = new_parent
+                self.parent = new_parent
             except Tag.DoesNotExist:
                 self.parent = self._create_parent_tag(parent_tag_path)
-        elif name_changed:
-            self.parent = None
 
         super().save(*args, **kwargs)
 
