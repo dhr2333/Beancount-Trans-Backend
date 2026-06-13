@@ -138,8 +138,13 @@ def parse_single_file_task(self, file_id, user_id, args):
                 # 从 CacheStep 的缓存中获取 original_row
                 cache_entry_data = cache.get(cache_key)
                 original_row = None
+                cached_parsed = {}
                 if cache_entry_data and isinstance(cache_entry_data, dict):
                     original_row = cache_entry_data.get('original_row')
+                    cached_parsed = cache_entry_data.get('parsed_entry') or {}
+                if not parsed_entry and cached_parsed:
+                    parsed_entry = cached_parsed
+                tag_details = parsed_entry.get('tag_details') or cached_parsed.get('tag_details', [])
                 
                 enhanced_entry = {
                     # parsed_entry 中 uuid 键恒存在，无支付宝/微信 uuid 时为 None；.get('uuid', cache_key) 会错误地得到 None
@@ -149,7 +154,7 @@ def parse_single_file_task(self, file_id, user_id, args):
                     'selected_expense_key': entry.get('selected_expense_key', ''),
                     'expense_candidates_with_score': entry.get('expense_candidates_with_score', []),
                     'original_row': original_row,
-                    'tag_details': parsed_entry.get('tag_details', []),
+                    'tag_details': tag_details,
                     'tag_overrides': ParseReviewService.default_tag_overrides(),
                 }
                 enhanced_formatted_data.append(enhanced_entry)

@@ -113,6 +113,79 @@ class ParseReviewService:
         }
 
     @classmethod
+    def _entry_header_has_tags(cls, entry: Dict[str, Any]) -> bool:
+        formatted = entry.get('formatted') or entry.get('edited_formatted') or ''
+        first_line = formatted.split('\n')[0] if formatted else ''
+        return bool(TAG_TOKEN_RE.search(first_line))
+
+    @classmethod
+    def ensure_entry_tag_details(
+        cls,
+        entry: Dict[str, Any],
+        owner_id: int,
+        config,
+        user=None,
+    ) -> bool:
+        """缺少 tag_details 时根据 original_row 重算来源（兼容历史缓存）。"""
+        cls.normalize_entry_tag_fields(entry)
+        if entry.get('tag_details'):
+            return False
+        if not cls._entry_header_has_tags(entry):
+            return False
+        original_row = entry.get('original_row')
+        if not original_row:
+            return False
+
+        selected_key = entry.get('selected_expense_key') or None
+        if selected_key == '':
+            selected_key = None
+
+        from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+        from project.apps.translate.services.alipay_refund_peer import resolve_refund_peer_for_row
+
+        try:
+            refund_peer = resolve_refund_peer_for_row(
+                original_row,
+                user,
+                owner_id,
+                config,
+                selected_key,
+            )
+            parsed = single_parse_transaction(
+                original_row,
+                owner_id,
+                config,
+                selected_key,
+                refund_peer=refund_peer,
+            )
+        except Exception as exc:
+            logger.warning('回填 tag_details 失败: %s', exc)
+            return False
+
+        tag_details = parsed.get('tag_details') or []
+        if not tag_details:
+            return False
+
+        entry['tag_details'] = tag_details
+        cls.rebuild_entry_edited_formatted(entry)
+        return True
+
+    @classmethod
+    def backfill_tag_details_in_data(
+        cls,
+        cached_data: Dict[str, Any],
+        owner_id: int,
+        config,
+        user=None,
+    ) -> bool:
+        """为缓存中缺失 tag_details 的条目批量回填。"""
+        changed = False
+        for entry in cached_data.get('formatted_data') or []:
+            if cls.ensure_entry_tag_details(entry, owner_id, config, user=user):
+                changed = True
+        return changed
+
+    @classmethod
     def get_review_expires_at(
         cls,
         cached_data: Optional[Dict[str, Any]],

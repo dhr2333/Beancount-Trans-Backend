@@ -1,10 +1,12 @@
 """解析审核标签 API 与 service 测试。"""
 import pytest
+from unittest.mock import patch
 from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from project.apps.translate.services.parse_review_service import ParseReviewService
 from project.apps.translate.services.tag_merger import merge_tags_with_details
+from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
 from project.apps.tags.models import Tag
 
 
@@ -97,6 +99,69 @@ class TestParseReviewTagOverrides:
         entry = cached['formatted_data'][0]
         assert '#Drop' not in entry['edited_formatted']
         assert 'Drop' in entry['tag_overrides']['removed_paths']
+
+
+@pytest.mark.django_db
+class TestParseReviewTagDetailsBackfill:
+    def setup_method(self):
+        cache.clear()
+
+    @patch('project.apps.translate.services.handlers.get_default_assets')
+    def test_ensure_entry_tag_details_backfills_missing_sources(
+        self,
+        mock_assets,
+        user,
+    ):
+        from project.apps.account.models import Account
+        from project.apps.maps.models import Expense
+        from project.apps.translate.tests.test_mapping_tags_without_account import (
+            _default_assets,
+            _expense_row,
+            _parse_config,
+        )
+
+        mock_assets.return_value = _default_assets()
+        tag = Tag.objects.create(name="Irregular", owner=user)
+        mapping = Expense.objects.create(
+            key="十月结晶",
+            expend=None,
+            owner=user,
+            enable=True,
+        )
+        mapping.tags.add(tag)
+
+        parsed = single_parse_transaction(
+            _expense_row(),
+            user.id,
+            _parse_config(),
+            None,
+        )
+        formatted = (
+            f'2024-02-25 * "十月结晶" "十月结晶会员出行必备" {parsed["tag"]}\n'
+            f'    Expenses:Other 14.80 CNY\n'
+            f'    Assets:Digital:Alipay -14.80 CNY\n'
+        )
+        entry = {
+            'uuid': 'entry-backfill',
+            'formatted': formatted,
+            'edited_formatted': formatted,
+            'selected_expense_key': parsed['selected_expense_key'],
+            'expense_candidates_with_score': parsed['expense_candidates_with_score'],
+            'original_row': _expense_row(),
+            'tag_details': [],
+            'tag_overrides': ParseReviewService.default_tag_overrides(),
+        }
+
+        changed = ParseReviewService.ensure_entry_tag_details(
+            entry,
+            user.id,
+            _parse_config(),
+            user=user,
+        )
+        assert changed is True
+        assert any(item['path'] == 'Irregular' for item in entry['tag_details'])
+        irregular = next(item for item in entry['tag_details'] if item['path'] == 'Irregular')
+        assert irregular['sources'][0]['key'] == '十月结晶'
 
 
 @pytest.mark.django_db

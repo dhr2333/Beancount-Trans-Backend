@@ -570,6 +570,19 @@ class ParseReviewResultsView(ParseReviewViewSet):
                 {'error': '解析结果不存在或已过期，请重新解析'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        config = get_user_config(request.user)
+        if ParseReviewService.backfill_tag_details_in_data(
+            parse_result,
+            request.user.id,
+            config,
+            user=request.user,
+        ):
+            ParseReviewService.save_parse_result(
+                parse_file.file_id,
+                parse_result,
+                timeout=ParseReviewService._ttl_for_resave(parse_file.file_id),
+            )
         
         # 去除 formatted_data 中每个条目的 formatted 和 edited_formatted 末尾的换行符
         if 'formatted_data' in parse_result:
@@ -675,10 +688,17 @@ class ParseReviewReparseView(ParseReviewViewSet):
             # 去除末尾的换行符
             formatted_result = formatted_result.rstrip() if formatted_result else ''
             edited_formatted_result = edited_formatted_result.rstrip() if edited_formatted_result else ''
-            tag_payload = ParseReviewService.entry_response_payload(updated_entry) if updated_entry else {
-                'tag_details': parsed_entry.get('tag_details', []),
-                'tag_overrides': ParseReviewService.default_tag_overrides(),
-            }
+            tag_payload = (
+                ParseReviewService.entry_response_payload(updated_entry)
+                if updated_entry
+                else {
+                    'tag_details': ParseReviewService.apply_tag_overrides(
+                        parsed_entry.get('tag_details', []),
+                        ParseReviewService.default_tag_overrides(),
+                    ),
+                    'tag_overrides': ParseReviewService.default_tag_overrides(),
+                }
+            )
             
             return Response({
                 'uuid': entry_uuid,
