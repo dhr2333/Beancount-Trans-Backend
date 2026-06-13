@@ -152,7 +152,7 @@ def mock_parse_result_data():
             }
         ],
         'created_at': current_time,
-        'expires_at': current_time + 86400  # 24小时后
+        'review_expires_at': current_time + 86400  # 24小时后
     }
 
 

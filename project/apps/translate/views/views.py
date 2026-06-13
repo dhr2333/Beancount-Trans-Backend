@@ -525,6 +525,23 @@ class ParseReviewViewSet(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def ensure_review_editable(self, task, parse_file):
+        """校验解析待办是否仍在用户审核期内（仅 pending 且未过期）。"""
+        if task.status != 'pending':
+            return Response(
+                {'error': '待办任务已完成或已取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
+        if ParseReviewService.is_review_expired(cached_data, task):
+            return Response(
+                {'error': '解析待办已过期，系统将自动写入'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return None
+
 
 class ParseReviewResultsView(ParseReviewViewSet):
     """获取解析结果"""
@@ -577,6 +594,10 @@ class ParseReviewReparseView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         entry_uuid = request.data.get('entry_uuid')
         selected_key = request.data.get('selected_key')
@@ -676,6 +697,10 @@ class ParseReviewEditView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         edited_formatted = request.data.get('edited_formatted')
         if edited_formatted is None:
@@ -743,12 +768,10 @@ class ParseReviewConfirmView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '待办任务已完成或已取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         # 从缓存获取最终结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
@@ -833,12 +856,10 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '待办任务已完成或已取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         # 重新执行解析任务（相当于在文件管理中再次解析）
         from project.apps.translate.tasks import parse_single_file_task

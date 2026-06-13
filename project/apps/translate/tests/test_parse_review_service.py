@@ -180,7 +180,7 @@ class TestParseReviewService:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400,
+            'review_expires_at': time.time() + 86400,
         }
         ParseReviewService.save_parse_result(file_id, stale)
         assert ParseReviewService.update_entry_edited_formatted(
@@ -317,4 +317,23 @@ class TestParseReviewService:
         result = ParseReviewService.update_entry_formatted(file_id, uuid, new_formatted)
         
         assert result is True
+
+    def test_get_review_expires_at_prefers_review_expires_at(self):
+        """测试 get_review_expires_at 优先使用 review_expires_at"""
+        cached_data = {
+            'created_at': 1000.0,
+            'review_expires_at': 2000.0,
+        }
+        assert ParseReviewService.get_review_expires_at(cached_data) == 2000.0
+
+    def test_get_review_expires_at_fallback_to_created_at(self):
+        """测试 get_review_expires_at 回退到 created_at + 24h"""
+        cached_data = {'created_at': 1000.0}
+        assert ParseReviewService.get_review_expires_at(cached_data) == 1000.0 + ParseReviewService.REVIEW_DEADLINE_SECONDS
+
+    def test_is_review_expired(self):
+        """测试 is_review_expired 判断"""
+        cached_data = {'review_expires_at': 1000.0}
+        assert ParseReviewService.is_review_expired(cached_data, now=1000.0) is True
+        assert ParseReviewService.is_review_expired(cached_data, now=999.0) is False
 
