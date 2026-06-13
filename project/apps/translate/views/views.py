@@ -931,6 +931,43 @@ class ParseReviewConfirmView(ParseReviewViewSet):
             )
 
 
+class ParseTaskStatusView(APIView):
+    """查询单个 Celery 解析任务状态（与 task_status:{task_id} 缓存一致）"""
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        celery_task_id = request.query_params.get('task_id')
+        if not celery_task_id:
+            return Response(
+                {'error': '缺少 task_id 参数'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        task_status = cache.get(f'task_status:{celery_task_id}') or {'status': 'unknown'}
+        file_id = task_status.get('file_id')
+        if file_id is not None:
+            file_obj = None
+            try:
+                from project.apps.file_manager.models import File
+                file_obj = File.objects.filter(id=file_id, owner=request.user).first()
+            except Exception:
+                file_obj = None
+            if file_obj is None:
+                return Response(
+                    {'error': '无权访问该任务'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        return Response({
+            'task_id': celery_task_id,
+            'file_id': file_id,
+            'status': task_status.get('status', 'unknown'),
+            'error': task_status.get('error'),
+        }, status=status.HTTP_200_OK)
+
+
 class ParseReviewReparseAllView(ParseReviewViewSet):
     """重新解析所有条目"""
     
@@ -968,11 +1005,17 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
             }
             
             # 异步执行解析任务
-            parse_single_file_task.delay(parse_file.file_id, request.user.id, args)
+            async_result = parse_single_file_task.delay(parse_file.file_id, request.user.id, args)
+            cache.set(f'task_status:{async_result.id}', {
+                'status': 'pending',
+                'file_id': parse_file.file_id,
+                'error': None,
+            }, timeout=24 * 3600)
             
             return Response({
                 'message': '重新解析任务已提交',
-                'file_id': parse_file.file_id
+                'file_id': parse_file.file_id,
+                'celery_task_id': async_result.id,
             }, status=status.HTTP_202_ACCEPTED)
             
         except Exception as e:

@@ -457,6 +457,9 @@ class TestParseReviewReparseAllView:
         # Mock parse_single_file_task.delay 避免实际执行
         # 在 CELERY_TASK_ALWAYS_EAGER=True 模式下，delay() 会立即执行，所以需要完全 mock
         mock_delay = MagicMock()
+        mock_async_result = MagicMock()
+        mock_async_result.id = 'test-celery-task-id'
+        mock_delay.return_value = mock_async_result
         mock_parse_task.delay = mock_delay
         
         # 确保 ParseFile 初始状态不是 pending
@@ -467,6 +470,7 @@ class TestParseReviewReparseAllView:
         
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert '重新解析任务已提交' in response.data['message']
+        assert response.data['celery_task_id'] == 'test-celery-task-id'
         
         # 验证 ParseFile 状态重置为 pending（在 try 块中设置）
         parse_file.refresh_from_db()
@@ -483,6 +487,27 @@ class TestParseReviewReparseAllView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '已完成或已取消' in response.data['error']
+
+
+@pytest.mark.django_db
+class TestParseTaskStatusView:
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_get_parse_task_status(self, user, parse_file):
+        from django.core.cache import cache
+
+        self.client.force_authenticate(user=user)
+        cache.set(f'task_status:celery-123', {
+            'status': 'pending_review',
+            'file_id': parse_file.file_id,
+            'error': None,
+        }, timeout=3600)
+
+        response = self.client.get('/api/translate/parse-task-status', {'task_id': 'celery-123'})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'pending_review'
+        assert response.data['file_id'] == parse_file.file_id
 
 
 @pytest.mark.django_db
