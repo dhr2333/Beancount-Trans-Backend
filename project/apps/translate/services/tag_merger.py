@@ -6,7 +6,7 @@
 2. 映射标签（Expense/Assets/Income 映射关联的标签）
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from project.apps.tags.models import Tag
 
 
@@ -21,6 +21,62 @@ def get_tag_full_path(tag: Tag) -> str:
         str: 标签完整路径，如 "Category/EDUCATION" 或 "Irregular"
     """
     return tag.get_full_path()
+
+
+def parse_source_tag_paths(source_tag: Optional[str]) -> List[str]:
+    """从账单原始标签字符串解析 path 列表（不含 #）。"""
+    if not source_tag:
+        return []
+    return [
+        tag.strip().lstrip('#')
+        for tag in source_tag.split()
+        if tag.strip().startswith('#')
+    ]
+
+
+def merge_tags_with_details(
+    source_tag: Optional[str],
+    mapping_tag_sources: List[Dict[str, Any]],
+    config: Optional[dict] = None,
+) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    """
+    合并标签并返回带来源信息的 tag_details。
+
+    mapping_tag_sources 元素形如 {'tag': Tag, 'source': {'type': 'mapping', ...}}。
+    """
+    if config is None:
+        config = {}
+
+    details_map: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
+
+    def add_path(path: str, source: Dict[str, Any]) -> None:
+        key = path.lower()
+        if key not in details_map:
+            details_map[key] = {'path': path, 'sources': []}
+            order.append(key)
+        sources = details_map[key]['sources']
+        if source not in sources:
+            sources.append(source)
+
+    if config.get('keep_source', True) and source_tag:
+        for path in parse_source_tag_paths(source_tag):
+            add_path(path, {'type': 'source'})
+
+    for item in mapping_tag_sources:
+        tag_obj = item.get('tag')
+        source = item.get('source') or {}
+        if not tag_obj or not tag_obj.enable:
+            continue
+        path = get_tag_full_path(tag_obj)
+        add_path(path, source)
+
+    tag_details = [details_map[key] for key in order]
+    if tag_details:
+        separator = config.get('separator', ' ')
+        formatted_tags = separator.join([f"#{d['path']}" for d in tag_details])
+        return formatted_tags, tag_details
+    return None, []
 
 
 def merge_tags(
@@ -50,13 +106,7 @@ def merge_tags(
 
     # 1. 解析原始标签
     if config.get('keep_source', True) and source_tag:
-        # 从字符串中提取标签名（去除#号和空格）
-        source_tags_list = [
-            tag.strip().lstrip('#')
-            for tag in source_tag.split()
-            if tag.strip().startswith('#')
-        ]
-        all_tags.extend(source_tags_list)
+        all_tags.extend(parse_source_tag_paths(source_tag))
 
     # 2. 添加映射标签（包含层级结构）
     for tag_obj in mapping_tags:

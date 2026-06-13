@@ -181,6 +181,20 @@ class TestExpenseMappingTagsWithoutAccount:
         assert parsed["selected_expense_key"] == "十月"
         assert "#TagOnly" in parsed["tag"]
         assert "#TagWithAccount" in parsed["tag"]
+        tag_only_detail = next(item for item in parsed["tag_details"] if item["path"] == "TagOnly")
+        tag_with_account_detail = next(
+            item for item in parsed["tag_details"] if item["path"] == "TagWithAccount"
+        )
+        assert tag_only_detail["sources"] == [{
+            "type": "mapping",
+            "key": "十月结晶",
+            "mapping_type": "expense",
+        }]
+        assert tag_with_account_detail["sources"] == [{
+            "type": "mapping",
+            "key": "十月",
+            "mapping_type": "expense",
+        }]
 
     @patch("project.apps.translate.services.handlers.get_default_assets")
     def test_manual_selected_key_without_account_still_applies_tags(self, mock_assets, user):

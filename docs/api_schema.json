@@ -5286,6 +5286,65 @@
         }
       }
     },
+    "/api/translate/parse-review/{task_id}/entries/{uuid}/tags": {
+      "patch": {
+        "operationId": "translate_parse_review_entries_tags_partial_update",
+        "description": "更新条目标签（添加/移除）\n\nPATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags\nBody: {\"action\": \"add|remove\", \"tag_path\": \"Category/EDUCATION\"}",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "uuid",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": ["add", "remove"]
+                  },
+                  "tag_path": {
+                    "type": "string"
+                  }
+                },
+                "required": ["action", "tag_path"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
     "/api/translate/parse-review/{task_id}/reparse": {
       "post": {
         "operationId": "translate_parse_review_reparse_create",

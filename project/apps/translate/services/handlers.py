@@ -29,6 +29,7 @@ class AccountHandler:
         self.balance = data['transaction_type']
         self.selected_asset_instance = None  # 新增：存储选中的资产映射实例
         self.asset_tags = []  # 新增：存储资产映射关联的标签
+        self.asset_tag_sources = []  # tag + source 元数据
         self._asset_mappings = []  # 缓存资产映射数据
 
     def find_asset_by_key(self, key: str):
@@ -75,13 +76,29 @@ class AccountHandler:
             if asset_instance:
                 self.selected_asset_instance = asset_instance
                 self.asset_tags = list(asset_instance.tags.filter(enable=True))
+                self.asset_tag_sources = [
+                    {
+                        'tag': tag,
+                        'source': {
+                            'type': 'mapping',
+                            'key': asset_key,
+                            'mapping_type': 'asset',
+                        },
+                    }
+                    for tag in self.asset_tags
+                ]
         except Exception as e:
             logger.error(f"加载资产标签失败: {str(e)}")
             self.asset_tags = []
+            self.asset_tag_sources = []
 
     def get_asset_tags(self):
         """获取资产映射的标签列表"""
         return self.asset_tags
+
+    def get_asset_tag_sources(self):
+        """获取资产映射标签及来源"""
+        return self.asset_tag_sources
 
     def get_account(self, data, ownerid, fallback_account=None):
         from project.apps.translate.utils import DEFAULT_FALLBACK_ACCOUNT
@@ -156,6 +173,7 @@ class ExpenseHandler:
         self.expense_candidates_with_score = []  # 如果你想带分数
         self.mapping_tags = []  # 新增：存储映射关联的标签
         self.all_candidates_tags = []  # 新增：存储所有候选映射的标签
+        self.candidate_tag_sources = []  # 候选映射标签及来源
         self._expense_mappings = []  # 缓存支出映射数据
         self._income_mappings = []  # 缓存收入映射数据
         self._asset_mappings = []  # 缓存资产映射数据
@@ -366,9 +384,23 @@ class ExpenseHandler:
         """加载所有候选映射的标签"""
         try:
             all_tags = []
+            candidate_tag_sources = []
+            if self.balance == '收入':
+                mapping_type = 'income'
+            else:
+                mapping_type = 'expense'
             for _, instance in conflict_candidates:
                 tags = list(instance.tags.filter(enable=True))
                 all_tags.extend(tags)
+                for tag in tags:
+                    candidate_tag_sources.append({
+                        'tag': tag,
+                        'source': {
+                            'type': 'mapping',
+                            'key': instance.key,
+                            'mapping_type': mapping_type,
+                        },
+                    })
             # 去重，保持标签对象唯一性
             seen_tag_ids = set()
             unique_tags = []
@@ -377,9 +409,11 @@ class ExpenseHandler:
                     seen_tag_ids.add(tag.id)
                     unique_tags.append(tag)
             self.all_candidates_tags = unique_tags
+            self.candidate_tag_sources = candidate_tag_sources
         except Exception as e:
             logger.error(f"加载候选标签失败: {str(e)}")
             self.all_candidates_tags = []
+            self.candidate_tag_sources = []
 
     def get_mapping_tags(self):
         """获取当前映射的标签列表"""
@@ -388,6 +422,10 @@ class ExpenseHandler:
     def get_all_candidates_tags(self):
         """获取所有候选映射的标签列表"""
         return self.all_candidates_tags
+
+    def get_candidate_tag_sources(self):
+        """获取所有候选映射的标签及来源"""
+        return self.candidate_tag_sources
 
     def _process_income(self, data: Dict, ownerid: int) -> Tuple[str, Optional[str], List[Dict]]:
         """处理收入逻辑

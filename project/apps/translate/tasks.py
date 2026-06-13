@@ -148,7 +148,9 @@ def parse_single_file_task(self, file_id, user_id, args):
                     'edited_formatted': entry.get('formatted', ''),  # 初始状态默认为 formatted
                     'selected_expense_key': entry.get('selected_expense_key', ''),
                     'expense_candidates_with_score': entry.get('expense_candidates_with_score', []),
-                    'original_row': original_row
+                    'original_row': original_row,
+                    'tag_details': parsed_entry.get('tag_details', []),
+                    'tag_overrides': ParseReviewService.default_tag_overrides(),
                 }
                 enhanced_formatted_data.append(enhanced_entry)
             

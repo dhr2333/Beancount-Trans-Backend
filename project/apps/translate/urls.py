@@ -16,6 +16,7 @@ urlpatterns = [
     path('parse-review/<int:task_id>/results', views.ParseReviewResultsView.as_view(), name='parse_review_results'),
     path('parse-review/<int:task_id>/reparse', views.ParseReviewReparseView.as_view(), name='parse_review_reparse'),
     path('parse-review/<int:task_id>/entries/<str:uuid>/edit', views.ParseReviewEditView.as_view(), name='parse_review_edit'),
+    path('parse-review/<int:task_id>/entries/<str:uuid>/tags', views.ParseReviewTagsView.as_view(), name='parse_review_tags'),
     path('parse-review/<int:task_id>/confirm', views.ParseReviewConfirmView.as_view(), name='parse_review_confirm'),
     path('parse-review/<int:task_id>/reparse-all', views.ParseReviewReparseAllView.as_view(), name='parse_review_reparse_all'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

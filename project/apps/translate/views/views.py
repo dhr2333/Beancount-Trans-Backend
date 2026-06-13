@@ -574,10 +574,12 @@ class ParseReviewResultsView(ParseReviewViewSet):
         # 去除 formatted_data 中每个条目的 formatted 和 edited_formatted 末尾的换行符
         if 'formatted_data' in parse_result:
             for entry in parse_result['formatted_data']:
+                ParseReviewService.normalize_entry_tag_fields(entry)
                 if 'formatted' in entry:
                     entry['formatted'] = entry['formatted'].rstrip() if entry['formatted'] else ''
                 if 'edited_formatted' in entry:
                     entry['edited_formatted'] = entry['edited_formatted'].rstrip() if entry['edited_formatted'] else ''
+                entry['tag_details'] = ParseReviewService.get_effective_tag_details(entry)
         
         return Response(parse_result, status=status.HTTP_200_OK)
 
@@ -652,8 +654,13 @@ class ParseReviewReparseView(ParseReviewViewSet):
             )
             formatted = FormatData.format_instance(parsed_entry, config=config)
             
-            # 更新缓存
-            ParseReviewService.update_entry_formatted(parse_file.file_id, entry_uuid, formatted)
+            # 更新缓存（保留 tag_overrides）
+            ParseReviewService.update_entry_formatted(
+                parse_file.file_id,
+                entry_uuid,
+                formatted,
+                tag_details=parsed_entry.get('tag_details', []),
+            )
             
             # 返回更新后的结果
             updated_result = ParseReviewService.get_parse_result(parse_file.file_id)
@@ -668,13 +675,18 @@ class ParseReviewReparseView(ParseReviewViewSet):
             # 去除末尾的换行符
             formatted_result = formatted_result.rstrip() if formatted_result else ''
             edited_formatted_result = edited_formatted_result.rstrip() if edited_formatted_result else ''
+            tag_payload = ParseReviewService.entry_response_payload(updated_entry) if updated_entry else {
+                'tag_details': parsed_entry.get('tag_details', []),
+                'tag_overrides': ParseReviewService.default_tag_overrides(),
+            }
             
             return Response({
                 'uuid': entry_uuid,
                 'formatted': formatted_result,
                 'edited_formatted': edited_formatted_result,
                 'selected_expense_key': selected_key,
-                'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', [])
+                'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', []),
+                **tag_payload,
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -755,6 +767,60 @@ class ParseReviewEditView(ParseReviewViewSet):
             response_data['validation_warning'] = validation_error
         
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class ParseReviewTagsView(ParseReviewViewSet):
+    """更新条目标签（添加/移除）"""
+
+    def patch(self, request, task_id, uuid):
+        """PATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags
+
+        Body: {"action": "add|remove", "tag_path": "Category/EDUCATION"}
+        """
+        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        if error_response:
+            return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
+
+        action = request.data.get('action')
+        tag_path = request.data.get('tag_path')
+        if action not in ('add', 'remove') or not tag_path:
+            return Response(
+                {'error': '缺少必要参数：action（add/remove）与 tag_path'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        if migrated is None:
+            return Response(
+                {'error': '解析结果不存在或已过期，请重新解析'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        entry_uuid = uuid
+        if uuid in ('null', 'undefined', 'None'):
+            fd = migrated.get('formatted_data') or []
+            if len(fd) == 1 and fd[0].get('uuid'):
+                entry_uuid = fd[0]['uuid']
+
+        result = ParseReviewService.update_entry_tags(
+            parse_file.file_id,
+            entry_uuid,
+            action,
+            tag_path,
+        )
+        if result is None:
+            return Response(
+                {'error': '更新标签失败或未找到条目'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class ParseReviewConfirmView(ParseReviewViewSet):
