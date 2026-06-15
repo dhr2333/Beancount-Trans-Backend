@@ -17,6 +17,7 @@ ACCOUNT_JSON = "account.json"
 MAPPING_EXPENSE_JSON = "mapping_expense.json"
 MAPPING_INCOME_JSON = "mapping_income.json"
 MAPPING_ASSETS_JSON = "mapping_assets.json"
+TAG_JSON = "tag.json"
 
 # BASE_DIR 在 settings 中为 backend 根目录，project 在其下
 PROJECT_DIR = Path(settings.BASE_DIR) / "project"
@@ -131,14 +132,39 @@ def load_official_mapping_data(template_type: str) -> Optional[dict]:
     return data
 
 
+def _validate_tag_item(item: dict) -> bool:
+    return isinstance(item, dict) and isinstance(item.get("tag_path"), str) and len(item["tag_path"].strip()) > 0
+
+
+def load_official_tag_data() -> Optional[dict]:
+    """
+    从 tag.json 加载官方标签模板数据。
+    返回格式: {"name", "description", "version", "update_notes", "items": [{...}]}
+    文件不存在或校验失败返回 None。
+    """
+    path = FIXTURES_OFFICIAL_DIR / TAG_JSON
+    data = _load_json_file(path)
+    if not data or "items" not in data:
+        return None
+    items = data.get("items")
+    if not isinstance(items, list):
+        return None
+    for i, item in enumerate(items):
+        if not _validate_tag_item(item):
+            logger.warning("tag.json items[%d] 缺少有效 tag_path，已跳过", i)
+            return None
+    return data
+
+
 def load_all_official_templates_data() -> dict[str, Any]:
     """
     一次性加载所有官方模板 JSON（若存在）。
-    返回: {"account": dict | None, "mapping_expense": dict | None, "mapping_income": dict | None, "mapping_assets": dict | None}
+    返回: {"account": dict | None, "mapping_expense": dict | None, "mapping_income": dict | None, "mapping_assets": dict | None, "tag": dict | None}
     """
     return {
         "account": load_official_account_data(),
         "mapping_expense": load_official_mapping_data("expense"),
         "mapping_income": load_official_mapping_data("income"),
         "mapping_assets": load_official_mapping_data("assets"),
+        "tag": load_official_tag_data(),
     }

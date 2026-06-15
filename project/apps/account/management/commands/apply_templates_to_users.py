@@ -1,6 +1,6 @@
 # project/apps/account/management/commands/apply_templates_to_users.py
 """
-批量为用户应用官方账户模板和映射模板
+批量为用户应用官方账户模板、标签模板和映射模板
 
 使用方法:
     python manage.py apply_templates_to_users --all-users  # 为所有用户应用
@@ -14,13 +14,14 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from project.apps.account.models import Account, AccountTemplate, AccountTemplateItem
 from project.apps.maps.models import Template, TemplateItem, Expense, Assets, Income
+from project.apps.tags.models import Tag, TagTemplate
 from project.apps.translate.models import FormatConfig
 
 User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = '批量为用户应用官方账户模板和映射模板'
+    help = '批量为用户应用官方账户模板、标签模板和映射模板'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -41,12 +42,12 @@ class Command(BaseCommand):
         parser.add_argument(
             '--force',
             action='store_true',
-            help='强制模式，删除用户现有的账户和映射后重新创建',
+            help='强制模式，删除用户现有的账户、标签和映射后重新创建',
         )
         parser.add_argument(
             '--skip-existing',
             action='store_true',
-            help='跳过已有账户或映射的用户',
+            help='跳过已有账户、标签或映射的用户',
         )
 
     def handle(self, *args, **options):
@@ -87,6 +88,7 @@ class Command(BaseCommand):
             'created_expenses': 0,
             'created_assets': 0,
             'created_incomes': 0,
+            'created_tags': 0,
             'created_configs': 0,
         }
 
@@ -112,10 +114,12 @@ class Command(BaseCommand):
                     stats['created_expenses'] += result['expenses']
                     stats['created_assets'] += result['assets']
                     stats['created_incomes'] += result['incomes']
+                    stats['created_tags'] += result['tags']
                     stats['created_configs'] += result['configs']
                     self.stdout.write(self.style.SUCCESS(
                         f'✓ 完成 {user.username}: '
                         f'账户={result["accounts"]}, '
+                        f'标签={result["tags"]}, '
                         f'支出={result["expenses"]}, '
                         f'资产={result["assets"]}, '
                         f'收入={result["incomes"]}'
@@ -147,12 +151,14 @@ class Command(BaseCommand):
         expense_template = Template.objects.filter(type='expense', is_official=True).first()
         income_template = Template.objects.filter(type='income', is_official=True).first()
         assets_template = Template.objects.filter(type='assets', is_official=True).first()
+        tag_template = TagTemplate.objects.filter(is_official=True).first()
 
         return {
             'account_template': account_template,
             'expense_template': expense_template,
             'income_template': income_template,
             'assets_template': assets_template,
+            'tag_template': tag_template,
         }
 
     def _apply_templates_to_user(self, user, official_templates, dry_run=False, force=False, skip_existing=False):
@@ -164,25 +170,37 @@ class Command(BaseCommand):
             'expenses': 0,
             'assets': 0,
             'incomes': 0,
+            'tags': 0,
             'configs': 0,
         }
 
         # 检查用户是否已有数据
         existing_accounts = Account.objects.filter(owner=user).count()
+        existing_tags = Tag.objects.filter(owner=user).count()
         existing_expenses = Expense.objects.filter(owner=user).count()
         existing_assets = Assets.objects.filter(owner=user).count()
         existing_incomes = Income.objects.filter(owner=user).count()
-        has_existing_data = existing_accounts > 0 or existing_expenses > 0 or existing_assets > 0 or existing_incomes > 0
+        has_existing_data = (
+            existing_accounts > 0
+            or existing_tags > 0
+            or existing_expenses > 0
+            or existing_assets > 0
+            or existing_incomes > 0
+        )
 
         if has_existing_data:
             if skip_existing:
                 result['skipped'] = True
-                result['reason'] = f'已有数据（账户={existing_accounts}, 映射={existing_expenses+existing_assets+existing_incomes}）'
+                result['reason'] = (
+                    f'已有数据（账户={existing_accounts}, 标签={existing_tags}, '
+                    f'映射={existing_expenses + existing_assets + existing_incomes}）'
+                )
                 return result
             elif force:
                 if not dry_run:
                     # 删除现有数据
                     Account.objects.filter(owner=user).delete()
+                    Tag.objects.filter(owner=user).delete()
                     Expense.objects.filter(owner=user).delete()
                     Assets.objects.filter(owner=user).delete()
                     Income.objects.filter(owner=user).delete()
@@ -198,6 +216,13 @@ class Command(BaseCommand):
                 result['incomes'] = official_templates['income_template'].items.count()
             if official_templates['assets_template']:
                 result['assets'] = official_templates['assets_template'].items.count()
+            if official_templates['tag_template']:
+                from project.apps.tags.signals import tag_exists_for_user
+                result['tags'] = sum(
+                    1
+                    for item in official_templates['tag_template'].items.all()
+                    if not tag_exists_for_user(user, item.tag_path)
+                )
             if not FormatConfig.objects.filter(owner=user).exists():
                 result['configs'] = 1
             return result
@@ -209,7 +234,12 @@ class Command(BaseCommand):
                 created_accounts = self._create_accounts_from_template(user, official_templates['account_template'])
                 result['accounts'] = len(created_accounts)
 
-            # 2. 应用映射模板
+            # 2. 应用标签模板
+            if official_templates['tag_template']:
+                from project.apps.tags.signals import apply_official_tag_templates
+                result['tags'] = apply_official_tag_templates(user)
+
+            # 3. 应用映射模板
             if official_templates['expense_template']:
                 result['expenses'] = self._create_expense_mappings(user, official_templates['expense_template'])
 
@@ -219,7 +249,7 @@ class Command(BaseCommand):
             if official_templates['assets_template']:
                 result['assets'] = self._create_assets_mappings(user, official_templates['assets_template'])
 
-            # 3. 创建格式化配置
+            # 4. 创建格式化配置
             if not FormatConfig.objects.filter(owner=user).exists():
                 FormatConfig.objects.create(
                     owner=user,
@@ -373,6 +403,7 @@ class Command(BaseCommand):
         self.stdout.write(f'失败用户:     {stats["failed_users"]}')
         self.stdout.write('-' * 60)
         self.stdout.write(f'创建账户数:   {stats["created_accounts"]}')
+        self.stdout.write(f'创建标签数:   {stats["created_tags"]}')
         self.stdout.write(f'创建支出映射: {stats["created_expenses"]}')
         self.stdout.write(f'创建资产映射: {stats["created_assets"]}')
         self.stdout.write(f'创建收入映射: {stats["created_incomes"]}')

@@ -147,3 +147,50 @@ class Tag(BaseModel):
         self.delete()
 
         return result
+
+
+class TagTemplate(BaseModel):
+    """标签模板"""
+    name = models.CharField(max_length=32, null=False, help_text="模板名称")
+    description = models.TextField(blank=True, help_text="模板描述")
+    is_public = models.BooleanField(default=False, help_text="是否公开")
+    is_official = models.BooleanField(default=False, help_text="是否官方")
+    version = models.CharField(max_length=16, blank=True, default="1.0.0", help_text="版本号")
+    update_notes = models.TextField(null=True, blank=True, help_text="更新说明")
+    owner = models.ForeignKey(User, related_name='tag_templates', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'tags_tag_template'
+        verbose_name = '标签模板'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'owner'],
+                name='unique_tag_template_per_user'
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class TagTemplateItem(BaseModel):
+    """标签模板项"""
+    template = models.ForeignKey(TagTemplate, related_name='items', on_delete=models.CASCADE)
+    tag_path = models.CharField(max_length=128, null=False, help_text="标签完整路径")
+    description = models.TextField(blank=True, default='', help_text="标签描述")
+    enable = models.BooleanField(default=True, help_text="默认启用状态")
+
+    class Meta:
+        db_table = 'tags_tag_template_item'
+        verbose_name = '标签模板项'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['template', 'tag_path'],
+                name='unique_tag_path_per_template'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.template.name} - {self.tag_path}"

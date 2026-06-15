@@ -1,5 +1,5 @@
 from django.contrib import admin
-from project.apps.tags.models import Tag
+from project.apps.tags.models import Tag, TagTemplate, TagTemplateItem
 
 
 @admin.register(Tag)
@@ -38,3 +38,27 @@ class TagAdmin(admin.ModelAdmin):
         """显示完整路径"""
         return obj.get_full_path()
     get_full_path.short_description = '完整路径'
+
+
+@admin.register(TagTemplate)
+class TagTemplateAdmin(admin.ModelAdmin):
+    """标签模板管理"""
+    list_display = ['name', 'is_public', 'is_official', 'owner', 'version', 'items_count']
+    list_per_page = 100
+    list_filter = ['is_public', 'is_official', 'owner']
+    search_fields = ['name', 'description', 'update_notes']
+    readonly_fields = ['items_count']
+
+    def items_count(self, obj):
+        """显示模板项数量"""
+        return obj.items.count()
+    items_count.short_description = '标签数量'
+
+
+@admin.register(TagTemplateItem)
+class TagTemplateItemAdmin(admin.ModelAdmin):
+    """标签模板项管理"""
+    list_display = ['template', 'tag_path', 'enable', 'description']
+    list_per_page = 500
+    list_filter = ['template', 'enable']
+    search_fields = ['tag_path']
