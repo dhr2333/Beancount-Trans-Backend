@@ -7,17 +7,19 @@
 import hashlib
 import json
 import logging
-import re
 import time
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from django.core.cache import cache
+
+from project.apps.translate.services.beancount_header_tags import (
+    header_line_has_tags_outside_quotes,
+    replace_header_tags_outside_quotes,
+)
 
 if TYPE_CHECKING:
     from project.apps.reconciliation.models import ScheduledTask
 
 logger = logging.getLogger(__name__)
-
-TAG_TOKEN_RE = re.compile(r'#\S+')
 
 
 class ParseReviewService:
@@ -73,12 +75,7 @@ class ParseReviewService:
         if not formatted:
             return formatted
         lines = formatted.split('\n')
-        first_line = TAG_TOKEN_RE.sub('', lines[0]).rstrip()
-        if tag_paths:
-            tag_str = ' '.join(f'#{path}' for path in tag_paths)
-            lines[0] = f'{first_line} {tag_str}'.rstrip()
-        else:
-            lines[0] = first_line
+        lines[0] = replace_header_tags_outside_quotes(lines[0], tag_paths)
         return '\n'.join(lines)
 
     @classmethod
@@ -116,7 +113,7 @@ class ParseReviewService:
     def _entry_header_has_tags(cls, entry: Dict[str, Any]) -> bool:
         formatted = entry.get('formatted') or entry.get('edited_formatted') or ''
         first_line = formatted.split('\n')[0] if formatted else ''
-        return bool(TAG_TOKEN_RE.search(first_line))
+        return header_line_has_tags_outside_quotes(first_line)
 
     @classmethod
     def ensure_entry_tag_details(

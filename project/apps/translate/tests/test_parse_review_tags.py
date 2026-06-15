@@ -64,6 +64,23 @@ class TestParseReviewTagOverrides:
         assert '#OldTag' not in updated.split('\n')[0]
         assert '#New/Tag #Keep' in updated.split('\n')[0]
 
+    def test_set_header_tags_preserves_hash_inside_quoted_note(self):
+        formatted = (
+            '2025-07-26 * "payee" "顾客打赏-#8袁记云饺(龙湾海城店)"\n'
+            '    Expenses:Test  2.00 CNY\n'
+        )
+        updated = ParseReviewService.set_header_tags(formatted, [])
+        assert updated.split('\n')[0] == (
+            '2025-07-26 * "payee" "顾客打赏-#8袁记云饺(龙湾海城店)"'
+        )
+        assert not ParseReviewService._entry_header_has_tags({'formatted': formatted})
+
+    def test_parse_source_tag_paths_skips_invalid_merchant_hash(self):
+        from project.apps.translate.services.tag_merger import parse_source_tag_paths
+
+        assert parse_source_tag_paths('#8袁记云饺(龙湾海城店)') == []
+        assert parse_source_tag_paths('#BillTag') == ['BillTag']
+
     def test_update_entry_tags_remove_persists_on_reparse_base(self):
         file_id = 42
         ParseReviewService.save_parse_result(file_id, {

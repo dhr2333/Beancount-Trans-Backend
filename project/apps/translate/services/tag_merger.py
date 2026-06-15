@@ -8,6 +8,7 @@
 
 from typing import Any, Dict, List, Optional, Tuple
 from project.apps.tags.models import Tag
+from project.apps.translate.services.beancount_header_tags import is_valid_beancount_tag_path
 
 
 def get_tag_full_path(tag: Tag) -> str:
@@ -27,11 +28,15 @@ def parse_source_tag_paths(source_tag: Optional[str]) -> List[str]:
     """从账单原始标签字符串解析 path 列表（不含 #）。"""
     if not source_tag:
         return []
-    return [
-        tag.strip().lstrip('#')
-        for tag in source_tag.split()
-        if tag.strip().startswith('#')
-    ]
+    paths = []
+    for tag in source_tag.split():
+        token = tag.strip()
+        if not token.startswith('#'):
+            continue
+        path = token.lstrip('#')
+        if is_valid_beancount_tag_path(path):
+            paths.append(path)
+    return paths
 
 
 def merge_tags_with_details(
