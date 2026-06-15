@@ -69,8 +69,32 @@ def load_official_account_data() -> Optional[dict]:
     return data
 
 
+def _validate_mapping_tags(item: dict) -> bool:
+    tags = item.get("tags")
+    if tags is None:
+        return True
+    if not isinstance(tags, list):
+        return False
+    return all(isinstance(tag, str) and tag.strip() for tag in tags)
+
+
+def normalize_mapping_tag_paths(item: dict) -> list[str]:
+    """从映射模板项提取标签路径列表。"""
+    tags = item.get("tags")
+    if not tags:
+        return []
+    if not isinstance(tags, list):
+        return []
+    return [tag.strip() for tag in tags if isinstance(tag, str) and tag.strip()]
+
+
 def _validate_mapping_expense_item(item: dict) -> bool:
-    return isinstance(item, dict) and isinstance(item.get("key"), str) and len(item["key"].strip()) > 0
+    return (
+        isinstance(item, dict)
+        and isinstance(item.get("key"), str)
+        and len(item["key"].strip()) > 0
+        and _validate_mapping_tags(item)
+    )
 
 
 def _validate_mapping_income_item(item: dict) -> bool:

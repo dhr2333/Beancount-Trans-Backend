@@ -323,7 +323,7 @@ class Command(BaseCommand):
                 account = None
 
             # 创建映射
-            Expense.objects.create(
+            expense = Expense.objects.create(
                 owner=user,
                 key=item.key,
                 payee=item.payee,
@@ -331,6 +331,8 @@ class Command(BaseCommand):
                 currency=item.currency,
                 enable=True
             )
+            from project.apps.tags.signals import apply_tags_to_mapping
+            apply_tags_to_mapping(expense, user, item.tag_paths)
             created_count += 1
 
         return created_count

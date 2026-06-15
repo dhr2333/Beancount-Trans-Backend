@@ -248,7 +248,8 @@
       "key": "车险",
       "payee": "",
       "account": "Expenses:Finance:Insurance",
-      "currency": null
+      "currency": null,
+      "tags": ["Fixed", "Online"]
     },
     {
       "key": "餐桌",
@@ -3590,7 +3591,8 @@
       "key": "财政局",
       "payee": "",
       "account": "Expenses:Finance:Fine",
-      "currency": null
+      "currency": null,
+      "tags": ["Emergency"]
     },
     {
       "key": "罚款",

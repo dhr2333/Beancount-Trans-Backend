@@ -8,11 +8,11 @@ from project.apps.tags.models import Tag, TagTemplate
 logger = logging.getLogger(__name__)
 
 
-def tag_exists_for_user(user, tag_path: str) -> bool:
-    """检查用户是否已有指定完整路径的标签。"""
+def get_tag_by_path_for_user(user, tag_path: str):
+    """按完整路径获取用户标签，不存在时返回 None。"""
     tag_path = tag_path.strip()
     if not tag_path:
-        return False
+        return None
 
     parts = tag_path.split('/')
     current = None
@@ -30,8 +30,40 @@ def tag_exists_for_user(user, tag_path: str) -> bool:
                 owner=user,
             ).first()
         if current is None:
-            return False
-    return True
+            return None
+    return current
+
+
+def tag_exists_for_user(user, tag_path: str) -> bool:
+    """检查用户是否已有指定完整路径的标签。"""
+    return get_tag_by_path_for_user(user, tag_path) is not None
+
+
+def resolve_user_tags_by_paths(user, tag_paths) -> list:
+    """将标签路径列表解析为用户 Tag 实例，跳过不存在的路径。"""
+    if not tag_paths:
+        return []
+
+    resolved = []
+    for tag_path in tag_paths:
+        if not isinstance(tag_path, str):
+            continue
+        tag_path = tag_path.strip()
+        if not tag_path:
+            continue
+        tag = get_tag_by_path_for_user(user, tag_path)
+        if tag is None:
+            logger.warning("用户 %s 缺少标签 %s，映射关联已跳过", user.username, tag_path)
+            continue
+        resolved.append(tag)
+    return resolved
+
+
+def apply_tags_to_mapping(mapping, user, tag_paths) -> None:
+    """为映射对象设置标签（按路径解析）。"""
+    tags = resolve_user_tags_by_paths(user, tag_paths)
+    if tags:
+        mapping.tags.set(tags)
 
 
 def apply_official_tag_templates(user):

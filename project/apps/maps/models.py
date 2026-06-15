@@ -89,6 +89,7 @@ class TemplateItem(BaseModel):
     payer = models.CharField(max_length=32, null=True, blank=True, help_text="付款方")
     full = models.CharField(max_length=32, null=True, blank=True, help_text="账户全称")
     currency = models.CharField(max_length=24, null=True, blank=True, help_text="货币代码")
+    tag_paths = models.JSONField(default=list, blank=True, help_text="关联标签路径列表")
 
     class Meta:
         db_table = 'maps_template_item'

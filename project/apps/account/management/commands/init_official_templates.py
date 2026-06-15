@@ -7,6 +7,7 @@ from project.apps.account.management.commands.official_templates_loader import (
     load_official_account_data,
     load_official_mapping_data,
     load_official_tag_data,
+    normalize_mapping_tag_paths,
 )
 from project.apps.maps.models import Template, TemplateItem
 from project.apps.tags.models import Tag, TagTemplate, TagTemplateItem
@@ -287,6 +288,7 @@ class Command(BaseCommand):
                     payee=(item.get("payee") or "").strip() or None,
                     account=(item.get("account") or "").strip() or None,
                     currency=(item.get("currency") or "").strip() or None,
+                    tag_paths=normalize_mapping_tag_paths(item),
                 )
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方支出映射模板 ({len(expense_data["items"])} 项)'

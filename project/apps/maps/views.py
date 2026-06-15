@@ -485,13 +485,15 @@ class TemplateViewSet(ModelViewSet):
                             'account': item.account
                         })
 
-                Expense.objects.create(
+                expense = Expense.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payee=item.payee,
                     expend=target_account,
                     currency=item.currency
                 )
+                from project.apps.tags.signals import apply_tags_to_mapping
+                apply_tags_to_mapping(expense, self.request.user, item.tag_paths)
                 result['created'] += 1
         else:  # merge 模式
             for item in template.items.all():
@@ -520,13 +522,15 @@ class TemplateViewSet(ModelViewSet):
                         })
 
                 # 创建新的映射
-                Expense.objects.create(
+                expense = Expense.objects.create(
                     owner=self.request.user,
                     key=item.key,
                     payee=item.payee,
                     expend=target_account,
                     currency=item.currency
                 )
+                from project.apps.tags.signals import apply_tags_to_mapping
+                apply_tags_to_mapping(expense, self.request.user, item.tag_paths)
                 result['created'] += 1
 
         return result
