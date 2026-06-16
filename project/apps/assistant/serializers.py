@@ -32,3 +32,4 @@ class AssistantStatusSerializer(serializers.Serializer):
     api_key_source = serializers.ChoiceField(choices=['user', 'platform', 'none'])
     ledger_exists = serializers.BooleanField()
     ledger_path = serializers.CharField(allow_blank=True)
+    reference_date = serializers.DateField(help_text='助手使用的基准日期（今天）')

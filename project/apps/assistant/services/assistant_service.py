@@ -2,26 +2,37 @@
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from datetime import date
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth.models import User
 from openai import OpenAI
 
-from .api_key_resolver import ResolvedApiKey, resolve_api_key
+from .api_key_resolver import resolve_api_key
 from .ledger_query import LedgerNotFoundError, LedgerQueryService
+from .reference_date import build_reference_date_context, get_reference_date
 from .schema_provider import get_ledger_context
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
+SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
+
+{reference_date_context}
 
 规则：
 1. 回答支出、收入、余额、汇总类问题时，必须先调用 run_bql 执行查询，不要编造数字。
 2. 不确定账户名称时，先调用 get_ledger_context 了解账户列表和 BQL 语法。
 3. 使用 account ~ 'Expenses:Food' 等正则匹配账户；金额汇总优先用 sum(units(position)) 或 sum(position)。
-4. 用中文简洁回答，标明货币单位；若查无数据，明确说明。
-5. 不要执行写操作，不要讨论与账本无关的话题。"""
+4. 涉及「本月」「上月」「最近」等时间时，以上述基准日期为准构造 BQL 日期条件。
+5. 用中文简洁回答，标明货币单位；若查无数据，明确说明。
+6. 不要执行写操作，不要讨论与账本无关的话题。"""
+
+
+def build_system_prompt(reference_date: date | None = None) -> str:
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        reference_date_context=build_reference_date_context(reference_date),
+    )
 
 TOOLS = [
     {
@@ -69,8 +80,9 @@ class AssistantService:
     MAX_TOOL_ROUNDS = 3
     MAX_MESSAGES = 20
 
-    def __init__(self, user: User):
+    def __init__(self, user: User, reference_date: date | None = None):
         self.user = user
+        self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
         self.model = getattr(settings, 'ASSISTANT_MODEL', 'deepseek-chat')
 
@@ -79,7 +91,7 @@ class AssistantService:
 
     def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
         if name == 'get_ledger_context':
-            return get_ledger_context(self.user)
+            return get_ledger_context(self.user, reference_date=self.reference_date)
 
         if name == 'run_bql':
             query = arguments.get('query', '')
@@ -108,7 +120,7 @@ class AssistantService:
         client = self._build_client(resolved.api_key)
         queries: list[QueryRecord] = []
         llm_messages: list[dict[str, Any]] = [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
+            {'role': 'system', 'content': build_system_prompt(self.reference_date)},
             *messages,
         ]
 

@@ -15,6 +15,7 @@ from .serializers import (
 from .services.api_key_resolver import resolve_api_key
 from .services.assistant_service import AssistantService
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
+from .services.reference_date import get_reference_date
 from .throttles import AssistantChatThrottle
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class AssistantStatusView(APIView):
             'api_key_source': resolved.source,
             'ledger_exists': ledger_service.ledger_exists(),
             'ledger_path': ledger_service.ledger_path if ledger_service.ledger_exists() else '',
+            'reference_date': get_reference_date(),
         }
         serializer = AssistantStatusSerializer(data)
         return Response(serializer.data)

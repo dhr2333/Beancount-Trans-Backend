@@ -23,6 +23,7 @@ class TestAssistantAPI:
         assert response.data['ledger_exists'] is True
         assert response.data['api_key_configured'] is True
         assert response.data['api_key_source'] == 'platform'
+        assert 'reference_date' in response.data
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     def test_chat_without_key_returns_400(self, api_client, user, bean_file):

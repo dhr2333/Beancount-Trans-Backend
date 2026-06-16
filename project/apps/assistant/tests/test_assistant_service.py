@@ -1,9 +1,10 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from datetime import date
 from django.test import override_settings
 
-from project.apps.assistant.services.assistant_service import AssistantService
+from project.apps.assistant.services.assistant_service import AssistantService, build_system_prompt
 from project.apps.translate.models import FormatConfig
 
 
@@ -43,6 +44,11 @@ def _make_text_response(text):
 
 @pytest.mark.django_db
 class TestAssistantService:
+    def test_system_prompt_includes_reference_date(self):
+        prompt = build_system_prompt(date(2026, 6, 16))
+        assert '基准日期（今天）: 2026-06-16' in prompt
+        assert '本月' in prompt
+
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_with_tool_calls(self, mock_openai_cls, user, bean_file):
