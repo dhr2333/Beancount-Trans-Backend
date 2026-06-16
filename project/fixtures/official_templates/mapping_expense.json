@@ -249,7 +249,10 @@
       "payee": "",
       "account": "Expenses:Finance:Insurance",
       "currency": null,
-      "tags": ["Fixed", "Online"]
+      "tags": [
+        "Fixed",
+        "Online"
+      ]
     },
     {
       "key": "餐桌",
@@ -285,7 +288,10 @@
       "key": "盐选",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": null
+      "currency": null,
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "透气",
@@ -381,25 +387,37 @@
       "key": "中国移动",
       "payee": "",
       "account": "Assets:Savings:Recharge:Operator:Mobile:C6428",
-      "currency": "COIN"
+      "currency": "COIN",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "浙江移动",
       "payee": "",
       "account": "Assets:Savings:Recharge:Operator:Mobile:C6428",
-      "currency": "COIN"
+      "currency": "COIN",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "月卡",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "包月",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "Petal On",
@@ -519,7 +537,10 @@
       "key": "美团外卖",
       "payee": "",
       "account": "Expenses:Food",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "东方宝石",
@@ -597,7 +618,10 @@
       "key": "ETC",
       "payee": "",
       "account": "Expenses:TransPort:Public",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "商贸",
@@ -663,7 +687,10 @@
       "key": "货拉拉",
       "payee": "",
       "account": "Expenses:Home:Utilities",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "家用",
@@ -693,7 +720,10 @@
       "key": "物业",
       "payee": "",
       "account": "Expenses:Home:Utilities",
-      "currency": null
+      "currency": null,
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "供电局",
@@ -789,7 +819,10 @@
       "key": "自动续费",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "娱乐",
@@ -819,7 +852,10 @@
       "key": "保险",
       "payee": "",
       "account": "Expenses:Finance:Insurance",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "得物",
@@ -987,7 +1023,10 @@
       "key": "打车",
       "payee": "",
       "account": "Expenses:TransPort:Public",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "华为",
@@ -1023,7 +1062,10 @@
       "key": "淘宝",
       "payee": "",
       "account": "Expenses:Shopping",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "超市",
@@ -1047,7 +1089,10 @@
       "key": "等多件",
       "payee": "",
       "account": "Expenses:Shopping",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "抖音电商",
@@ -1083,7 +1128,10 @@
       "key": "阿里云",
       "payee": "",
       "account": "Assets:Savings:Recharge:AliCloud",
-      "currency": "COIN"
+      "currency": "COIN",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "理发",
@@ -1461,7 +1509,10 @@
       "key": "电费",
       "payee": "",
       "account": "Expenses:Home:Utilities",
-      "currency": null
+      "currency": null,
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "充值",
@@ -1503,7 +1554,10 @@
       "key": "淘票票",
       "payee": "",
       "account": "Expenses:Culture:Entertainment",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "影城",
@@ -2157,7 +2211,10 @@
       "key": "**",
       "payee": "",
       "account": "Expenses:Shopping",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "湿巾",
@@ -2277,7 +2334,10 @@
       "key": "88VIP",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "宽带",
@@ -2919,7 +2979,10 @@
       "key": "饿了么",
       "payee": "",
       "account": "Expenses:Food",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Online"
+      ]
     },
     {
       "key": "美团平台商户",
@@ -3592,7 +3655,9 @@
       "payee": "",
       "account": "Expenses:Finance:Fine",
       "currency": null,
-      "tags": ["Emergency"]
+      "tags": [
+        "Emergency"
+      ]
     },
     {
       "key": "罚款",
@@ -3964,7 +4029,50 @@
       "key": "工本费",
       "payee": "",
       "account": "Expenses:Finance:Commission",
-      "currency": null
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "扫码",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "抖音生活服务",
+      "payee": "",
+      "account": "Expenses:Food",
+      "currency": null,
+      "tags": ["Online"]
+    },
+    {
+      "key": "收钱码收款",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "直播",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": ["Online"]
+    },
+    {
+      "key": "二维码支付",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "小桔充电",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": []
     }
   ]
 }

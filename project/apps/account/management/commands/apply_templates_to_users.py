@@ -309,6 +309,13 @@ class Command(BaseCommand):
 
     def _create_expense_mappings(self, user, expense_template):
         """创建支出映射"""
+        from project.apps.account.management.commands.official_templates_loader import (
+            load_official_expense_tag_paths_by_key,
+            resolve_expense_template_item_tag_paths,
+        )
+        from project.apps.tags.signals import apply_tags_to_mapping
+
+        json_tag_map = load_official_expense_tag_paths_by_key()
         created_count = 0
         template_items = expense_template.items.all()
 
@@ -331,8 +338,8 @@ class Command(BaseCommand):
                 currency=item.currency,
                 enable=True
             )
-            from project.apps.tags.signals import apply_tags_to_mapping
-            apply_tags_to_mapping(expense, user, item.tag_paths)
+            tag_paths = resolve_expense_template_item_tag_paths(item, json_tag_map)
+            apply_tags_to_mapping(expense, user, tag_paths)
             created_count += 1
 
         return created_count

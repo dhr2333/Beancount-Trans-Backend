@@ -59,6 +59,9 @@ class Command(BaseCommand):
         # 6. 创建官方映射模板
         self._create_official_mapping_templates(admin_user, force)
 
+        # 6.1 同步支出映射模板项的标签路径（无需 --force）
+        self._sync_official_expense_template_tag_paths()
+
         # 7. 应用官方映射模板到 admin 用户
         self._apply_mapping_templates_to_admin(admin_user)
 
@@ -357,6 +360,33 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方收入映射模板 ({len(income_data["items"])} 项)'
             ))
+
+    def _sync_official_expense_template_tag_paths(self):
+        """将 mapping_expense.json 中的 tags 同步到官方支出 TemplateItem.tag_paths。"""
+        expense_template = Template.objects.filter(name='官方支出映射', is_official=True).first()
+        if not expense_template:
+            return
+
+        expense_data = load_official_mapping_data('expense')
+        if not expense_data:
+            self.stdout.write(self.style.WARNING('无法加载 mapping_expense.json，跳过标签路径同步'))
+            return
+
+        tag_by_key = {
+            item['key']: normalize_mapping_tag_paths(item)
+            for item in expense_data['items']
+        }
+        updated = 0
+        for item in TemplateItem.objects.filter(template=expense_template):
+            new_paths = tag_by_key.get(item.key, [])
+            if item.tag_paths != new_paths:
+                item.tag_paths = new_paths
+                item.save(update_fields=['tag_paths', 'modified'])
+                updated += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f'✓ 同步官方支出映射标签路径 ({updated} 项已更新)'
+        ))
 
     def _apply_mapping_templates_to_admin(self, admin_user):
         """应用映射模板到 admin 用户"""

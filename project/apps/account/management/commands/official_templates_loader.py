@@ -180,6 +180,29 @@ def load_official_tag_data() -> Optional[dict]:
     return data
 
 
+def load_official_expense_tag_paths_by_key() -> dict[str, list[str]]:
+    """从 mapping_expense.json 加载 key -> 标签路径列表。"""
+    data = load_official_mapping_data('expense')
+    if not data:
+        return {}
+    result: dict[str, list[str]] = {}
+    for item in data.get('items', []):
+        paths = normalize_mapping_tag_paths(item)
+        if paths:
+            result[item['key']] = paths
+    return result
+
+
+def resolve_expense_template_item_tag_paths(item, json_tag_map: dict[str, list[str]] | None = None) -> list[str]:
+    """解析模板项的有效标签路径：优先 DB，为空时回退 JSON。"""
+    db_paths = list(item.tag_paths or [])
+    if db_paths:
+        return db_paths
+    if json_tag_map is None:
+        json_tag_map = load_official_expense_tag_paths_by_key()
+    return list(json_tag_map.get(item.key, []))
+
+
 def load_all_official_templates_data() -> dict[str, Any]:
     """
     一次性加载所有官方模板 JSON（若存在）。

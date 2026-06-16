@@ -460,6 +460,13 @@ class TemplateViewSet(ModelViewSet):
 
     def _apply_expense_template(self, template, action_type, conflict_resolution):
         """应用支出模板"""
+        from project.apps.account.management.commands.official_templates_loader import (
+            load_official_expense_tag_paths_by_key,
+            resolve_expense_template_item_tag_paths,
+        )
+        from project.apps.tags.signals import apply_tags_to_mapping
+
+        json_tag_map = load_official_expense_tag_paths_by_key()
         result = {
             'created': 0,
             'skipped': 0,
@@ -492,8 +499,8 @@ class TemplateViewSet(ModelViewSet):
                     expend=target_account,
                     currency=item.currency
                 )
-                from project.apps.tags.signals import apply_tags_to_mapping
-                apply_tags_to_mapping(expense, self.request.user, item.tag_paths)
+                tag_paths = resolve_expense_template_item_tag_paths(item, json_tag_map)
+                apply_tags_to_mapping(expense, self.request.user, tag_paths)
                 result['created'] += 1
         else:  # merge 模式
             for item in template.items.all():
@@ -529,8 +536,8 @@ class TemplateViewSet(ModelViewSet):
                     expend=target_account,
                     currency=item.currency
                 )
-                from project.apps.tags.signals import apply_tags_to_mapping
-                apply_tags_to_mapping(expense, self.request.user, item.tag_paths)
+                tag_paths = resolve_expense_template_item_tag_paths(item, json_tag_map)
+                apply_tags_to_mapping(expense, self.request.user, tag_paths)
                 result['created'] += 1
 
         return result
