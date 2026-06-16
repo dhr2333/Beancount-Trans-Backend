@@ -1,0 +1,162 @@
+"""LLM 编排：DeepSeek function calling + BQL 工具。"""
+import json
+import logging
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from django.conf import settings
+from django.contrib.auth.models import User
+from openai import OpenAI
+
+from .api_key_resolver import ResolvedApiKey, resolve_api_key
+from .ledger_query import LedgerNotFoundError, LedgerQueryService
+from .schema_provider import get_ledger_context
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
+
+规则：
+1. 回答支出、收入、余额、汇总类问题时，必须先调用 run_bql 执行查询，不要编造数字。
+2. 不确定账户名称时，先调用 get_ledger_context 了解账户列表和 BQL 语法。
+3. 使用 account ~ 'Expenses:Food' 等正则匹配账户；金额汇总优先用 sum(units(position)) 或 sum(position)。
+4. 用中文简洁回答，标明货币单位；若查无数据，明确说明。
+5. 不要执行写操作，不要讨论与账本无关的话题。"""
+
+TOOLS = [
+    {
+        'type': 'function',
+        'function': {
+            'name': 'get_ledger_context',
+            'description': '获取用户账本上下文：账户列表、默认货币、BQL 语法说明',
+            'parameters': {'type': 'object', 'properties': {}, 'required': []},
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'run_bql',
+            'description': '执行只读 BQL 查询并返回表格结果',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'query': {
+                        'type': 'string',
+                        'description': 'BQL SELECT 查询语句',
+                    }
+                },
+                'required': ['query'],
+            },
+        },
+    },
+]
+
+
+@dataclass
+class QueryRecord:
+    bql: str
+    result_preview: str
+
+
+@dataclass
+class AssistantReply:
+    reply: str
+    queries: list[QueryRecord] = field(default_factory=list)
+    api_key_source: str = 'none'
+
+
+class AssistantService:
+    MAX_TOOL_ROUNDS = 3
+    MAX_MESSAGES = 20
+
+    def __init__(self, user: User):
+        self.user = user
+        self.ledger_query = LedgerQueryService(user)
+        self.model = getattr(settings, 'ASSISTANT_MODEL', 'deepseek-chat')
+
+    def _build_client(self, api_key: str) -> OpenAI:
+        return OpenAI(api_key=api_key, base_url='https://api.deepseek.com')
+
+    def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
+        if name == 'get_ledger_context':
+            return get_ledger_context(self.user)
+
+        if name == 'run_bql':
+            query = arguments.get('query', '')
+            try:
+                result = self.ledger_query.execute(query)
+                queries.append(QueryRecord(bql=result.bql, result_preview=result.result_text))
+                return result.result_text
+            except Exception as exc:
+                return f'查询失败: {exc}'
+
+        return f'未知工具: {name}'
+
+    def chat(self, messages: list[dict[str, str]], show_bql: bool = False) -> AssistantReply:
+        resolved = resolve_api_key(self.user)
+        if not resolved.api_key:
+            raise ValueError(
+                '未配置 DeepSeek API Key，请在「输出配置」中填写，或联系管理员配置平台 Key。'
+            )
+
+        if not self.ledger_query.ledger_exists():
+            raise LedgerNotFoundError('账本文件尚未创建，请先上传并解析账单。')
+
+        if len(messages) > self.MAX_MESSAGES:
+            messages = messages[-self.MAX_MESSAGES:]
+
+        client = self._build_client(resolved.api_key)
+        queries: list[QueryRecord] = []
+        llm_messages: list[dict[str, Any]] = [
+            {'role': 'system', 'content': SYSTEM_PROMPT},
+            *messages,
+        ]
+
+        for _ in range(self.MAX_TOOL_ROUNDS + 1):
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=llm_messages,
+                tools=TOOLS,
+                tool_choice='auto',
+                temperature=0.1,
+            )
+            choice = response.choices[0]
+            message = choice.message
+
+            if choice.finish_reason == 'tool_calls' or message.tool_calls:
+                llm_messages.append(message.model_dump(exclude_none=True))
+                for tool_call in message.tool_calls or []:
+                    fn_name = tool_call.function.name
+                    try:
+                        fn_args = json.loads(tool_call.function.arguments or '{}')
+                    except json.JSONDecodeError:
+                        fn_args = {}
+                    tool_result = self._dispatch_tool(fn_name, fn_args, queries)
+                    llm_messages.append({
+                        'role': 'tool',
+                        'tool_call_id': tool_call.id,
+                        'content': tool_result,
+                    })
+                continue
+
+            reply_text = (message.content or '').strip()
+            if not reply_text:
+                reply_text = '抱歉，我暂时无法回答这个问题，请尝试换个问法。'
+
+            if show_bql and queries:
+                bql_section = '\n\n'.join(
+                    f'```bql\n{q.bql}\n```\n{q.result_preview}' for q in queries
+                )
+                reply_text = f'{reply_text}\n\n---\n查询详情:\n{bql_section}'
+
+            return AssistantReply(
+                reply=reply_text,
+                queries=queries,
+                api_key_source=resolved.source,
+            )
+
+        return AssistantReply(
+            reply='查询步骤过多，请简化问题后重试。',
+            queries=queries,
+            api_key_source=resolved.source,
+        )

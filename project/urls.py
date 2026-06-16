@@ -79,4 +79,5 @@ urlpatterns = [
     path('api/fava/', include('project.apps.fava_instances.urls')),  # fava容器服务
     path('api/git/', include('project.apps.git_repository.urls')),  # Git仓库管理
     path('api/reconciliation/', include('project.apps.reconciliation.urls')),  # 对账功能
+    path('api/assistant/', include('project.apps.assistant.urls')),  # AI 账本助手
 ]

@@ -1089,6 +1089,84 @@
         }
       }
     },
+    "/api/assistant/chat/": {
+      "post": {
+        "operationId": "assistant_chat_create",
+        "summary": "AI 账本助手对话",
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantChatResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/assistant/status/": {
+      "get": {
+        "operationId": "assistant_status_retrieve",
+        "summary": "获取 AI 账本助手状态",
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStatus"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/auth/2fa/status/": {
       "get": {
         "operationId": "auth_2fa_status_retrieve",
@@ -5289,7 +5367,7 @@
     "/api/translate/parse-review/{task_id}/entries/{uuid}/tags": {
       "patch": {
         "operationId": "translate_parse_review_entries_tags_partial_update",
-        "description": "更新条目标签（添加/移除）\n\nPATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags\nBody: {\"action\": \"add|remove\", \"tag_path\": \"Category/EDUCATION\"}",
+        "description": "PATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags\n\nBody: {\"action\": \"add|remove\", \"tag_path\": \"Category/EDUCATION\"}",
         "parameters": [
           {
             "in": "path",
@@ -5319,25 +5397,6 @@
             "Bearer": []
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "action": {
-                    "type": "string",
-                    "enum": ["add", "remove"]
-                  },
-                  "tag_path": {
-                    "type": "string"
-                  }
-                },
-                "required": ["action", "tag_path"]
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "No response body"
@@ -5423,6 +5482,28 @@
             "required": true
           }
         ],
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/parse-task-status": {
+      "get": {
+        "operationId": "translate_parse_task_status_retrieve",
+        "description": "查询单个 Celery 解析任务状态（与 task_status:{task_id} 缓存一致）",
         "tags": [
           "translate"
         ],
@@ -6078,6 +6159,15 @@
           "parent_account"
         ]
       },
+      "ApiKeySourceEnum": {
+        "enum": [
+          "user",
+          "platform",
+          "none"
+        ],
+        "type": "string",
+        "description": "* `user` - user\n* `platform` - platform\n* `none` - none"
+      },
       "Assets": {
         "type": "object",
         "properties": {
@@ -6178,9 +6268,89 @@
           "key"
         ]
       },
+      "AssistantChatRequestRequest": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageRequest"
+            }
+          },
+          "show_bql": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "messages"
+        ]
+      },
+      "AssistantChatResponse": {
+        "type": "object",
+        "properties": {
+          "reply": {
+            "type": "string"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryRecord"
+            }
+          },
+          "api_key_source": {
+            "$ref": "#/components/schemas/ApiKeySourceEnum"
+          }
+        },
+        "required": [
+          "api_key_source",
+          "queries",
+          "reply"
+        ]
+      },
+      "AssistantStatus": {
+        "type": "object",
+        "properties": {
+          "api_key_configured": {
+            "type": "boolean"
+          },
+          "api_key_source": {
+            "$ref": "#/components/schemas/ApiKeySourceEnum"
+          },
+          "ledger_exists": {
+            "type": "boolean"
+          },
+          "ledger_path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key_configured",
+          "api_key_source",
+          "ledger_exists",
+          "ledger_path"
+        ]
+      },
       "BlankEnum": {
         "enum": [
           ""
+        ]
+      },
+      "ChatMessageRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/RoleEnum"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "content",
+          "role"
         ]
       },
       "CreateRepositoryRequest": {
@@ -7196,10 +7366,28 @@
             "description": "货币代码",
             "maxLength": 24
           },
+          "tag_paths": {
+            "description": "关联标签路径列表"
+          },
           "template": {
             "type": "integer"
           }
         }
+      },
+      "QueryRecord": {
+        "type": "object",
+        "properties": {
+          "bql": {
+            "type": "string"
+          },
+          "result_preview": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bql",
+          "result_preview"
+        ]
       },
       "ReconciliationCycleUnitEnum": {
         "enum": [
@@ -7413,6 +7601,14 @@
           "is_first_reconciliation"
         ]
       },
+      "RoleEnum": {
+        "enum": [
+          "user",
+          "assistant"
+        ],
+        "type": "string",
+        "description": "* `user` - user\n* `assistant` - assistant"
+      },
       "ScheduledTask": {
         "type": "object",
         "description": "ScheduledTask 基础序列化器",
@@ -7547,7 +7743,7 @@
             "type": "string",
             "readOnly": true
           },
-          "expires_at": {
+          "review_expires_at": {
             "type": "string",
             "readOnly": true
           },
@@ -7566,11 +7762,11 @@
           "account_name",
           "account_type",
           "created",
-          "expires_at",
           "file_id",
           "file_name",
           "id",
           "modified",
+          "review_expires_at",
           "status_display",
           "task_type",
           "task_type_display"
@@ -8129,6 +8325,9 @@
             "description": "货币代码",
             "maxLength": 24
           },
+          "tag_paths": {
+            "description": "关联标签路径列表"
+          },
           "template": {
             "type": "integer"
           }
@@ -8179,6 +8378,9 @@
             "nullable": true,
             "description": "货币代码",
             "maxLength": 24
+          },
+          "tag_paths": {
+            "description": "关联标签路径列表"
           },
           "template": {
             "type": "integer"

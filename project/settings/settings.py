@@ -105,6 +105,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.reconciliation',
     'project.apps.tags',
     'project.apps.translate',
+    'project.apps.assistant',
 ]
 
 # 根据 DEBUG 模式决定是否包含开发专用应用
@@ -395,7 +396,8 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': '10000/minute',
-        'user': '10000/minute'
+        'user': '10000/minute',
+        'assistant_chat': '20/hour',
     },
     'DEFAULT_FILTER_BACKENDS': (  # 过滤后端，允许使用 Django Filter 进行查询
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -585,3 +587,8 @@ SMS_CODE_RESEND_INTERVAL = 60  # 1分钟
 # Phonenumber Field
 PHONENUMBER_DEFAULT_REGION = 'CN'
 PHONENUMBER_DB_FORMAT = 'E164'
+
+# AI 账本助手
+ASSISTANT_DEEPSEEK_API_KEY = os.environ.get('ASSISTANT_DEEPSEEK_API_KEY', '')
+ASSISTANT_MODEL = os.environ.get('ASSISTANT_MODEL', 'deepseek-chat')
+ASSISTANT_MAX_BQL_ROWS = int(os.environ.get('ASSISTANT_MAX_BQL_ROWS', '100'))
