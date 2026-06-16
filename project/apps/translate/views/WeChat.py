@@ -211,13 +211,19 @@ def wechatpay_get_note(data):
 
 
 def wechatpay_get_tag(data):
+    import re
+    from project.apps.translate.services.beancount_header_tags import is_valid_beancount_tag_path
+
     notes = wechatpay_get_note(data)
-    if "#" in notes:
-        return "#" + notes.split("#")[1].strip()
-    elif "^" in notes:
-        return "^" + notes.split("^")[1].strip()
-    else:
-        return None
+    tag_match = re.search(r'(?:^|\s)(#\S+)', notes or '')
+    if tag_match:
+        path = tag_match.group(1).lstrip('#')
+        if is_valid_beancount_tag_path(path):
+            return tag_match.group(1).strip()
+    caret_match = re.search(r'(?:^|\s)(\^\S+)', notes or '')
+    if caret_match:
+        return caret_match.group(1).strip()
+    return None
 
 
 def wechatpay_get_commission(data):

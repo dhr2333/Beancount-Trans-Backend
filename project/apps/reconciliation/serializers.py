@@ -39,8 +39,8 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     file_name = serializers.SerializerMethodField()
     file_id = serializers.SerializerMethodField()
     
-    # 缓存过期时间（解析待办）
-    expires_at = serializers.SerializerMethodField()
+    # 缓存审核截止时间（解析待办）
+    review_expires_at = serializers.SerializerMethodField()
     
     class Meta:
         model = ScheduledTask
@@ -50,7 +50,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'account_name', 'account_type',
             'file_name', 'file_id',
-            'expires_at',
+            'review_expires_at',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -83,15 +83,16 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             return obj.content_object.file_id
         return None
     
-    def get_expires_at(self, obj):
-        """获取缓存过期时间（解析待办）"""
+    def get_review_expires_at(self, obj):
+        """获取用户审核截止时间（解析待办）"""
         if obj.task_type == 'parse_review':
             from project.apps.translate.models import ParseFile
             from project.apps.translate.services.parse_review_service import ParseReviewService
             if isinstance(obj.content_object, ParseFile):
                 parse_result = ParseReviewService.get_parse_result(obj.content_object.file_id)
-                if parse_result and 'expires_at' in parse_result:
-                    return parse_result['expires_at']
+                expires_at = ParseReviewService.get_review_expires_at(parse_result, obj)
+                if expires_at is not None:
+                    return expires_at
         return None
 
 

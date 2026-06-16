@@ -73,8 +73,10 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             try:
                 from project.apps.account.signals import apply_official_account_templates
                 from project.apps.maps.signals import apply_official_templates
+                from project.apps.tags.signals import apply_official_tag_templates
 
                 apply_official_account_templates(user)
+                apply_official_tag_templates(user)
                 apply_official_templates(user)
             except Exception as exc:  # pragma: no cover - 初始化失败不影响登录
                 logger.warning("为用户 %s 应用初始化模板失败: %s", user.username, exc)

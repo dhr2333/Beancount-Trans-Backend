@@ -6,8 +6,11 @@ from project.apps.account.models import Account, AccountTemplate, AccountTemplat
 from project.apps.account.management.commands.official_templates_loader import (
     load_official_account_data,
     load_official_mapping_data,
+    load_official_tag_data,
+    normalize_mapping_tag_paths,
 )
 from project.apps.maps.models import Template, TemplateItem
+from project.apps.tags.models import Tag, TagTemplate, TagTemplateItem
 from project.apps.translate.models import FormatConfig
 
 User = get_user_model()
@@ -47,16 +50,25 @@ class Command(BaseCommand):
         # 3. 应用官方账户模板到 admin 用户
         self._apply_account_templates_to_admin(admin_user)
 
-        # 4. 创建官方映射模板
+        # 4. 创建官方标签模板
+        self._create_official_tag_template(admin_user, force)
+
+        # 5. 应用官方标签模板到 admin 用户
+        self._apply_tag_templates_to_admin(admin_user)
+
+        # 6. 创建官方映射模板
         self._create_official_mapping_templates(admin_user, force)
 
-        # 5. 应用官方映射模板到 admin 用户
+        # 6.1 同步支出映射模板项的标签路径（无需 --force）
+        self._sync_official_expense_template_tag_paths()
+
+        # 7. 应用官方映射模板到 admin 用户
         self._apply_mapping_templates_to_admin(admin_user)
 
-        # 6. 确保 admin 用户有格式化配置
+        # 8. 确保 admin 用户有格式化配置
         self._ensure_format_config(admin_user)
 
-        # 7. 为 admin 用户创建案例文件（始终按 fixtures 强制覆盖，与 --force 无关）
+        # 9. 为 admin 用户创建案例文件（始终按 fixtures 强制覆盖，与 --force 无关）
         self._create_sample_files_for_admin(admin_user)
 
         self.stdout.write(self.style.SUCCESS('✓ 官方模板和默认用户初始化完成'))
@@ -153,6 +165,71 @@ class Command(BaseCommand):
             f'✓ 为 admin 用户创建了 {final_count} 个账户'
         ))
 
+    def _create_official_tag_template(self, admin_user, force):
+        """创建官方标签模板（仅使用 JSON 单一数据源）"""
+        template_name = "官方标签模板"
+
+        existing_template = TagTemplate.objects.filter(
+            name=template_name,
+            is_official=True,
+        ).first()
+
+        if existing_template:
+            if force:
+                existing_template.delete()
+                self.stdout.write(self.style.WARNING(f'删除现有官方标签模板: {template_name}'))
+            else:
+                self.stdout.write(self.style.WARNING(
+                    f'官方标签模板已存在: {template_name}，使用 --force 强制重建'
+                ))
+                return
+
+        with transaction.atomic():
+            tag_data = load_official_tag_data()
+            if not tag_data:
+                raise CommandError(
+                    "官方标签模板 JSON 缺失或无效，请在 project/fixtures/official_templates/tag.json "
+                    "配置后再运行 init_official_templates。"
+                )
+
+            template = TagTemplate.objects.create(
+                name=tag_data["name"],
+                description=tag_data.get("description", ""),
+                version=tag_data.get("version", "1.0.0"),
+                update_notes=tag_data.get("update_notes"),
+                is_public=True,
+                is_official=True,
+                owner=admin_user,
+            )
+            for item in tag_data["items"]:
+                TagTemplateItem.objects.create(
+                    template=template,
+                    tag_path=item["tag_path"],
+                    enable=item.get("enable", True),
+                    description=(item.get("description") or "").strip(),
+                )
+
+            self.stdout.write(self.style.SUCCESS(
+                f'✓ 创建官方标签模板: {tag_data["name"]} ({len(tag_data["items"])} 个标签)'
+            ))
+
+    def _apply_tag_templates_to_admin(self, admin_user):
+        """应用标签模板到 admin 用户"""
+        from project.apps.tags.signals import apply_official_tag_templates
+
+        existing_count = Tag.objects.filter(owner=admin_user).count()
+        if existing_count > 0:
+            self.stdout.write(self.style.WARNING(
+                f'admin 用户已有 {existing_count} 个标签，跳过自动应用'
+            ))
+            return
+
+        apply_official_tag_templates(admin_user)
+        final_count = Tag.objects.filter(owner=admin_user).count()
+        self.stdout.write(self.style.SUCCESS(
+            f'✓ 为 admin 用户创建了 {final_count} 个标签'
+        ))
+
     def _ensure_format_config(self, admin_user):
         """确保 admin 用户有格式化配置"""
         config, created = FormatConfig.objects.get_or_create(
@@ -165,7 +242,7 @@ class Command(BaseCommand):
                 'show_uuid': True,
                 'show_status': True,
                 'show_discount': True,
-                'income_template': 'Income:Discount',
+                'income_template': 'Income:Transfer:Organizational',
                 'commission_template': 'Expenses:Finance:Commission',
                 'reconciliation_fallback_account': 'Equity:Adjustments',
                 'currency': 'CNY',
@@ -214,6 +291,7 @@ class Command(BaseCommand):
                     payee=(item.get("payee") or "").strip() or None,
                     account=(item.get("account") or "").strip() or None,
                     currency=(item.get("currency") or "").strip() or None,
+                    tag_paths=normalize_mapping_tag_paths(item),
                 )
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方支出映射模板 ({len(expense_data["items"])} 项)'
@@ -282,6 +360,33 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f'✓ 创建官方收入映射模板 ({len(income_data["items"])} 项)'
             ))
+
+    def _sync_official_expense_template_tag_paths(self):
+        """将 mapping_expense.json 中的 tags 同步到官方支出 TemplateItem.tag_paths。"""
+        expense_template = Template.objects.filter(name='官方支出映射', is_official=True).first()
+        if not expense_template:
+            return
+
+        expense_data = load_official_mapping_data('expense')
+        if not expense_data:
+            self.stdout.write(self.style.WARNING('无法加载 mapping_expense.json，跳过标签路径同步'))
+            return
+
+        tag_by_key = {
+            item['key']: normalize_mapping_tag_paths(item)
+            for item in expense_data['items']
+        }
+        updated = 0
+        for item in TemplateItem.objects.filter(template=expense_template):
+            new_paths = tag_by_key.get(item.key, [])
+            if item.tag_paths != new_paths:
+                item.tag_paths = new_paths
+                item.save(update_fields=['tag_paths', 'modified'])
+                updated += 1
+
+        self.stdout.write(self.style.SUCCESS(
+            f'✓ 同步官方支出映射标签路径 ({updated} 项已更新)'
+        ))
 
     def _apply_mapping_templates_to_admin(self, admin_user):
         """应用映射模板到 admin 用户"""

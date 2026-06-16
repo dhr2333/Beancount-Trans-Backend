@@ -1,5 +1,9 @@
+from django.db import IntegrityError
 from rest_framework import serializers
+
 from project.apps.tags.models import Tag
+
+_DUPLICATE_TAG_MSG = '该标签已存在，请勿重复添加'
 
 
 class TagTreeSerializer(serializers.ModelSerializer):
@@ -151,7 +155,64 @@ class TagSerializer(serializers.ModelSerializer):
             if char in value:
                 raise serializers.ValidationError(f"标签名称不能包含字符: '{char}'")
 
-        return value.strip()
+        path = value.strip()
+        request = self.context.get('request')
+        if request and getattr(request.user, 'is_authenticated', False):
+            if self._tag_with_path_exists(path, request.user):
+                raise serializers.ValidationError(_DUPLICATE_TAG_MSG)
+
+        return path
+
+    def _tag_with_path_exists(self, path, owner):
+        """检查指定完整路径的标签是否已存在"""
+        leaf_name = path.split('/')[-1] if '/' in path else path
+        qs = Tag.objects.filter(name=leaf_name, owner=owner)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        return any(tag.get_full_path() == path for tag in qs)
+
+    def _get_or_create_parent_by_path(self, owner, parent_path):
+        """根据完整路径查找或创建父标签"""
+        helper = Tag(owner=owner, name='__helper__')
+        try:
+            return helper._get_tag_by_path(parent_path)
+        except Tag.DoesNotExist:
+            return helper._create_parent_tag(parent_path)
+
+    def _apply_path_to_instance(self, instance, path):
+        """将完整路径解析为叶子名称与父标签"""
+        if '/' in path:
+            instance.name = path.split('/')[-1]
+            parent_path = '/'.join(path.split('/')[:-1])
+            parent = self._get_or_create_parent_by_path(instance.owner, parent_path)
+            if parent.pk == instance.pk:
+                raise serializers.ValidationError({'name': '标签不能成为自己的父标签'})
+            instance.parent = parent
+        else:
+            instance.name = path
+            instance.parent = None
+
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
+
+    def update(self, instance, validated_data):
+        name_input = validated_data.pop('name', None)
+        if name_input is not None:
+            new_path = name_input.strip()
+            if new_path != instance.get_full_path():
+                self._apply_path_to_instance(instance, new_path)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        try:
+            instance.save()
+        except IntegrityError:
+            raise serializers.ValidationError({'name': [_DUPLICATE_TAG_MSG]})
+        return instance
 
     def validate(self, data):
         """验证整体数据"""

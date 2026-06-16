@@ -41,79 +41,41 @@ class Tag(BaseModel):
                 current = current.parent
 
     def save(self, *args, **kwargs):
-        """保存标签时自动创建父标签，并同步状态"""
-        # 检查enable字段是否发生变化
-        enable_changed = False
-        name_changed = False
-        old_name = None
-
-        if self.pk:
-            try:
-                old_instance = Tag.objects.get(pk=self.pk)
-                enable_changed = old_instance.enable != self.enable
-                name_changed = old_instance.name != self.name
-                if name_changed:
-                    old_name = old_instance.name
-            except Tag.DoesNotExist:
-                pass
-
-        # 如果没有父标签，但name中包含斜杠，自动创建父标签
-        if not self.parent and '/' in self.name:
+        """保存标签时自动创建父标签（仅处理含斜杠的完整路径输入）"""
+        if '/' in self.name:
             parent_tag_path = '/'.join(self.name.split('/')[:-1])
-            # 提取最后一个部分作为实际的name
             self.name = self.name.split('/')[-1]
             try:
-                # 尝试获取已存在的父标签
-                self.parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
+                new_parent = self._get_tag_by_path(parent_tag_path)
+                if new_parent.pk == self.pk:
+                    raise ValidationError("标签不能成为自己的父标签")
+                self.parent = new_parent
             except Tag.DoesNotExist:
-                # 自动创建父标签
                 self.parent = self._create_parent_tag(parent_tag_path)
 
         super().save(*args, **kwargs)
 
-        # 如果enable状态发生变化，同步更新子标签状态
-        if enable_changed and not self.enable:
-            self._disable_children()
+    def _get_tag_by_path(self, path):
+        """根据完整路径查找标签"""
+        if '/' in path:
+            parent_path = '/'.join(path.split('/')[:-1])
+            leaf_name = path.split('/')[-1]
+            parent_tag = self._get_tag_by_path(parent_path)
+            return Tag.objects.get(name=leaf_name, parent=parent_tag, owner=self.owner)
+        return Tag.objects.get(name=path, parent__isnull=True, owner=self.owner)
 
     def _create_parent_tag(self, parent_tag_path):
         """递归创建父标签（参考 Account 的实现）"""
         try:
-            # 尝试获取父标签
-            parent = Tag.objects.get(name=parent_tag_path, owner=self.owner)
-            return parent
+            return self._get_tag_by_path(parent_tag_path)
         except Tag.DoesNotExist:
-            # 如果父标签不存在，递归创建
-            if '/' in parent_tag_path:
-                # 还有更上级的父标签，先创建上级父标签
-                grandparent_path = '/'.join(parent_tag_path.split('/')[:-1])
-                grandparent = self._create_parent_tag(grandparent_path)
-
-                # 提取当前层级的标签名
-                current_name = parent_tag_path.split('/')[-1]
-
-                # 创建当前父标签
-                parent = Tag.objects.create(
-                    name=current_name,
-                    owner=self.owner,
-                    parent=grandparent,
-                    enable=True
-                )
-            else:
-                # 这是根级标签，直接创建
-                parent = Tag.objects.create(
-                    name=parent_tag_path,
-                    owner=self.owner,
-                    enable=True
-                )
-
+            parent = Tag(
+                name=parent_tag_path,
+                owner=self.owner,
+                enable=True
+            )
+            parent.save()
             return parent
-
-    def _disable_children(self):
-        """递归禁用所有子标签"""
-        for child in self.children.all():
-            if child.enable:
-                child.enable = False
-                child.save()
 
     def has_children(self):
         """检查是否存在子标签"""
@@ -185,3 +147,50 @@ class Tag(BaseModel):
         self.delete()
 
         return result
+
+
+class TagTemplate(BaseModel):
+    """标签模板"""
+    name = models.CharField(max_length=32, null=False, help_text="模板名称")
+    description = models.TextField(blank=True, help_text="模板描述")
+    is_public = models.BooleanField(default=False, help_text="是否公开")
+    is_official = models.BooleanField(default=False, help_text="是否官方")
+    version = models.CharField(max_length=16, blank=True, default="1.0.0", help_text="版本号")
+    update_notes = models.TextField(null=True, blank=True, help_text="更新说明")
+    owner = models.ForeignKey(User, related_name='tag_templates', on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = 'tags_tag_template'
+        verbose_name = '标签模板'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'owner'],
+                name='unique_tag_template_per_user'
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class TagTemplateItem(BaseModel):
+    """标签模板项"""
+    template = models.ForeignKey(TagTemplate, related_name='items', on_delete=models.CASCADE)
+    tag_path = models.CharField(max_length=128, null=False, help_text="标签完整路径")
+    description = models.TextField(blank=True, default='', help_text="标签描述")
+    enable = models.BooleanField(default=True, help_text="默认启用状态")
+
+    class Meta:
+        db_table = 'tags_tag_template_item'
+        verbose_name = '标签模板项'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(
+                fields=['template', 'tag_path'],
+                name='unique_tag_path_per_template'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.template.name} - {self.tag_path}"

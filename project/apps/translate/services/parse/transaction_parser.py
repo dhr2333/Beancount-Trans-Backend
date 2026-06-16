@@ -4,7 +4,7 @@ from typing import Dict, Optional
 from project.apps.translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
 from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
-from project.apps.translate.services.tag_merger import merge_tags
+from project.apps.translate.services.tag_merger import merge_tags_with_details
 from project.apps.translate.utils import get_fallback_account
 
 
@@ -59,34 +59,20 @@ def single_parse_transaction(
         currency = expense_handler.get_currency()
 
         # 获取所有候选映射的标签并合并（支出、收入、资产）
-        all_tags = []
+        mapping_tag_sources = []
+        mapping_tag_sources.extend(expense_handler.get_candidate_tag_sources())
+        mapping_tag_sources.extend(account_handler.get_asset_tag_sources())
 
-        # 1. 获取支出/收入映射的标签
-        expense_tags = expense_handler.get_all_candidates_tags()
-        all_tags.extend(expense_tags)
-
-        # 2. 获取资产映射的标签
-        asset_tags = account_handler.get_asset_tags()
-        all_tags.extend(asset_tags)
-
-        # 3. 去重（保持标签对象唯一性）
-        seen_tag_ids = set()
-        unique_tags = []
-        for tag in all_tags:
-            if tag.id not in seen_tag_ids:
-                seen_tag_ids.add(tag.id)
-                unique_tags.append(tag)
-
-        # 4. 合并所有标签
-        merged_tag = merge_tags(
+        merge_config = {
+            'deduplicate': True,
+            'keep_source': True,
+            'separator': ' ',
+            'sort_alpha': False,
+        }
+        merged_tag, tag_details = merge_tags_with_details(
             source_tag=source_tag,
-            mapping_tags=unique_tags,
-            config={
-                'deduplicate': True,
-                'keep_source': True,  # 保留原始标签
-                'separator': ' ',
-                'sort_alpha': False
-            }
+            mapping_tag_sources=mapping_tag_sources,
+            config=merge_config,
         )
 
         # 根据beancount规范重新制订返回的字段
@@ -123,6 +109,7 @@ def single_parse_transaction(
             "payee": payee,
             "note": note,
             "tag": merged_tag,  # 使用合并后的标签
+            "tag_details": tag_details,
             "balance": balance,
             "balance_date": balance_date,
             "expense": expense,

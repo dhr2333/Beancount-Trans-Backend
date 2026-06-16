@@ -1,0 +1,47 @@
+{
+  "name": "官方标签模板",
+  "description": "新用户默认标签树",
+  "version": "1.0.0",
+  "items": [
+    {
+      "tag_path": "Discretionary",
+      "description": "非必要支出。提升生活品质的支出，可以削减、延迟或替代（与个人喜好、生活方式相关，有多种选择方案（不同品牌、档次），可以延迟或取消而不影响基本生活。如外出就餐（非必须场合）、娱乐消费（电影、游戏、演唱会）、美妆护肤（超出基本清洁）、旅游度假、升级版电子产品（非必须替换））",
+      "enable": true
+    },
+    {
+      "tag_path": "Emergency",
+      "description": "不可预见的突发性支出",
+      "enable": true
+    },
+    {
+      "tag_path": "Fixed",
+      "description": "固定支出，其他所有支出默认为变动支出",
+      "enable": true
+    },
+    {
+      "tag_path": "Investment",
+      "description": "预期能在未来产生回报",
+      "enable": true
+    },
+    {
+      "tag_path": "Necessary",
+      "description": "必要支出。维持家庭基本生活和安全所必需的开支，无法避免或大幅削减（不支付会产生严重后果（健康、安全、法律问题），替代方案有限或不存在，金额相对固定。如房租房贷、水电煤网、必要食物支出（基础食材、工作日午餐））",
+      "enable": false
+    },
+    {
+      "tag_path": "Offline",
+      "description": "线下支付",
+      "enable": false
+    },
+    {
+      "tag_path": "Online",
+      "description": "线上支付",
+      "enable": true
+    },
+    {
+      "tag_path": "Pet",
+      "description": "宠物相关",
+      "enable": false
+    }
+  ]
+}

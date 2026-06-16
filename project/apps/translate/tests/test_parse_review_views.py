@@ -325,7 +325,7 @@ class TestParseReviewConfirmView:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, invalid_data)
         
@@ -366,7 +366,7 @@ class TestParseReviewConfirmView:
                 }
             ],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, invalid_data)
         
@@ -407,6 +407,30 @@ class TestParseReviewConfirmView:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '已完成或已取消' in response.data['error']
 
+    def test_confirm_write_review_expired(self, user, parse_review_task, parse_file):
+        """测试审核截止时间已过后拒绝确认写入"""
+        self.client.force_authenticate(user=user)
+
+        expired_data = {
+            'file_id': parse_file.file_id,
+            'formatted_data': [
+                {
+                    'uuid': 'entry-1',
+                    'formatted': '2025-01-20 * "Test" "Transaction"\n    Expenses:Test  100.00 CNY\n    Assets:Test  -100.00 CNY\n',
+                    'edited_formatted': '2025-01-20 * "Test" "Transaction"\n    Expenses:Test  100.00 CNY\n    Assets:Test  -100.00 CNY\n',
+                    'original_row': {},
+                }
+            ],
+            'created_at': time.time() - 86400,
+            'review_expires_at': time.time() - 3600,
+        }
+        ParseReviewService.save_parse_result(parse_file.file_id, expired_data)
+
+        response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/confirm')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert '已过期' in response.data['error']
+
 
 @pytest.mark.django_db
 class TestParseReviewReparseAllView:
@@ -433,16 +457,24 @@ class TestParseReviewReparseAllView:
         # Mock parse_single_file_task.delay 避免实际执行
         # 在 CELERY_TASK_ALWAYS_EAGER=True 模式下，delay() 会立即执行，所以需要完全 mock
         mock_delay = MagicMock()
+        mock_async_result = MagicMock()
+        mock_async_result.id = 'test-celery-task-id'
+        mock_delay.return_value = mock_async_result
         mock_parse_task.delay = mock_delay
         
         # 确保 ParseFile 初始状态不是 pending
         parse_file.status = 'pending_review'
         parse_file.save()
+
+        # 清理前序测试可能留下的过期缓存，避免 ensure_review 类校验干扰
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        ParseReviewService.delete_parse_result(parse_file.file_id)
         
         response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/reparse-all')
         
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert '重新解析任务已提交' in response.data['message']
+        assert response.data['celery_task_id'] == 'test-celery-task-id'
         
         # 验证 ParseFile 状态重置为 pending（在 try 块中设置）
         parse_file.refresh_from_db()
@@ -459,6 +491,60 @@ class TestParseReviewReparseAllView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '已完成或已取消' in response.data['error']
+
+    @patch('project.apps.translate.tasks.parse_single_file_task')
+    @patch('project.apps.translate.views.views.get_user_config')
+    def test_reparse_all_allowed_when_review_expired(
+        self, mock_get_config, mock_parse_task, user, parse_review_task, parse_file,
+    ):
+        """审核已过期仍允许重新解析全部条目"""
+        self.client.force_authenticate(user=user)
+
+        from project.apps.translate.models import FormatConfig
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        config, _ = FormatConfig.objects.get_or_create(
+            owner=user,
+            defaults={'parsing_mode_preference': 'review'},
+        )
+        mock_get_config.return_value = config
+
+        mock_async_result = MagicMock()
+        mock_async_result.id = 'test-celery-task-id'
+        mock_parse_task.delay = MagicMock(return_value=mock_async_result)
+
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [],
+            'created_at': time.time() - 86400,
+            'review_expires_at': time.time() - 3600,
+        })
+
+        response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/reparse-all')
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data['celery_task_id'] == 'test-celery-task-id'
+
+
+@pytest.mark.django_db
+class TestParseTaskStatusView:
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_get_parse_task_status(self, user, parse_file):
+        from django.core.cache import cache
+
+        self.client.force_authenticate(user=user)
+        cache.set(f'task_status:celery-123', {
+            'status': 'pending_review',
+            'file_id': parse_file.file_id,
+            'error': None,
+        }, timeout=3600)
+
+        response = self.client.get('/api/translate/parse-task-status', {'task_id': 'celery-123'})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['status'] == 'pending_review'
+        assert response.data['file_id'] == parse_file.file_id
 
 
 @pytest.mark.django_db
@@ -482,7 +568,7 @@ class TestCancelParseView:
             'file_id': parse_file.file_id,
             'formatted_data': [],
             'created_at': time.time(),
-            'expires_at': time.time() + 86400
+            'review_expires_at': time.time() + 86400
         }
         ParseReviewService.save_parse_result(parse_file.file_id, mock_data)
         

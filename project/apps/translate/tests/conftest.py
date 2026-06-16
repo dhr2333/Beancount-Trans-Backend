@@ -138,7 +138,9 @@ def mock_parse_result_data():
                 'expense_candidates_with_score': [
                     {'key': 'Expenses:Test', 'score': 0.9}
                 ],
-                'original_row': {'date': '2025-01-20', 'description': 'Test Transaction 1', 'amount': 100.00}
+                'original_row': {'date': '2025-01-20', 'description': 'Test Transaction 1', 'amount': 100.00},
+                'tag_details': [],
+                'tag_overrides': {'removed_paths': [], 'added_paths': []}
             },
             {
                 'uuid': 'entry-2',
@@ -148,11 +150,13 @@ def mock_parse_result_data():
                 'expense_candidates_with_score': [
                     {'key': 'Expenses:Test', 'score': 0.85}
                 ],
-                'original_row': {'date': '2025-01-21', 'description': 'Test Transaction 2', 'amount': 200.00}
+                'original_row': {'date': '2025-01-21', 'description': 'Test Transaction 2', 'amount': 200.00},
+                'tag_details': [],
+                'tag_overrides': {'removed_paths': [], 'added_paths': []}
             }
         ],
         'created_at': current_time,
-        'expires_at': current_time + 86400  # 24小时后
+        'review_expires_at': current_time + 86400  # 24小时后
     }
 
 

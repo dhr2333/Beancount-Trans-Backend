@@ -148,6 +148,8 @@ class SingleBillAnalyzeView(APIView):
                         "formatted": formatted_data.get("formatted"),
                         "ai_choose": formatted_data.get("selected_expense_key"),
                         "ai_candidates": formatted_data.get("expense_candidates_with_score", []),
+                        "counterparty": formatted_data.get("counterparty", ""),
+                        "commodity": formatted_data.get("commodity", ""),
                     })
                 else:
                     results.append({
@@ -226,7 +228,9 @@ class ReparseEntryView(APIView):
                 "id": entry_id,
                 "formatted": formatted,
                 "ai_choose": selected_key,
-                "ai_candidates": parsed_entry['expense_candidates_with_score']
+                "ai_candidates": parsed_entry['expense_candidates_with_score'],
+                "counterparty": original_row.get("counterparty", ""),
+                "commodity": original_row.get("commodity", ""),
             }, status=status.HTTP_200_OK)
         except Exception as e:
             logger.exception(e)
@@ -521,6 +525,23 @@ class ParseReviewViewSet(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def ensure_review_editable(self, task, parse_file):
+        """校验解析待办是否仍在用户审核期内（仅 pending 且未过期）。"""
+        if task.status != 'pending':
+            return Response(
+                {'error': '待办任务已完成或已取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
+        if ParseReviewService.is_review_expired(cached_data, task):
+            return Response(
+                {'error': '解析待办已过期，系统将自动写入'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return None
+
 
 class ParseReviewResultsView(ParseReviewViewSet):
     """获取解析结果"""
@@ -549,14 +570,29 @@ class ParseReviewResultsView(ParseReviewViewSet):
                 {'error': '解析结果不存在或已过期，请重新解析'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        config = get_user_config(request.user)
+        if ParseReviewService.backfill_tag_details_in_data(
+            parse_result,
+            request.user.id,
+            config,
+            user=request.user,
+        ):
+            ParseReviewService.save_parse_result(
+                parse_file.file_id,
+                parse_result,
+                timeout=ParseReviewService._ttl_for_resave(parse_file.file_id),
+            )
         
         # 去除 formatted_data 中每个条目的 formatted 和 edited_formatted 末尾的换行符
         if 'formatted_data' in parse_result:
             for entry in parse_result['formatted_data']:
+                ParseReviewService.normalize_entry_tag_fields(entry)
                 if 'formatted' in entry:
                     entry['formatted'] = entry['formatted'].rstrip() if entry['formatted'] else ''
                 if 'edited_formatted' in entry:
                     entry['edited_formatted'] = entry['edited_formatted'].rstrip() if entry['edited_formatted'] else ''
+                entry['tag_details'] = ParseReviewService.get_effective_tag_details(entry)
         
         return Response(parse_result, status=status.HTTP_200_OK)
 
@@ -573,6 +609,10 @@ class ParseReviewReparseView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         entry_uuid = request.data.get('entry_uuid')
         selected_key = request.data.get('selected_key')
@@ -627,8 +667,13 @@ class ParseReviewReparseView(ParseReviewViewSet):
             )
             formatted = FormatData.format_instance(parsed_entry, config=config)
             
-            # 更新缓存
-            ParseReviewService.update_entry_formatted(parse_file.file_id, entry_uuid, formatted)
+            # 更新缓存（保留 tag_overrides）
+            ParseReviewService.update_entry_formatted(
+                parse_file.file_id,
+                entry_uuid,
+                formatted,
+                tag_details=parsed_entry.get('tag_details', []),
+            )
             
             # 返回更新后的结果
             updated_result = ParseReviewService.get_parse_result(parse_file.file_id)
@@ -643,13 +688,25 @@ class ParseReviewReparseView(ParseReviewViewSet):
             # 去除末尾的换行符
             formatted_result = formatted_result.rstrip() if formatted_result else ''
             edited_formatted_result = edited_formatted_result.rstrip() if edited_formatted_result else ''
+            tag_payload = (
+                ParseReviewService.entry_response_payload(updated_entry)
+                if updated_entry
+                else {
+                    'tag_details': ParseReviewService.apply_tag_overrides(
+                        parsed_entry.get('tag_details', []),
+                        ParseReviewService.default_tag_overrides(),
+                    ),
+                    'tag_overrides': ParseReviewService.default_tag_overrides(),
+                }
+            )
             
             return Response({
                 'uuid': entry_uuid,
                 'formatted': formatted_result,
                 'edited_formatted': edited_formatted_result,
                 'selected_expense_key': selected_key,
-                'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', [])
+                'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', []),
+                **tag_payload,
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -672,6 +729,10 @@ class ParseReviewEditView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         edited_formatted = request.data.get('edited_formatted')
         if edited_formatted is None:
@@ -728,6 +789,60 @@ class ParseReviewEditView(ParseReviewViewSet):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
+class ParseReviewTagsView(ParseReviewViewSet):
+    """更新条目标签（添加/移除）"""
+
+    def patch(self, request, task_id, uuid):
+        """PATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags
+
+        Body: {"action": "add|remove", "tag_path": "Category/EDUCATION"}
+        """
+        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        if error_response:
+            return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
+
+        action = request.data.get('action')
+        tag_path = request.data.get('tag_path')
+        if action not in ('add', 'remove') or not tag_path:
+            return Response(
+                {'error': '缺少必要参数：action（add/remove）与 tag_path'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        if migrated is None:
+            return Response(
+                {'error': '解析结果不存在或已过期，请重新解析'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        entry_uuid = uuid
+        if uuid in ('null', 'undefined', 'None'):
+            fd = migrated.get('formatted_data') or []
+            if len(fd) == 1 and fd[0].get('uuid'):
+                entry_uuid = fd[0]['uuid']
+
+        result = ParseReviewService.update_entry_tags(
+            parse_file.file_id,
+            entry_uuid,
+            action,
+            tag_path,
+        )
+        if result is None:
+            return Response(
+                {'error': '更新标签失败或未找到条目'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
 class ParseReviewConfirmView(ParseReviewViewSet):
     """确认写入"""
     
@@ -739,12 +854,10 @@ class ParseReviewConfirmView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '待办任务已完成或已取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
         
         # 从缓存获取最终结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
@@ -818,6 +931,43 @@ class ParseReviewConfirmView(ParseReviewViewSet):
             )
 
 
+class ParseTaskStatusView(APIView):
+    """查询单个 Celery 解析任务状态（与 task_status:{task_id} 缓存一致）"""
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        celery_task_id = request.query_params.get('task_id')
+        if not celery_task_id:
+            return Response(
+                {'error': '缺少 task_id 参数'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        task_status = cache.get(f'task_status:{celery_task_id}') or {'status': 'unknown'}
+        file_id = task_status.get('file_id')
+        if file_id is not None:
+            file_obj = None
+            try:
+                from project.apps.file_manager.models import File
+                file_obj = File.objects.filter(id=file_id, owner=request.user).first()
+            except Exception:
+                file_obj = None
+            if file_obj is None:
+                return Response(
+                    {'error': '无权访问该任务'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        return Response({
+            'task_id': celery_task_id,
+            'file_id': file_id,
+            'status': task_status.get('status', 'unknown'),
+            'error': task_status.get('error'),
+        }, status=status.HTTP_200_OK)
+
+
 class ParseReviewReparseAllView(ParseReviewViewSet):
     """重新解析所有条目"""
     
@@ -829,7 +979,7 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
         task, parse_file, error_response = self.get_task_and_file(request, task_id)
         if error_response:
             return error_response
-        
+
         if task.status != 'pending':
             return Response(
                 {'error': '待办任务已完成或已取消'},
@@ -857,11 +1007,17 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
             }
             
             # 异步执行解析任务
-            parse_single_file_task.delay(parse_file.file_id, request.user.id, args)
+            async_result = parse_single_file_task.delay(parse_file.file_id, request.user.id, args)
+            cache.set(f'task_status:{async_result.id}', {
+                'status': 'pending',
+                'file_id': parse_file.file_id,
+                'error': None,
+            }, timeout=24 * 3600)
             
             return Response({
                 'message': '重新解析任务已提交',
-                'file_id': parse_file.file_id
+                'file_id': parse_file.file_id,
+                'celery_task_id': async_result.id,
             }, status=status.HTTP_202_ACCEPTED)
             
         except Exception as e:
