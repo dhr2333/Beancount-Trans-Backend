@@ -465,6 +465,10 @@ class TestParseReviewReparseAllView:
         # 确保 ParseFile 初始状态不是 pending
         parse_file.status = 'pending_review'
         parse_file.save()
+
+        # 清理前序测试可能留下的过期缓存，避免 ensure_review 类校验干扰
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        ParseReviewService.delete_parse_result(parse_file.file_id)
         
         response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/reparse-all')
         
@@ -487,6 +491,39 @@ class TestParseReviewReparseAllView:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert '已完成或已取消' in response.data['error']
+
+    @patch('project.apps.translate.tasks.parse_single_file_task')
+    @patch('project.apps.translate.views.views.get_user_config')
+    def test_reparse_all_allowed_when_review_expired(
+        self, mock_get_config, mock_parse_task, user, parse_review_task, parse_file,
+    ):
+        """审核已过期仍允许重新解析全部条目"""
+        self.client.force_authenticate(user=user)
+
+        from project.apps.translate.models import FormatConfig
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        config, _ = FormatConfig.objects.get_or_create(
+            owner=user,
+            defaults={'parsing_mode_preference': 'review'},
+        )
+        mock_get_config.return_value = config
+
+        mock_async_result = MagicMock()
+        mock_async_result.id = 'test-celery-task-id'
+        mock_parse_task.delay = MagicMock(return_value=mock_async_result)
+
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [],
+            'created_at': time.time() - 86400,
+            'review_expires_at': time.time() - 3600,
+        })
+
+        response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/reparse-all')
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        assert response.data['celery_task_id'] == 'test-celery-task-id'
 
 
 @pytest.mark.django_db

@@ -980,9 +980,11 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
         if error_response:
             return error_response
 
-        editable_error = self.ensure_review_editable(task, parse_file)
-        if editable_error:
-            return editable_error
+        if task.status != 'pending':
+            return Response(
+                {'error': '待办任务已完成或已取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # 重新执行解析任务（相当于在文件管理中再次解析）
         from project.apps.translate.tasks import parse_single_file_task
