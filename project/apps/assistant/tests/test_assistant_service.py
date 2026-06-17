@@ -8,15 +8,17 @@ from project.apps.assistant.services.assistant_service import (
     AssistantService,
     StreamEvent,
     build_system_prompt,
+    merge_thinking_text,
 )
 from project.apps.translate.models import FormatConfig
 
 
-def _make_stream_chunk(*, content=None, tool_call=None, finish_reason=None):
+def _make_stream_chunk(*, content=None, reasoning_content=None, tool_call=None, finish_reason=None):
     chunk = MagicMock()
     choice = MagicMock()
     delta = MagicMock()
     delta.content = content
+    delta.reasoning_content = reasoning_content
     delta.tool_calls = [tool_call] if tool_call else None
     choice.delta = delta
     choice.finish_reason = finish_reason
@@ -42,6 +44,13 @@ def _make_tool_call_stream(tool_name, arguments, call_id='call_1'):
 
 def _make_text_stream(text):
     chunks = [_make_stream_chunk(content=char) for char in text]
+    chunks.append(_make_stream_chunk(finish_reason='stop'))
+    return iter(chunks)
+
+
+def _make_reasoning_then_text_stream(reasoning: str, answer: str):
+    chunks = [_make_stream_chunk(reasoning_content=char) for char in reasoning]
+    chunks.extend(_make_stream_chunk(content=char) for char in answer)
     chunks.append(_make_stream_chunk(finish_reason='stop'))
     return iter(chunks)
 
@@ -164,9 +173,12 @@ class TestAssistantService:
         assert event_types[0] == 'status'
         assert 'tool_start' in event_types
         assert 'tool_end' in event_types
+        assert 'thinking_delta' in event_types
         assert 'delta' in event_types
         assert event_types[-1] == 'done'
         assert '50' in events[-1].data['reply']
+        assert '执行查询' in events[-1].data['thinking']
+        assert 'SELECT account LIMIT 1' in events[-1].data['thinking']
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
@@ -209,3 +221,35 @@ class TestAssistantService:
         assert events[writing_idx].data['phase'] == 'writing'
         assert writing_idx < first_delta_idx
         assert event_types[-1] == 'done'
+
+    def test_merge_thinking_text(self):
+        assert merge_thinking_text('推理', '步骤') == '推理\n\n---\n\n步骤'
+        assert merge_thinking_text('', '步骤') == '步骤'
+        assert merge_thinking_text('推理', '') == '推理'
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_reasoning_delta_emitted_and_in_done(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_reasoning_then_text_stream('先分析账户。', '本月 100 元。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '本月支出？'}])
+        event_types = [e.event for e in events]
+
+        assert 'reasoning_delta' in event_types
+        reasoning_idx = event_types.index('reasoning_delta')
+        delta_idx = event_types.index('delta')
+        assert reasoning_idx < delta_idx
+        done = events[-1]
+        assert done.event == 'done'
+        assert '先分析账户' in done.data['reasoning']
+        assert '先分析账户' in done.data['thinking']
+        assert '100' in done.data['reply']

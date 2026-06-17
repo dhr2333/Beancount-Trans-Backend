@@ -19,6 +19,38 @@ from .schema_provider import build_bql_examples, get_ledger_context
 
 logger = logging.getLogger(__name__)
 
+THINKING_PREVIEW_MAX_LEN = 800
+
+
+def merge_thinking_text(reasoning: str, agent: str) -> str:
+    reasoning = reasoning.strip()
+    agent = agent.strip()
+    if reasoning and agent:
+        return f'{reasoning}\n\n---\n\n{agent}'
+    return reasoning or agent
+
+
+def truncate_thinking_preview(text: str) -> str:
+    if len(text) <= THINKING_PREVIEW_MAX_LEN:
+        return text
+    return f'{text[:THINKING_PREVIEW_MAX_LEN]}\n…（已截断，完整结果见「查询详情」）'
+
+
+def format_tool_thinking_start(fn_name: str, fn_args: dict[str, Any]) -> str:
+    if fn_name == 'get_ledger_context':
+        return '\n\n### 获取账本上下文\n'
+    if fn_name == 'run_bql':
+        query = fn_args.get('query', '')
+        return f'\n\n### 执行查询\n```bql\n{query}\n```\n'
+    return f'\n\n### 调用 {fn_name}\n'
+
+
+def format_tool_thinking_end(fn_name: str, tool_result: str) -> str:
+    if fn_name == 'get_ledger_context':
+        return ''
+    preview = truncate_thinking_preview(tool_result)
+    return f'\n**结果预览**\n```\n{preview}\n```\n'
+
 SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
 
 {reference_date_context}
@@ -103,6 +135,8 @@ class AssistantReply:
     reply: str
     queries: list[QueryRecord] = field(default_factory=list)
     api_key_source: str = 'none'
+    thinking: str = ''
+    reasoning: str = ''
 
 
 @dataclass
@@ -122,6 +156,7 @@ class _AccumulatedToolCall:
 class _StreamRoundResult:
     content_parts: list[str]
     tool_calls: list[_AccumulatedToolCall]
+    reasoning_parts: list[str] = field(default_factory=list)
 
 
 class AssistantService:
@@ -162,6 +197,9 @@ class AssistantService:
         queries: list[QueryRecord],
         show_bql: bool,
         api_key_source: str,
+        *,
+        reasoning: str = '',
+        thinking: str = '',
     ) -> AssistantReply:
         if not reply_text:
             reply_text = '抱歉，我暂时无法回答这个问题，请尝试换个问法。'
@@ -176,6 +214,8 @@ class AssistantService:
             reply=reply_text,
             queries=queries,
             api_key_source=api_key_source,
+            thinking=thinking,
+            reasoning=reasoning,
         )
 
     def _done_event_data(self, reply: AssistantReply) -> dict[str, Any]:
@@ -186,7 +226,30 @@ class AssistantService:
                 for q in reply.queries
             ],
             'api_key_source': reply.api_key_source,
+            'thinking': reply.thinking,
+            'reasoning': reply.reasoning,
         }
+
+    def _build_thinking_reply(
+        self,
+        reply_text: str,
+        queries: list[QueryRecord],
+        show_bql: bool,
+        api_key_source: str,
+        reasoning_parts: list[str],
+        thinking_parts: list[str],
+    ) -> AssistantReply:
+        reasoning_text = ''.join(reasoning_parts)
+        agent_text = ''.join(thinking_parts)
+        merged = merge_thinking_text(reasoning_text, agent_text)
+        return self._finalize_reply(
+            reply_text,
+            queries,
+            show_bql,
+            api_key_source,
+            reasoning=reasoning_text,
+            thinking=merged,
+        )
 
     def _run_llm_round(
         self,
@@ -209,6 +272,7 @@ class AssistantService:
             kwargs['tool_choice'] = tool_choice
 
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tool_calls_map: dict[int, _AccumulatedToolCall] = {}
 
         stream = client.chat.completions.create(**kwargs)
@@ -223,7 +287,12 @@ class AssistantService:
                         entry.name = tool_call.function.name
                     if tool_call.function.arguments:
                         entry.arguments += tool_call.function.arguments
-            elif delta.content:
+            reasoning_content = getattr(delta, 'reasoning_content', None)
+            if reasoning_content:
+                reasoning_parts.append(reasoning_content)
+                if stream_text:
+                    yield StreamEvent('reasoning_delta', {'content': reasoning_content})
+            if delta.content:
                 content_parts.append(delta.content)
                 if stream_text and not tool_calls_map:
                     yield StreamEvent('delta', {'content': delta.content})
@@ -231,6 +300,7 @@ class AssistantService:
         yield _StreamRoundResult(
             content_parts=content_parts,
             tool_calls=[tool_calls_map[i] for i in sorted(tool_calls_map)],
+            reasoning_parts=reasoning_parts,
         )
 
     def _assistant_message_from_tool_calls(
@@ -257,6 +327,8 @@ class AssistantService:
         queries: list[QueryRecord],
         show_bql: bool,
         api_key_source: str,
+        reasoning_parts: list[str],
+        thinking_parts: list[str],
     ) -> Iterator[StreamEvent]:
         synthesis_messages = [
             *llm_messages,
@@ -272,12 +344,16 @@ class AssistantService:
         content_parts: list[str] = []
         for item in self._run_llm_round(client, synthesis_messages, stream_text=True):
             if isinstance(item, StreamEvent):
+                if item.event == 'reasoning_delta':
+                    reasoning_parts.append(item.data['content'])
                 yield item
             else:
                 content_parts = item.content_parts
 
         reply_text = ''.join(content_parts).strip()
-        final = self._finalize_reply(reply_text, queries, show_bql, api_key_source)
+        final = self._build_thinking_reply(
+            reply_text, queries, show_bql, api_key_source, reasoning_parts, thinking_parts,
+        )
         yield StreamEvent('done', self._done_event_data(final))
 
     def _iter_chat_events(
@@ -306,6 +382,8 @@ class AssistantService:
 
         yield StreamEvent('status', {'phase': 'thinking'})
         tool_round = 0
+        reasoning_parts: list[str] = []
+        thinking_parts: list[str] = []
 
         while True:
             round_result: _StreamRoundResult | None = None
@@ -318,6 +396,8 @@ class AssistantService:
                 stream_text=True,
             ):
                 if isinstance(item, StreamEvent):
+                    if item.event == 'reasoning_delta':
+                        reasoning_parts.append(item.data['content'])
                     if item.event == 'delta' and not writing_status_sent:
                         yield StreamEvent('status', {'phase': 'writing'})
                         writing_status_sent = True
@@ -337,6 +417,8 @@ class AssistantService:
                         queries,
                         show_bql,
                         resolved.source,
+                        reasoning_parts,
+                        thinking_parts,
                     )
                     return
 
@@ -355,8 +437,18 @@ class AssistantService:
                         tool_start['query'] = fn_args.get('query', '')
                     yield StreamEvent('tool_start', tool_start)
 
+                    thinking_start = format_tool_thinking_start(fn_name, fn_args)
+                    if thinking_start:
+                        thinking_parts.append(thinking_start)
+                        yield StreamEvent('thinking_delta', {'content': thinking_start})
+
                     queries_before = len(queries)
                     tool_result = self._dispatch_tool(fn_name, fn_args, queries)
+
+                    thinking_end = format_tool_thinking_end(fn_name, tool_result)
+                    if thinking_end:
+                        thinking_parts.append(thinking_end)
+                        yield StreamEvent('thinking_delta', {'content': thinking_end})
 
                     tool_end: dict[str, Any] = {'name': fn_name}
                     if fn_name == 'run_bql' and len(queries) > queries_before:
@@ -373,7 +465,9 @@ class AssistantService:
                 continue
 
             reply_text = ''.join(round_result.content_parts).strip()
-            final = self._finalize_reply(reply_text, queries, show_bql, resolved.source)
+            final = self._build_thinking_reply(
+                reply_text, queries, show_bql, resolved.source, reasoning_parts, thinking_parts,
+            )
             yield StreamEvent('done', self._done_event_data(final))
             return
 
@@ -388,6 +482,8 @@ class AssistantService:
                         for q in event.data['queries']
                     ],
                     api_key_source=event.data['api_key_source'],
+                    thinking=event.data.get('thinking', ''),
+                    reasoning=event.data.get('reasoning', ''),
                 )
         if result is None:
             raise RuntimeError('对话未产生完成事件')

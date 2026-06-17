@@ -6,7 +6,10 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from project.apps.translate.models import FormatConfig
-from project.apps.assistant.tests.test_assistant_service import _make_text_stream
+from project.apps.assistant.tests.test_assistant_service import (
+    _make_text_stream,
+    _make_tool_call_stream,
+)
 
 
 @pytest.fixture
@@ -57,6 +60,7 @@ class TestAssistantAPI:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', '{"query": "SELECT account LIMIT 1"}'),
             _make_text_stream('你好。'),
         ]
 
@@ -72,3 +76,4 @@ class TestAssistantAPI:
         body = b''.join(response.streaming_content).decode('utf-8')
         assert 'event: done' in body
         assert 'event: delta' in body
+        assert 'event: thinking_delta' in body

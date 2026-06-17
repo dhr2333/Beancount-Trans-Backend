@@ -98,6 +98,8 @@ class AssistantChatView(APIView):
                 for q in result.queries
             ],
             'api_key_source': result.api_key_source,
+            'thinking': result.thinking,
+            'reasoning': result.reasoning,
         }
         return Response(AssistantChatResponseSerializer(response_data).data)
 
@@ -114,7 +116,8 @@ class AssistantChatStreamView(APIView):
             200: OpenApiResponse(
                 description=(
                     'SSE 流式响应 (text/event-stream)。事件类型：'
-                    'status, tool_start, tool_end, delta, done, error'
+                    'status, reasoning_delta, thinking_delta, tool_start, tool_end, '
+                    'delta, done, error'
                 ),
             ),
         },

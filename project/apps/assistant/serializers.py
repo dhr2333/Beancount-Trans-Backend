@@ -25,6 +25,8 @@ class AssistantChatResponseSerializer(serializers.Serializer):
     reply = serializers.CharField()
     queries = QueryRecordSerializer(many=True)
     api_key_source = serializers.ChoiceField(choices=['user', 'platform', 'none'])
+    thinking = serializers.CharField(allow_blank=True, required=False, default='')
+    reasoning = serializers.CharField(allow_blank=True, required=False, default='')
 
 
 class AssistantStatusSerializer(serializers.Serializer):
