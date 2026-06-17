@@ -1,6 +1,7 @@
 """LLM 编排：DeepSeek function calling + BQL 工具。"""
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -16,6 +17,26 @@ from .schema_provider import get_ledger_context
 
 logger = logging.getLogger(__name__)
 
+_DEBUG_LOG_PATH = '/home/daihaorui/桌面/GitHub/Beancount-Trans/.cursor/debug-4df769.log'
+
+
+def _agent_log(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
+    # #region agent log
+    try:
+        payload = {
+            'sessionId': '4df769',
+            'hypothesisId': hypothesis_id,
+            'location': location,
+            'message': message,
+            'data': data or {},
+            'timestamp': int(time.time() * 1000),
+        }
+        with open(_DEBUG_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+    # #endregion
+
 SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
 
 {reference_date_context}
@@ -26,7 +47,8 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 3. 使用 account ~ 'Expenses:Food' 等正则匹配账户；金额汇总优先用 sum(units(position)) 或 sum(position)。
 4. 涉及「本月」「上月」「最近」等时间时，以上述基准日期为准构造 BQL 日期条件。
 5. 用中文简洁回答，标明货币单位；若查无数据，明确说明。
-6. 不要执行写操作，不要讨论与账本无关的话题。"""
+6. 同一问题最多调用 run_bql 3 次；若仍无满意结果，请根据已有查询结果作答，不要无限重试。
+7. 不要执行写操作，不要讨论与账本无关的话题。"""
 
 
 def build_system_prompt(reference_date: date | None = None) -> str:
@@ -77,7 +99,7 @@ class AssistantReply:
 
 
 class AssistantService:
-    MAX_TOOL_ROUNDS = 3
+    MAX_TOOL_ROUNDS = 8
     MAX_MESSAGES = 20
 
     def __init__(self, user: User, reference_date: date | None = None):
@@ -104,6 +126,84 @@ class AssistantService:
 
         return f'未知工具: {name}'
 
+    def _finalize_reply(
+        self,
+        reply_text: str,
+        queries: list[QueryRecord],
+        show_bql: bool,
+        api_key_source: str,
+        *,
+        log_tag: str,
+        llm_round: int,
+        tool_round: int,
+    ) -> AssistantReply:
+        if not reply_text:
+            reply_text = '抱歉，我暂时无法回答这个问题，请尝试换个问法。'
+
+        if show_bql and queries:
+            bql_section = '\n\n'.join(
+                f'```bql\n{q.bql}\n```\n{q.result_preview}' for q in queries
+            )
+            reply_text = f'{reply_text}\n\n---\n查询详情:\n{bql_section}'
+
+        # #region agent log
+        _agent_log('A', 'assistant_service.py:success', log_tag, {
+            'runId': 'post-fix-v2',
+            'llm_round': llm_round,
+            'tool_round': tool_round,
+            'total_queries': len(queries),
+            'reply_len': len(reply_text),
+        })
+        # #endregion
+        return AssistantReply(
+            reply=reply_text,
+            queries=queries,
+            api_key_source=api_key_source,
+        )
+
+    def _force_final_reply(
+        self,
+        client: OpenAI,
+        llm_messages: list[dict[str, Any]],
+        queries: list[QueryRecord],
+        show_bql: bool,
+        api_key_source: str,
+        llm_round: int,
+        tool_round: int,
+    ) -> AssistantReply:
+        # #region agent log
+        _agent_log('C', 'assistant_service.py:force_synthesis', 'Forcing final reply without tools', {
+            'runId': 'post-fix-v2',
+            'tool_round': tool_round,
+            'total_queries': len(queries),
+        })
+        # #endregion
+        synthesis_messages = [
+            *llm_messages,
+            {
+                'role': 'user',
+                'content': (
+                    '已达到工具调用次数上限。请仅根据上文工具已返回的查询结果，'
+                    '用中文直接回答用户最初的问题；若数据不足请说明，不要编造数字。'
+                ),
+            },
+        ]
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=synthesis_messages,
+            temperature=0.1,
+        )
+        reply_text = (response.choices[0].message.content or '').strip()
+        return self._finalize_reply(
+            reply_text,
+            queries,
+            show_bql,
+            api_key_source,
+            log_tag='Forced final reply returned',
+            llm_round=llm_round + 1,
+            tool_round=tool_round,
+        )
+
     def chat(self, messages: list[dict[str, str]], show_bql: bool = False) -> AssistantReply:
         resolved = resolve_api_key(self.user)
         if not resolved.api_key:
@@ -124,7 +224,19 @@ class AssistantService:
             *messages,
         ]
 
-        for _ in range(self.MAX_TOOL_ROUNDS + 1):
+        tool_round = 0
+        llm_round = 0
+        while True:
+            # #region agent log
+            _agent_log('A', 'assistant_service.py:loop_start', 'LLM round start', {
+                'runId': 'post-fix-v2',
+                'llm_round': llm_round,
+                'tool_round': tool_round,
+                'max_tool_rounds': self.MAX_TOOL_ROUNDS,
+                'llm_message_count': len(llm_messages),
+                'queries_so_far': len(queries),
+            })
+            # #endregion
             response = client.chat.completions.create(
                 model=self.model,
                 messages=llm_messages,
@@ -134,8 +246,33 @@ class AssistantService:
             )
             choice = response.choices[0]
             message = choice.message
+            llm_round += 1
+
+            tool_names = [tc.function.name for tc in (message.tool_calls or [])]
+            # #region agent log
+            _agent_log('B', 'assistant_service.py:llm_response', 'LLM response received', {
+                'runId': 'post-fix-v2',
+                'llm_round': llm_round,
+                'tool_round': tool_round,
+                'finish_reason': choice.finish_reason,
+                'has_tool_calls': bool(message.tool_calls),
+                'tool_names': tool_names,
+                'content_len': len(message.content or ''),
+            })
+            # #endregion
 
             if choice.finish_reason == 'tool_calls' or message.tool_calls:
+                tool_round += 1
+                if tool_round > self.MAX_TOOL_ROUNDS:
+                    return self._force_final_reply(
+                        client,
+                        llm_messages,
+                        queries,
+                        show_bql,
+                        resolved.source,
+                        llm_round,
+                        tool_round,
+                    )
                 llm_messages.append(message.model_dump(exclude_none=True))
                 for tool_call in message.tool_calls or []:
                     fn_name = tool_call.function.name
@@ -152,23 +289,12 @@ class AssistantService:
                 continue
 
             reply_text = (message.content or '').strip()
-            if not reply_text:
-                reply_text = '抱歉，我暂时无法回答这个问题，请尝试换个问法。'
-
-            if show_bql and queries:
-                bql_section = '\n\n'.join(
-                    f'```bql\n{q.bql}\n```\n{q.result_preview}' for q in queries
-                )
-                reply_text = f'{reply_text}\n\n---\n查询详情:\n{bql_section}'
-
-            return AssistantReply(
-                reply=reply_text,
-                queries=queries,
-                api_key_source=resolved.source,
+            return self._finalize_reply(
+                reply_text,
+                queries,
+                show_bql,
+                resolved.source,
+                log_tag='Final reply returned',
+                llm_round=llm_round,
+                tool_round=tool_round,
             )
-
-        return AssistantReply(
-            reply='查询步骤过多，请简化问题后重试。',
-            queries=queries,
-            api_key_source=resolved.source,
-        )
