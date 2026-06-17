@@ -1,9 +1,12 @@
 import pytest
+from unittest.mock import MagicMock, patch
+
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from project.apps.translate.models import FormatConfig
+from project.apps.assistant.tests.test_assistant_service import _make_text_stream
 
 
 @pytest.fixture
@@ -43,3 +46,29 @@ class TestAssistantAPI:
         client = APIClient()
         response = client.get(reverse('assistant-status'))
         assert response.status_code == 401
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_chat_stream_endpoint_returns_sse(self, mock_openai_cls, api_client, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_text_stream('你好。'),
+        ]
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {'messages': [{'role': 'user', 'content': '你好'}]},
+            format='json',
+            HTTP_ACCEPT='text/event-stream',
+        )
+
+        assert response.status_code == 200
+        assert response['Content-Type'].startswith('text/event-stream')
+        body = b''.join(response.streaming_content).decode('utf-8')
+        assert 'event: done' in body
+        assert 'event: delta' in body

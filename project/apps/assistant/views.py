@@ -1,8 +1,10 @@
 import logging
 
-from drf_spectacular.utils import extend_schema
+from django.http import StreamingHttpResponse
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -19,6 +21,15 @@ from .services.reference_date import get_reference_date
 from .throttles import AssistantChatThrottle
 
 logger = logging.getLogger(__name__)
+
+
+class EventStreamRenderer(BaseRenderer):
+    media_type = 'text/event-stream'
+    format = 'event-stream'
+    charset = 'utf-8'
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
 
 
 class AssistantStatusView(APIView):
@@ -86,3 +97,57 @@ class AssistantChatView(APIView):
             'api_key_source': result.api_key_source,
         }
         return Response(AssistantChatResponseSerializer(response_data).data)
+
+
+class AssistantChatStreamView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistantChatThrottle]
+    renderer_classes = [EventStreamRenderer]
+
+    @extend_schema(
+        request=AssistantChatRequestSerializer,
+        responses={
+            200: OpenApiResponse(
+                description=(
+                    'SSE 流式响应 (text/event-stream)。事件类型：'
+                    'status, tool_start, tool_end, delta, done, error'
+                ),
+            ),
+        },
+        summary='AI 账本助手对话（SSE 流式）',
+    )
+    def post(self, request):
+        serializer = AssistantChatRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        messages = [
+            {'role': msg['role'], 'content': msg['content']}
+            for msg in serializer.validated_data['messages']
+        ]
+        show_bql = serializer.validated_data.get('show_bql', False)
+
+        resolved = resolve_api_key(request.user)
+        if not resolved.api_key:
+            return Response(
+                {'detail': '未配置 DeepSeek API Key，请在「输出配置」中填写，或联系管理员配置平台 Key。'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        ledger_service = LedgerQueryService(request.user)
+        if not ledger_service.ledger_exists():
+            return Response(
+                {'detail': '账本文件尚未创建，请先上传并解析账单。'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        def event_stream():
+            stream_service = AssistantService(request.user)
+            yield from stream_service.chat_stream(messages, show_bql=show_bql)
+
+        response = StreamingHttpResponse(
+            event_stream(),
+            content_type='text/event-stream',
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response

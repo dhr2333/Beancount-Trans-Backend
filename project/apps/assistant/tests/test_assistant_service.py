@@ -4,42 +4,50 @@ import pytest
 from datetime import date
 from django.test import override_settings
 
-from project.apps.assistant.services.assistant_service import AssistantService, build_system_prompt
+from project.apps.assistant.services.assistant_service import (
+    AssistantService,
+    StreamEvent,
+    build_system_prompt,
+)
 from project.apps.translate.models import FormatConfig
 
 
-def _make_tool_call_response(tool_name, arguments, call_id='call_1'):
+def _make_stream_chunk(*, content=None, tool_call=None, finish_reason=None):
+    chunk = MagicMock()
+    choice = MagicMock()
+    delta = MagicMock()
+    delta.content = content
+    delta.tool_calls = [tool_call] if tool_call else None
+    choice.delta = delta
+    choice.finish_reason = finish_reason
+    chunk.choices = [choice]
+    return chunk
+
+
+def _make_tool_call_chunk(index, call_id, name, arguments_fragment):
     tool_call = MagicMock()
+    tool_call.index = index
     tool_call.id = call_id
-    tool_call.function.name = tool_name
-    tool_call.function.arguments = arguments
-
-    message = MagicMock()
-    message.content = None
-    message.tool_calls = [tool_call]
-
-    choice = MagicMock()
-    choice.finish_reason = 'tool_calls'
-    choice.message = message
-
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+    tool_call.function = MagicMock()
+    tool_call.function.name = name
+    tool_call.function.arguments = arguments_fragment
+    return _make_stream_chunk(tool_call=tool_call)
 
 
-def _make_text_response(text):
-    message = MagicMock()
-    message.content = text
-    message.tool_calls = None
+def _make_tool_call_stream(tool_name, arguments, call_id='call_1'):
+    return iter([
+        _make_tool_call_chunk(0, call_id, tool_name, arguments),
+    ])
 
-    choice = MagicMock()
-    choice.finish_reason = 'stop'
-    choice.message = message
-    choice.message.model_dump.return_value = {'role': 'assistant', 'content': text}
 
-    response = MagicMock()
-    response.choices = [choice]
-    return response
+def _make_text_stream(text):
+    chunks = [_make_stream_chunk(content=char) for char in text]
+    chunks.append(_make_stream_chunk(finish_reason='stop'))
+    return iter(chunks)
+
+
+def _collect_events(service, messages, show_bql=False):
+    return list(service._iter_chat_events(messages, show_bql=show_bql))
 
 
 @pytest.mark.django_db
@@ -63,8 +71,8 @@ class TestAssistantService:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_tool_call_response('run_bql', '{"query": "SELECT account LIMIT 1"}'),
-            _make_text_response('本月餐饮支出 50 元。'),
+            _make_tool_call_stream('run_bql', '{"query": "SELECT account LIMIT 1"}'),
+            _make_text_stream('本月餐饮支出 50 元。'),
         ]
 
         service = AssistantService(user)
@@ -77,7 +85,6 @@ class TestAssistantService:
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_with_multiple_tool_rounds_before_reply(self, mock_openai_cls, user, bean_file):
-        """复现日志场景：get_ledger_context + 3x run_bql 后应仍能返回最终回复。"""
         config = FormatConfig.get_user_config(user)
         config.deepseek_apikey = ''
         config.save()
@@ -85,11 +92,11 @@ class TestAssistantService:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_tool_call_response('get_ledger_context', '{}'),
-            _make_tool_call_response('run_bql', '{"query": "SELECT 1"}', 'call_2'),
-            _make_tool_call_response('run_bql', '{"query": "SELECT 2"}', 'call_3'),
-            _make_tool_call_response('run_bql', '{"query": "SELECT 3"}', 'call_4'),
-            _make_text_response('本月总支出 1000 元。'),
+            _make_tool_call_stream('get_ledger_context', '{}'),
+            _make_tool_call_stream('run_bql', '{"query": "SELECT 1"}', 'call_2'),
+            _make_tool_call_stream('run_bql', '{"query": "SELECT 2"}', 'call_3'),
+            _make_tool_call_stream('run_bql', '{"query": "SELECT 3"}', 'call_4'),
+            _make_text_stream('本月总支出 1000 元。'),
         ]
 
         service = AssistantService(user)
@@ -102,20 +109,19 @@ class TestAssistantService:
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_forces_synthesis_when_tool_limit_exceeded(self, mock_openai_cls, user, bean_file):
-        """超过工具轮次上限时，应强制汇总而非返回错误提示。"""
         config = FormatConfig.get_user_config(user)
         config.deepseek_apikey = ''
         config.save()
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        tool_responses = [
-            _make_tool_call_response('run_bql', '{"query": "SELECT 1"}', f'call_{i}')
+        tool_streams = [
+            _make_tool_call_stream('run_bql', '{"query": "SELECT 1"}', f'call_{i}')
             for i in range(AssistantService.MAX_TOOL_ROUNDS + 1)
         ]
         mock_client.chat.completions.create.side_effect = [
-            *tool_responses,
-            _make_text_response('根据已有查询，本月支出约 800 元。'),
+            *tool_streams,
+            _make_text_stream('根据已有查询，本月支出约 800 元。'),
         ]
 
         service = AssistantService(user)
@@ -134,3 +140,47 @@ class TestAssistantService:
         service = AssistantService(user)
         with pytest.raises(ValueError, match='未配置 DeepSeek API Key'):
             service.chat([{'role': 'user', 'content': '你好'}])
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_iter_chat_events_emits_sse_sequence(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', '{"query": "SELECT account LIMIT 1"}'),
+            _make_text_stream('本月餐饮支出 50 元。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '餐饮花了多少？'}])
+        event_types = [e.event for e in events]
+
+        assert event_types[0] == 'status'
+        assert 'tool_start' in event_types
+        assert 'tool_end' in event_types
+        assert 'delta' in event_types
+        assert event_types[-1] == 'done'
+        assert '50' in events[-1].data['reply']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_chat_stream_yields_formatted_sse(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_text_stream('你好。'),
+        ]
+
+        service = AssistantService(user)
+        chunks = list(service.chat_stream([{'role': 'user', 'content': '你好'}]))
+
+        assert any('event: done' in chunk for chunk in chunks)
+        assert any('event: delta' in chunk for chunk in chunks)

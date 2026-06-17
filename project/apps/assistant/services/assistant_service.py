@@ -1,6 +1,7 @@
 """LLM 编排：DeepSeek function calling + BQL 工具。"""
 import json
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -44,6 +45,11 @@ def build_system_prompt(reference_date: date | None = None) -> str:
         bql_capability_reference=build_bql_capability_reference(),
         bql_examples=build_bql_examples(ref),
     )
+
+
+def format_sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
 
 TOOLS = [
     {
@@ -90,6 +96,25 @@ class AssistantReply:
     reply: str
     queries: list[QueryRecord] = field(default_factory=list)
     api_key_source: str = 'none'
+
+
+@dataclass
+class StreamEvent:
+    event: str
+    data: dict[str, Any]
+
+
+@dataclass
+class _AccumulatedToolCall:
+    id: str = ''
+    name: str = ''
+    arguments: str = ''
+
+
+@dataclass
+class _StreamRoundResult:
+    content_parts: list[str]
+    tool_calls: list[_AccumulatedToolCall]
 
 
 class AssistantService:
@@ -146,14 +171,86 @@ class AssistantService:
             api_key_source=api_key_source,
         )
 
-    def _force_final_reply(
+    def _done_event_data(self, reply: AssistantReply) -> dict[str, Any]:
+        return {
+            'reply': reply.reply,
+            'queries': [
+                {'bql': q.bql, 'result_preview': q.result_preview}
+                for q in reply.queries
+            ],
+            'api_key_source': reply.api_key_source,
+        }
+
+    def _run_llm_round(
+        self,
+        client: OpenAI,
+        llm_messages: list[dict[str, Any]],
+        *,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: str | None = None,
+        stream_text: bool = False,
+    ) -> Iterator[StreamEvent | _StreamRoundResult]:
+        kwargs: dict[str, Any] = {
+            'model': self.model,
+            'messages': llm_messages,
+            'temperature': 0.1,
+            'stream': True,
+        }
+        if tools is not None:
+            kwargs['tools'] = tools
+        if tool_choice is not None:
+            kwargs['tool_choice'] = tool_choice
+
+        content_parts: list[str] = []
+        tool_calls_map: dict[int, _AccumulatedToolCall] = {}
+
+        stream = client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                content_parts.append(delta.content)
+                if stream_text:
+                    yield StreamEvent('delta', {'content': delta.content})
+            if delta.tool_calls:
+                for tool_call in delta.tool_calls:
+                    entry = tool_calls_map.setdefault(tool_call.index, _AccumulatedToolCall())
+                    if tool_call.id:
+                        entry.id = tool_call.id
+                    if tool_call.function.name:
+                        entry.name = tool_call.function.name
+                    if tool_call.function.arguments:
+                        entry.arguments += tool_call.function.arguments
+
+        yield _StreamRoundResult(
+            content_parts=content_parts,
+            tool_calls=[tool_calls_map[i] for i in sorted(tool_calls_map)],
+        )
+
+    def _assistant_message_from_tool_calls(
+        self,
+        tool_calls: list[_AccumulatedToolCall],
+    ) -> dict[str, Any]:
+        return {
+            'role': 'assistant',
+            'content': None,
+            'tool_calls': [
+                {
+                    'id': tc.id,
+                    'type': 'function',
+                    'function': {'name': tc.name, 'arguments': tc.arguments},
+                }
+                for tc in tool_calls
+            ],
+        }
+
+    def _iter_force_final_reply(
         self,
         client: OpenAI,
         llm_messages: list[dict[str, Any]],
         queries: list[QueryRecord],
         show_bql: bool,
         api_key_source: str,
-    ) -> AssistantReply:
+    ) -> Iterator[StreamEvent]:
         synthesis_messages = [
             *llm_messages,
             {
@@ -164,15 +261,23 @@ class AssistantService:
                 ),
             },
         ]
-        response = client.chat.completions.create(
-            model=self.model,
-            messages=synthesis_messages,
-            temperature=0.1,
-        )
-        reply_text = (response.choices[0].message.content or '').strip()
-        return self._finalize_reply(reply_text, queries, show_bql, api_key_source)
+        yield StreamEvent('status', {'phase': 'writing'})
+        content_parts: list[str] = []
+        for item in self._run_llm_round(client, synthesis_messages, stream_text=True):
+            if isinstance(item, StreamEvent):
+                yield item
+            else:
+                content_parts = item.content_parts
 
-    def chat(self, messages: list[dict[str, str]], show_bql: bool = False) -> AssistantReply:
+        reply_text = ''.join(content_parts).strip()
+        final = self._finalize_reply(reply_text, queries, show_bql, api_key_source)
+        yield StreamEvent('done', self._done_event_data(final))
+
+    def _iter_chat_events(
+        self,
+        messages: list[dict[str, str]],
+        show_bql: bool = False,
+    ) -> Iterator[StreamEvent]:
         resolved = resolve_api_key(self.user)
         if not resolved.api_key:
             raise ValueError(
@@ -192,36 +297,62 @@ class AssistantService:
             *messages,
         ]
 
+        yield StreamEvent('status', {'phase': 'thinking'})
         tool_round = 0
+
         while True:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=llm_messages,
+            round_gen = self._run_llm_round(
+                client,
+                llm_messages,
                 tools=TOOLS,
                 tool_choice='auto',
-                temperature=0.1,
+                stream_text=False,
             )
-            choice = response.choices[0]
-            message = choice.message
+            round_result: _StreamRoundResult | None = None
+            for item in round_gen:
+                if isinstance(item, _StreamRoundResult):
+                    round_result = item
 
-            if choice.finish_reason == 'tool_calls' or message.tool_calls:
+            if round_result is None:
+                raise RuntimeError('LLM 轮次未返回结果')
+
+            if round_result.tool_calls:
                 tool_round += 1
                 if tool_round > self.MAX_TOOL_ROUNDS:
-                    return self._force_final_reply(
+                    yield from self._iter_force_final_reply(
                         client,
                         llm_messages,
                         queries,
                         show_bql,
                         resolved.source,
                     )
-                llm_messages.append(message.model_dump(exclude_none=True))
-                for tool_call in message.tool_calls or []:
-                    fn_name = tool_call.function.name
+                    return
+
+                yield StreamEvent('status', {'phase': 'querying'})
+                llm_messages.append(self._assistant_message_from_tool_calls(round_result.tool_calls))
+
+                for tool_call in round_result.tool_calls:
+                    fn_name = tool_call.name
                     try:
-                        fn_args = json.loads(tool_call.function.arguments or '{}')
+                        fn_args = json.loads(tool_call.arguments or '{}')
                     except json.JSONDecodeError:
                         fn_args = {}
+
+                    tool_start: dict[str, Any] = {'name': fn_name}
+                    if fn_name == 'run_bql':
+                        tool_start['query'] = fn_args.get('query', '')
+                    yield StreamEvent('tool_start', tool_start)
+
+                    queries_before = len(queries)
                     tool_result = self._dispatch_tool(fn_name, fn_args, queries)
+
+                    tool_end: dict[str, Any] = {'name': fn_name}
+                    if fn_name == 'run_bql' and len(queries) > queries_before:
+                        record = queries[-1]
+                        tool_end['bql'] = record.bql
+                        tool_end['result_preview'] = record.result_preview
+                    yield StreamEvent('tool_end', tool_end)
+
                     llm_messages.append({
                         'role': 'tool',
                         'tool_call_id': tool_call.id,
@@ -229,5 +360,41 @@ class AssistantService:
                     })
                 continue
 
-            reply_text = (message.content or '').strip()
-            return self._finalize_reply(reply_text, queries, show_bql, resolved.source)
+            yield StreamEvent('status', {'phase': 'writing'})
+            for piece in round_result.content_parts:
+                yield StreamEvent('delta', {'content': piece})
+
+            reply_text = ''.join(round_result.content_parts).strip()
+            final = self._finalize_reply(reply_text, queries, show_bql, resolved.source)
+            yield StreamEvent('done', self._done_event_data(final))
+            return
+
+    def chat(self, messages: list[dict[str, str]], show_bql: bool = False) -> AssistantReply:
+        result: AssistantReply | None = None
+        for event in self._iter_chat_events(messages, show_bql=show_bql):
+            if event.event == 'done':
+                result = AssistantReply(
+                    reply=event.data['reply'],
+                    queries=[
+                        QueryRecord(bql=q['bql'], result_preview=q['result_preview'])
+                        for q in event.data['queries']
+                    ],
+                    api_key_source=event.data['api_key_source'],
+                )
+        if result is None:
+            raise RuntimeError('对话未产生完成事件')
+        return result
+
+    def chat_stream(
+        self,
+        messages: list[dict[str, str]],
+        show_bql: bool = False,
+    ) -> Iterator[str]:
+        try:
+            for event in self._iter_chat_events(messages, show_bql=show_bql):
+                yield format_sse(event.event, event.data)
+        except (ValueError, LedgerNotFoundError):
+            raise
+        except Exception as exc:
+            logger.exception('AI 助手流式调用失败')
+            yield format_sse('error', {'detail': f'AI 助手暂时不可用: {exc}'})

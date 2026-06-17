@@ -1138,6 +1138,56 @@
         }
       }
     },
+    "/api/assistant/chat/stream/": {
+      "post": {
+        "operationId": "assistant_chat_stream_create",
+        "summary": "AI 账本助手对话（SSE 流式）",
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantChatRequestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE 事件流：status, tool_start, tool_end, delta, done, error"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/assistant/status/": {
       "get": {
         "operationId": "assistant_status_retrieve",
