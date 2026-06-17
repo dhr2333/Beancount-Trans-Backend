@@ -116,7 +116,7 @@ class AssistantChatStreamView(APIView):
             200: OpenApiResponse(
                 description=(
                     'SSE 流式响应 (text/event-stream)。事件类型：'
-                    'status, reasoning_delta, thinking_delta, tool_start, tool_end, '
+                    'status, reasoning_delta, thinking_delta, thinking_set, tool_start, tool_end, '
                     'delta, done, error'
                 ),
             ),

@@ -36,6 +36,12 @@ def _make_tool_call_chunk(index, call_id, name, arguments_fragment):
     return _make_stream_chunk(tool_call=tool_call)
 
 
+def _make_planning_tool_stream(planning: str, tool_name: str, arguments: str, call_id='call_1'):
+    chunks = [_make_stream_chunk(content=char) for char in planning]
+    chunks.append(_make_tool_call_chunk(0, call_id, tool_name, arguments))
+    return iter(chunks)
+
+
 def _make_tool_call_stream(tool_name, arguments, call_id='call_1'):
     return iter([
         _make_tool_call_chunk(0, call_id, tool_name, arguments),
@@ -253,3 +259,34 @@ class TestAssistantService:
         assert '先分析账户' in done.data['reasoning']
         assert '先分析账户' in done.data['thinking']
         assert '100' in done.data['reply']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_planning_text_before_tool_call_in_reasoning(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        planning = '我先获取账本上下文，了解账户结构。'
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_planning_tool_stream(
+                planning,
+                'get_ledger_context',
+                '{}',
+            ),
+            _make_text_stream('本月餐饮 50 元。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '餐饮多少？'}])
+        reasoning_events = [e for e in events if e.event == 'reasoning_delta']
+        done = events[-1]
+
+        assert reasoning_events
+        assert planning in ''.join(e.data['content'] for e in reasoning_events)
+        assert planning in done.data['reasoning']
+        assert planning in done.data['thinking']
+        assert '50' in done.data['reply']
+        assert '50' not in done.data['reasoning']

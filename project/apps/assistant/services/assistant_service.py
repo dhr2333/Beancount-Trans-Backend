@@ -67,6 +67,7 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 9. 同一问题最多调用 run_bql 3 次；若仍无满意结果，请根据已有查询结果作答，不要无限重试。
 10. 不要执行写操作，不要讨论与账本无关的话题。
 11. 使用 Markdown 格式化回答：金额与关键数字用 **粗体**；多项对比用 Markdown 表格；列举用有序/无序列表；不要输出原始 HTML。
+12. 调用工具前，用一两句话简要说明你的分析思路（会展示在「思考过程」中）；最终回答中不要重复这段思路。
 
 {bql_capability_reference}
 
@@ -236,10 +237,11 @@ class AssistantService:
         queries: list[QueryRecord],
         show_bql: bool,
         api_key_source: str,
-        reasoning_parts: list[str],
+        api_reasoning_parts: list[str],
+        planning_parts: list[str],
         thinking_parts: list[str],
     ) -> AssistantReply:
-        reasoning_text = ''.join(reasoning_parts)
+        reasoning_text = self._merged_reasoning_text(api_reasoning_parts, planning_parts)
         agent_text = ''.join(thinking_parts)
         merged = merge_thinking_text(reasoning_text, agent_text)
         return self._finalize_reply(
@@ -259,6 +261,7 @@ class AssistantService:
         tools: list[dict[str, Any]] | None = None,
         tool_choice: str | None = None,
         stream_text: bool = False,
+        planning_mode: bool = False,
     ) -> Iterator[StreamEvent | _StreamRoundResult]:
         kwargs: dict[str, Any] = {
             'model': self.model,
@@ -291,11 +294,20 @@ class AssistantService:
             if reasoning_content:
                 reasoning_parts.append(reasoning_content)
                 if stream_text:
-                    yield StreamEvent('reasoning_delta', {'content': reasoning_content})
+                    yield StreamEvent('reasoning_delta', {
+                        'content': reasoning_content,
+                        'source': 'api',
+                    })
             if delta.content:
                 content_parts.append(delta.content)
-                if stream_text and not tool_calls_map:
-                    yield StreamEvent('delta', {'content': delta.content})
+                if stream_text:
+                    if planning_mode:
+                        yield StreamEvent('reasoning_delta', {
+                            'content': delta.content,
+                            'source': 'planning',
+                        })
+                    elif not tool_calls_map:
+                        yield StreamEvent('delta', {'content': delta.content})
 
         yield _StreamRoundResult(
             content_parts=content_parts,
@@ -327,7 +339,8 @@ class AssistantService:
         queries: list[QueryRecord],
         show_bql: bool,
         api_key_source: str,
-        reasoning_parts: list[str],
+        api_reasoning_parts: list[str],
+        planning_parts: list[str],
         thinking_parts: list[str],
     ) -> Iterator[StreamEvent]:
         synthesis_messages = [
@@ -345,16 +358,37 @@ class AssistantService:
         for item in self._run_llm_round(client, synthesis_messages, stream_text=True):
             if isinstance(item, StreamEvent):
                 if item.event == 'reasoning_delta':
-                    reasoning_parts.append(item.data['content'])
+                    source = item.data.get('source', 'api')
+                    if source == 'planning':
+                        planning_parts.append(item.data['content'])
+                    else:
+                        api_reasoning_parts.append(item.data['content'])
                 yield item
             else:
                 content_parts = item.content_parts
 
         reply_text = ''.join(content_parts).strip()
         final = self._build_thinking_reply(
-            reply_text, queries, show_bql, api_key_source, reasoning_parts, thinking_parts,
+            reply_text,
+            queries,
+            show_bql,
+            api_key_source,
+            api_reasoning_parts,
+            planning_parts,
+            thinking_parts,
         )
         yield StreamEvent('done', self._done_event_data(final))
+
+    def _merged_reasoning_text(
+        self,
+        api_reasoning_parts: list[str],
+        planning_parts: list[str],
+    ) -> str:
+        api_text = ''.join(api_reasoning_parts).strip()
+        planning_text = ''.join(planning_parts).strip()
+        if api_text and planning_text:
+            return f'{api_text}\n\n{planning_text}'
+        return api_text or planning_text
 
     def _iter_chat_events(
         self,
@@ -382,22 +416,29 @@ class AssistantService:
 
         yield StreamEvent('status', {'phase': 'thinking'})
         tool_round = 0
-        reasoning_parts: list[str] = []
+        api_reasoning_parts: list[str] = []
+        planning_parts: list[str] = []
         thinking_parts: list[str] = []
 
         while True:
             round_result: _StreamRoundResult | None = None
             writing_status_sent = False
+            planning_len_before = len(planning_parts)
             for item in self._run_llm_round(
                 client,
                 llm_messages,
                 tools=TOOLS,
                 tool_choice='auto',
                 stream_text=True,
+                planning_mode=True,
             ):
                 if isinstance(item, StreamEvent):
                     if item.event == 'reasoning_delta':
-                        reasoning_parts.append(item.data['content'])
+                        source = item.data.get('source', 'api')
+                        if source == 'planning':
+                            planning_parts.append(item.data['content'])
+                        else:
+                            api_reasoning_parts.append(item.data['content'])
                     if item.event == 'delta' and not writing_status_sent:
                         yield StreamEvent('status', {'phase': 'writing'})
                         writing_status_sent = True
@@ -417,7 +458,8 @@ class AssistantService:
                         queries,
                         show_bql,
                         resolved.source,
-                        reasoning_parts,
+                        api_reasoning_parts,
+                        planning_parts,
                         thinking_parts,
                     )
                     return
@@ -464,9 +506,30 @@ class AssistantService:
                     })
                 continue
 
+            planning_parts[planning_len_before:] = []
+            merged_thinking = merge_thinking_text(
+                self._merged_reasoning_text(api_reasoning_parts, planning_parts),
+                ''.join(thinking_parts),
+            )
+            if merged_thinking.strip():
+                yield StreamEvent('thinking_set', {
+                    'content': merged_thinking,
+                    'reasoning': self._merged_reasoning_text(api_reasoning_parts, planning_parts),
+                })
+
+            yield StreamEvent('status', {'phase': 'writing'})
+            for piece in round_result.content_parts:
+                yield StreamEvent('delta', {'content': piece})
+
             reply_text = ''.join(round_result.content_parts).strip()
             final = self._build_thinking_reply(
-                reply_text, queries, show_bql, resolved.source, reasoning_parts, thinking_parts,
+                reply_text,
+                queries,
+                show_bql,
+                resolved.source,
+                api_reasoning_parts,
+                planning_parts,
+                thinking_parts,
             )
             yield StreamEvent('done', self._done_event_data(final))
             return
