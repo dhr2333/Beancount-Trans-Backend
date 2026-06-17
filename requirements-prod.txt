@@ -1,4 +1,5 @@
 beancount==3.2.3
+beanquery==0.2.0
 chardet==7.4.3
 django-allauth==65.16.1
 django-celery-beat==2.9.0

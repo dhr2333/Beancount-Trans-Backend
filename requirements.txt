@@ -1,6 +1,7 @@
 aliyun-python-sdk-dysmsapi==2.1.2
 async-timeout==5.0.1
 beancount==3.2.0
+beanquery==0.2.0
 boto3==1.42.33
 chardet==5.2.0
 django-allauth==65.14.0
