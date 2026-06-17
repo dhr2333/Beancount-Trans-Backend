@@ -4,6 +4,9 @@ import tempfile
 import pytest
 from django.contrib.auth import get_user_model
 
+from project.apps.account.models import Account
+from project.apps.tags.models import Tag
+
 User = get_user_model()
 
 SAMPLE_BEAN = """2024-01-01 open Assets:Cash CNY
@@ -37,3 +40,27 @@ def bean_file(tmp_path, settings, user, monkeypatch):
     main_bean.write_text(SAMPLE_BEAN, encoding='utf-8')
     monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
     return main_bean
+
+
+@pytest.fixture
+def platform_metadata(user):
+    """平台账户与标签描述元数据。"""
+    Account.objects.create(
+        owner=user,
+        account='Expenses:Food',
+        description='餐饮',
+        enable=True,
+    )
+    Account.objects.create(
+        owner=user,
+        account='Assets:Cash',
+        description='现金',
+        enable=True,
+    )
+    Tag.objects.create(
+        owner=user,
+        name='Discretionary',
+        description='非必要支出',
+        enable=True,
+    )
+    return user

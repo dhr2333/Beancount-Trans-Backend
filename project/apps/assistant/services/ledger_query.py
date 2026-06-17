@@ -15,6 +15,8 @@ from project.utils.file import BeanFileManager
 
 from .bql_errors import format_bql_error
 from .bql_validator import BQLValidationError, validate_bql
+from .metadata_catalog import build_path_to_description_map
+from .result_enricher import enrich_bql_result_text
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +51,7 @@ class LedgerQueryService:
         conn.attach(f'beancount:{self.ledger_path}')
         return conn
 
-    def execute(self, query: str) -> BQLQueryResult:
+    def execute(self, query: str, *, enrich: bool = True) -> BQLQueryResult:
         bql = validate_bql(query)
         conn = self._connect()
         try:
@@ -66,6 +68,9 @@ class LedgerQueryService:
             result_text = out.getvalue()
             if truncated:
                 result_text += f'\n... (结果已截断，仅显示前 {self.max_rows} 行，共 {row_count} 行)'
+            if enrich and result_text:
+                path_map = build_path_to_description_map(self.user)
+                result_text = enrich_bql_result_text(result_text, path_map)
             return BQLQueryResult(
                 bql=bql,
                 result_text=result_text or '(无结果)',
@@ -87,7 +92,8 @@ class LedgerQueryService:
             return []
         try:
             result = self.execute(
-                f'SELECT DISTINCT account ORDER BY account LIMIT {int(limit)}'
+                f'SELECT DISTINCT account ORDER BY account LIMIT {int(limit)}',
+                enrich=False,
             )
             accounts = []
             for line in result.result_text.splitlines():

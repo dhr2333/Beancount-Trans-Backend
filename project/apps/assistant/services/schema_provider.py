@@ -7,6 +7,7 @@ from project.apps.translate.models import FormatConfig
 
 from .bql_reference import build_bql_capability_reference
 from .ledger_query import LedgerQueryService
+from .metadata_catalog import format_catalog_for_llm
 from .reference_date import build_reference_date_context, get_reference_date
 
 BQL_SCHEMA_HINT = """
@@ -90,12 +91,16 @@ def get_ledger_context(user: User, reference_date: date | None = None) -> str:
         build_bql_examples(ref),
     ]
 
+    ledger_accounts: list[str] = []
     if query_service.ledger_exists():
-        accounts = query_service.list_accounts(limit=100)
-        if accounts:
-            lines.append('账本账户列表（部分）:')
-            lines.extend(f'  - {acc}' for acc in accounts[:80])
-            if len(accounts) > 80:
-                lines.append(f'  ... 共 {len(accounts)} 个账户')
+        ledger_accounts = query_service.list_accounts(limit=100)
+
+    lines.append(format_catalog_for_llm(user, ledger_accounts))
+
+    if ledger_accounts:
+        lines.append('账本实际出现的账户（部分，BQL 查询范围）:')
+        lines.extend(f'  - {acc}' for acc in ledger_accounts[:80])
+        if len(ledger_accounts) > 80:
+            lines.append(f'  ... 共 {len(ledger_accounts)} 个账户')
 
     return '\n'.join(lines)

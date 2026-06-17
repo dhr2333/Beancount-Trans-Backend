@@ -60,3 +60,11 @@ class TestGetLedgerContext:
         assert 'Expenses:Food' in context
         assert 'BQL 能力说明' in context
         assert '禁止 units(position) > N' in context
+
+    def test_includes_platform_catalog(self, user, bean_file, platform_metadata):
+        context = get_ledger_context(user, reference_date=date(2026, 6, 16))
+        assert '平台账户目录' in context
+        assert 'Expenses:Food → 餐饮' in context
+        assert '平台标签目录' in context
+        assert 'Discretionary → 非必要支出' in context
+        assert '账本实际出现的账户' in context

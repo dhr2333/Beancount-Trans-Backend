@@ -42,3 +42,12 @@ class TestLedgerQueryService:
             service.execute(
                 "SELECT date WHERE account ~ 'Expenses' AND units(position) > 100"
             )
+
+    def test_execute_enriches_with_platform_description(
+        self, user, bean_file, platform_metadata
+    ):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT account, sum(position) WHERE account ~ 'Expenses' GROUP BY account"
+        )
+        assert '餐饮（Expenses:Food）' in result.result_text
