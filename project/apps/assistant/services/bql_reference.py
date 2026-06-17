@@ -27,7 +27,20 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【SELECT 聚合】
 - 汇总：SELECT account, sum(units(position)) ... GROUP BY account
+- 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
 - 聚合函数只能出现在 SELECT，不能出现在 WHERE
+
+【余额与结构分析（应收/资产/负债/收入）】
+- 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）
+- 各子账户余额：
+  SELECT account, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY account
+- 某类账户总额：
+  SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
+- 各负债账户欠款：
+  SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account
+- 按交易对方汇总（需先锁定具体 account 正则）：
+  SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable:Person' GROUP BY payee
+- 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询
 
 【大额消费推荐写法】
 方式 A（按金额过滤支出）：

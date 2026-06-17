@@ -61,8 +61,18 @@ def _make_reasoning_then_text_stream(reasoning: str, answer: str):
     return iter(chunks)
 
 
+def _with_guard_retry(*streams):
+    """为数字校验重试追加一次安全的 LLM mock 响应。"""
+    return [*streams, _make_text_stream('请以查询详情中的 BQL 结果为准。')]
+
+
 def _collect_events(service, messages, show_bql=False):
     return list(service._iter_chat_events(messages, show_bql=show_bql))
+
+
+_FOOD_SUM_BQL = (
+    '{"query": "SELECT sum(units(position)) WHERE account ~ \'^Expenses:Food\'"}'
+)
 
 
 @pytest.mark.django_db
@@ -74,6 +84,7 @@ class TestAssistantService:
         assert '【BQL】' in prompt
         assert 'year = 2026 AND month = 6' in prompt
         assert 'BQL 能力说明' in prompt
+        assert '禁止心算' in prompt
         assert 'Markdown' in prompt
         assert '平台账户目录' in prompt
         assert '描述（账户路径）' in prompt
@@ -88,7 +99,7 @@ class TestAssistantService:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_tool_call_stream('run_bql', '{"query": "SELECT account LIMIT 1"}'),
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
             _make_text_stream('本月餐饮支出 50 元。'),
         ]
 
@@ -113,13 +124,13 @@ class TestAssistantService:
             _make_tool_call_stream('run_bql', '{"query": "SELECT 1"}', 'call_2'),
             _make_tool_call_stream('run_bql', '{"query": "SELECT 2"}', 'call_3'),
             _make_tool_call_stream('run_bql', '{"query": "SELECT 3"}', 'call_4'),
-            _make_text_stream('本月总支出 1000 元。'),
+            _make_text_stream('已完成多轮查询，明细请见查询详情。'),
         ]
 
         service = AssistantService(user)
         result = service.chat([{'role': 'user', 'content': '本月总支出是多少？'}])
 
-        assert '1000' in result.reply
+        assert '查询详情' in result.reply
         assert len(result.queries) == 3
         assert '查询步骤过多' not in result.reply
 
@@ -138,13 +149,13 @@ class TestAssistantService:
         ]
         mock_client.chat.completions.create.side_effect = [
             *tool_streams,
-            _make_text_stream('根据已有查询，本月支出约 800 元。'),
+            _make_text_stream('根据已有查询整理如下，详见查询详情。'),
         ]
 
         service = AssistantService(user)
         result = service.chat([{'role': 'user', 'content': '本月支出？'}])
 
-        assert '800' in result.reply
+        assert '查询详情' in result.reply
         assert '查询步骤过多' not in result.reply
         assert mock_client.chat.completions.create.call_count == AssistantService.MAX_TOOL_ROUNDS + 2
 
@@ -168,7 +179,7 @@ class TestAssistantService:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_tool_call_stream('run_bql', '{"query": "SELECT account LIMIT 1"}'),
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
             _make_text_stream('本月餐饮支出 50 元。'),
         ]
 
@@ -184,7 +195,7 @@ class TestAssistantService:
         assert event_types[-1] == 'done'
         assert '50' in events[-1].data['reply']
         assert '执行查询' in events[-1].data['thinking']
-        assert 'SELECT account LIMIT 1' in events[-1].data['thinking']
+        assert 'Expenses:Food' in events[-1].data['thinking']
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
@@ -243,7 +254,7 @@ class TestAssistantService:
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_reasoning_then_text_stream('先分析账户。', '本月 100 元。'),
+            _make_reasoning_then_text_stream('先分析账户。', '本月支出请结合账户结构查看。'),
         ]
 
         service = AssistantService(user)
@@ -258,7 +269,7 @@ class TestAssistantService:
         assert done.event == 'done'
         assert '先分析账户' in done.data['reasoning']
         assert '先分析账户' in done.data['thinking']
-        assert '100' in done.data['reply']
+        assert '支出' in done.data['reply']
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
@@ -276,6 +287,7 @@ class TestAssistantService:
                 'get_ledger_context',
                 '{}',
             ),
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL, 'call_2'),
             _make_text_stream('本月餐饮 50 元。'),
         ]
 
@@ -290,3 +302,27 @@ class TestAssistantService:
         assert planning in done.data['thinking']
         assert '50' in done.data['reply']
         assert '50' not in done.data['reasoning']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_number_guard_retries_when_reply_has_uncited_amounts(
+        self, mock_openai_cls, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_text_stream('个人应收款合计 **9999** 元。'),
+            _make_text_stream('当前未执行账本查询，无法确认具体金额。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '分析个人应收款'}])
+        done = events[-1]
+
+        assert done.event == 'done'
+        assert mock_client.chat.completions.create.call_count == 2
+        assert '9999' not in done.data['reply']

@@ -19,6 +19,14 @@ class TestBuildBqlExamples:
         assert '【BQL】' in text
         assert "account ~ '^Expenses'" in text
 
+    def test_includes_receivable_and_liabilities_examples(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '^Assets:Receivable' in text
+        assert '^Liabilities' in text
+        assert '个人应收款各户余额' in text
+        assert '各负债账户欠款' in text
+        assert '非 Fava 余额' not in text
+
     def test_january_last_month_is_previous_december(self):
         text = build_bql_examples(date(2026, 1, 15))
         assert 'year = 2026 AND month = 1' in text
@@ -38,6 +46,12 @@ class TestBqlCapabilityReference:
         assert 'number > 100' in ref
         assert '禁止 units(position) > N' in ref
         assert 'beancount.github.io' in ref
+
+    def test_documents_balance_analysis_patterns(self):
+        ref = build_bql_capability_reference()
+        assert '余额与结构分析' in ref
+        assert '^Assets:Receivable' in ref
+        assert '禁止拉取大量明细行' in ref
 
 
 class TestBuildSystemPrompt:

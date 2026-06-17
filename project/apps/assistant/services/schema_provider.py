@@ -62,8 +62,24 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             f"AND year = {year} AND month = {month} GROUP BY payee",
         ),
         (
-            '各资产账户入账汇总（postings 汇总，非 Fava 余额）',
+            '各资产账户累计余额（postings 汇总）',
             "SELECT account, sum(units(position)) WHERE account ~ '^Assets' GROUP BY account",
+        ),
+        (
+            '个人应收款各户余额是多少？',
+            "SELECT account, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY account",
+        ),
+        (
+            '应收款总额是多少？',
+            "SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'",
+        ),
+        (
+            '各负债账户欠款多少？',
+            "SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account",
+        ),
+        (
+            '某应收账户按交易对方汇总',
+            "SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY payee",
         ),
     ]
 
