@@ -51,6 +51,7 @@ class TestAssistantService:
         assert '【BQL】' in prompt
         assert 'year = 2026 AND month = 6' in prompt
         assert 'BQL 能力说明' in prompt
+        assert 'Markdown' in prompt
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
