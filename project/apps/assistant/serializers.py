@@ -33,3 +33,22 @@ class AssistantStatusSerializer(serializers.Serializer):
     ledger_exists = serializers.BooleanField()
     ledger_path = serializers.CharField(allow_blank=True)
     reference_date = serializers.DateField(help_text='助手使用的基准日期（今天）')
+
+
+class AssistantFeedbackRequestSerializer(serializers.Serializer):
+    message_id = serializers.UUIDField()
+    rating = serializers.ChoiceField(
+        choices=['like', 'dislike'],
+        allow_null=True,
+        required=False,
+    )
+    user_message = serializers.CharField(max_length=4000)
+    assistant_reply = serializers.CharField()
+    queries = QueryRecordSerializer(many=True, required=False, default=list)
+    comment = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
+
+
+class AssistantFeedbackResponseSerializer(serializers.Serializer):
+    message_id = serializers.UUIDField()
+    rating = serializers.ChoiceField(choices=['like', 'dislike'], allow_null=True)
+    comment = serializers.CharField(allow_blank=True, required=False)

@@ -12,8 +12,11 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from .serializers import (
     AssistantChatRequestSerializer,
     AssistantChatResponseSerializer,
+    AssistantFeedbackRequestSerializer,
+    AssistantFeedbackResponseSerializer,
     AssistantStatusSerializer,
 )
+from .models import AssistantFeedback
 from .services.api_key_resolver import resolve_api_key
 from .services.assistant_service import AssistantService
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
@@ -151,3 +154,50 @@ class AssistantChatStreamView(APIView):
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         return response
+
+
+class AssistantFeedbackView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=AssistantFeedbackRequestSerializer,
+        responses={200: AssistantFeedbackResponseSerializer},
+        summary='提交 AI 账本助手回复评价',
+    )
+    def post(self, request):
+        serializer = AssistantFeedbackRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        message_id = data['message_id']
+        rating = data.get('rating')
+
+        if rating is None:
+            AssistantFeedback.objects.filter(
+                user=request.user,
+                message_id=message_id,
+            ).delete()
+            response_data = {
+                'message_id': message_id,
+                'rating': None,
+                'comment': '',
+            }
+            return Response(AssistantFeedbackResponseSerializer(response_data).data)
+
+        feedback, _created = AssistantFeedback.objects.update_or_create(
+            user=request.user,
+            message_id=message_id,
+            defaults={
+                'rating': rating,
+                'user_message': data['user_message'],
+                'assistant_reply': data['assistant_reply'],
+                'queries': data.get('queries', []),
+                'comment': data.get('comment', ''),
+            },
+        )
+        response_data = {
+            'message_id': feedback.message_id,
+            'rating': feedback.rating,
+            'comment': feedback.comment,
+        }
+        return Response(AssistantFeedbackResponseSerializer(response_data).data)

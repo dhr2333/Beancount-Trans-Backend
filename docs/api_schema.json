@@ -1188,6 +1188,45 @@
         }
       }
     },
+    "/api/assistant/feedback/": {
+      "post": {
+        "operationId": "assistant_feedback_create",
+        "summary": "提交 AI 账本助手回复评价",
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantFeedbackRequestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantFeedbackResponse"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/assistant/status/": {
       "get": {
         "operationId": "assistant_status_retrieve",
@@ -6357,6 +6396,82 @@
           "queries",
           "reply"
         ]
+      },
+      "AssistantFeedbackRequestRequest": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rating": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AssistantFeedbackRatingEnum"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_message": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "assistant_reply": {
+            "type": "string"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryRecord"
+            }
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "assistant_reply",
+          "message_id",
+          "user_message"
+        ]
+      },
+      "AssistantFeedbackResponse": {
+        "type": "object",
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rating": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AssistantFeedbackRatingEnum"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comment": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message_id",
+          "rating"
+        ]
+      },
+      "AssistantFeedbackRatingEnum": {
+        "enum": [
+          "like",
+          "dislike"
+        ],
+        "type": "string"
       },
       "AssistantStatus": {
         "type": "object",
