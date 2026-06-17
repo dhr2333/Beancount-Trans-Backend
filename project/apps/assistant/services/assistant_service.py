@@ -214,10 +214,6 @@ class AssistantService:
         stream = client.chat.completions.create(**kwargs)
         for chunk in stream:
             delta = chunk.choices[0].delta
-            if delta.content:
-                content_parts.append(delta.content)
-                if stream_text:
-                    yield StreamEvent('delta', {'content': delta.content})
             if delta.tool_calls:
                 for tool_call in delta.tool_calls:
                     entry = tool_calls_map.setdefault(tool_call.index, _AccumulatedToolCall())
@@ -227,6 +223,10 @@ class AssistantService:
                         entry.name = tool_call.function.name
                     if tool_call.function.arguments:
                         entry.arguments += tool_call.function.arguments
+            elif delta.content:
+                content_parts.append(delta.content)
+                if stream_text and not tool_calls_map:
+                    yield StreamEvent('delta', {'content': delta.content})
 
         yield _StreamRoundResult(
             content_parts=content_parts,
@@ -308,16 +308,21 @@ class AssistantService:
         tool_round = 0
 
         while True:
-            round_gen = self._run_llm_round(
+            round_result: _StreamRoundResult | None = None
+            writing_status_sent = False
+            for item in self._run_llm_round(
                 client,
                 llm_messages,
                 tools=TOOLS,
                 tool_choice='auto',
-                stream_text=False,
-            )
-            round_result: _StreamRoundResult | None = None
-            for item in round_gen:
-                if isinstance(item, _StreamRoundResult):
+                stream_text=True,
+            ):
+                if isinstance(item, StreamEvent):
+                    if item.event == 'delta' and not writing_status_sent:
+                        yield StreamEvent('status', {'phase': 'writing'})
+                        writing_status_sent = True
+                    yield item
+                else:
                     round_result = item
 
             if round_result is None:
@@ -366,10 +371,6 @@ class AssistantService:
                         'content': tool_result,
                     })
                 continue
-
-            yield StreamEvent('status', {'phase': 'writing'})
-            for piece in round_result.content_parts:
-                yield StreamEvent('delta', {'content': piece})
 
             reply_text = ''.join(round_result.content_parts).strip()
             final = self._finalize_reply(reply_text, queries, show_bql, resolved.source)

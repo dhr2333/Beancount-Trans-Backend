@@ -186,3 +186,26 @@ class TestAssistantService:
 
         assert any('event: done' in chunk for chunk in chunks)
         assert any('event: delta' in chunk for chunk in chunks)
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_text_reply_streams_deltas_during_llm_round(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_text_stream('你好。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '你好'}])
+        event_types = [e.event for e in events]
+
+        writing_idx = event_types.index('status', 1)
+        first_delta_idx = event_types.index('delta')
+        assert events[writing_idx].data['phase'] == 'writing'
+        assert writing_idx < first_delta_idx
+        assert event_types[-1] == 'done'
