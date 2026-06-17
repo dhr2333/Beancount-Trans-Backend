@@ -5,22 +5,13 @@ from django.contrib.auth.models import User
 
 from project.apps.translate.models import FormatConfig
 
+from .bql_reference import build_bql_capability_reference
 from .ledger_query import LedgerQueryService
 from .reference_date import build_reference_date_context, get_reference_date
 
 BQL_SCHEMA_HINT = """
-BQL (Bean Query Language) 常用说明：
-- 默认查询 postings 视图，字段包括 date, year, month, account, position, payee, narration, tags 等
-- 不要写 FROM 子句
-- 账户匹配：优先 account ~ 'Expenses' 或 account ~ '^Expenses'（正则），避免臆造不存在的精确账户名
-- 金额汇总：优先 sum(units(position))；有 cost/lot 时避免直接 sum(position) 导致难读结果
-- 分组：GROUP BY account, year, month, payee
-- 排序：ORDER BY date DESC
-- 限制：LIMIT 10
-- 日期过滤：year = YYYY AND month = M，或 date >= YYYY-MM-DD AND date <= YYYY-MM-DD
-- 相对时间请以「基准日期」段落为准展开，不要使用中文字面量
-- 支出账户通常以 Expenses: 开头，收入以 Income: 开头，资产以 Assets: 开头
-- 查询失败或返回 (无结果) 时：最多再试 1 次，换更宽账户前缀或检查年月，不要连续多次微调相似语句
+BQL 速查：默认查询 postings；不要写 FROM / HAVING；账户用 account ~ 正则；
+金额汇总用 sum(units(position))；详见下方「BQL 能力说明」。
 """
 
 
@@ -53,9 +44,16 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             f"AND year = {last_year} AND month = {last_month}",
         ),
         (
-            '最近 10 笔大额消费有哪些？',
-            "SELECT date, payee, narration, account, units(position) "
-            "WHERE account ~ '^Expenses' ORDER BY date DESC LIMIT 10",
+            '本月超过 100 元的大额消费有哪些？',
+            f"SELECT date, payee, narration, account, units(position) "
+            f"WHERE account ~ '^Expenses' AND year = {year} AND month = {month} "
+            f"AND number > 100 ORDER BY date DESC LIMIT 20",
+        ),
+        (
+            '最近 10 笔大额消费（按金额排序）',
+            f"SELECT date, payee, narration, account, units(position) "
+            f"WHERE account ~ '^Expenses' AND year = {year} AND month = {month} "
+            f"ORDER BY units(position) DESC LIMIT 10",
         ),
         (
             '本月按商家汇总支出',
@@ -88,6 +86,7 @@ def get_ledger_context(user: User, reference_date: date | None = None) -> str:
         f'默认货币: {currency}',
         f'账本文件存在: {"是" if query_service.ledger_exists() else "否"}',
         BQL_SCHEMA_HINT.strip(),
+        build_bql_capability_reference(),
         build_bql_examples(ref),
     ]
 

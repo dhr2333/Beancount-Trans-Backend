@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from typing import Optional
 
 import beanquery
+from beanquery.compiler import CompilationError
 from beanquery.query_render import render_text
 from django.conf import settings
 from django.contrib.auth.models import User
 
 from project.utils.file import BeanFileManager
 
+from .bql_errors import format_bql_error
 from .bql_validator import BQLValidationError, validate_bql
 
 logger = logging.getLogger(__name__)
@@ -72,9 +74,12 @@ class LedgerQueryService:
             )
         except BQLValidationError:
             raise
+        except CompilationError as exc:
+            logger.warning('BQL 编译失败: %s — %s', bql, exc)
+            raise ValueError(format_bql_error(exc)) from exc
         except Exception as exc:
             logger.exception('BQL 执行失败: %s', bql)
-            raise ValueError(f'BQL 执行失败: {exc}') from exc
+            raise ValueError(format_bql_error(exc)) from exc
 
     def list_accounts(self, limit: int = 200) -> list[str]:
         """获取账本中的账户列表。"""

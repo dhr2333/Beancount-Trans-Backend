@@ -27,3 +27,29 @@ class TestBQLValidator:
     def test_strip_trailing_semicolon(self):
         q = validate_bql('SELECT account LIMIT 1;')
         assert not q.endswith(';')
+
+    def test_reject_units_position_compare(self):
+        with pytest.raises(BQLValidationError, match='units\\(position\\)'):
+            validate_bql(
+                "SELECT date, units(position) WHERE account ~ 'Expenses' "
+                "AND units(position) > 100"
+            )
+
+    def test_reject_having_clause(self):
+        with pytest.raises(BQLValidationError, match='HAVING'):
+            validate_bql(
+                "SELECT account, sum(units(position)) WHERE account ~ 'Expenses' "
+                "GROUP BY account HAVING sum(units(position)) > 100"
+            )
+
+    def test_reject_aggregate_in_where(self):
+        with pytest.raises(BQLValidationError, match='聚合'):
+            validate_bql(
+                "SELECT date WHERE account ~ 'Expenses' AND sum(units(position)) > 0"
+            )
+
+    def test_allow_number_compare(self):
+        q = validate_bql(
+            "SELECT date, units(position) WHERE account ~ 'Expenses' AND number > 100"
+        )
+        assert 'number > 100' in q

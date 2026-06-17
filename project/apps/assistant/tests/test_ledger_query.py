@@ -28,3 +28,17 @@ class TestLedgerQueryService:
         accounts = service.list_accounts()
         assert 'Expenses:Food' in accounts
         assert 'Assets:Cash' in accounts
+
+    def test_execute_number_filter_query(self, user, bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT date, units(position) WHERE account ~ 'Expenses' AND number > 30"
+        )
+        assert '50' in result.result_text or '50.00' in result.result_text
+
+    def test_reject_units_position_compare_before_execute(self, user, bean_file):
+        service = LedgerQueryService(user)
+        with pytest.raises(BQLValidationError, match='units\\(position\\)'):
+            service.execute(
+                "SELECT date WHERE account ~ 'Expenses' AND units(position) > 100"
+            )

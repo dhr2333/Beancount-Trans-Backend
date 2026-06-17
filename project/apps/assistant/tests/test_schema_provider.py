@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from project.apps.assistant.services.assistant_service import build_system_prompt
+from project.apps.assistant.services.bql_reference import build_bql_capability_reference
 from project.apps.assistant.services.schema_provider import (
     build_bql_examples,
     get_ledger_context,
@@ -24,13 +25,29 @@ class TestBuildBqlExamples:
         assert 'year = 2025 AND month = 12' in text
 
 
+    def test_large_expense_uses_number_not_units_compare(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert 'number > 100' in text
+        assert 'units(position) >' not in text
+        assert 'ORDER BY units(position) DESC' in text
+
+
+class TestBqlCapabilityReference:
+    def test_documents_number_and_forbids_units_compare(self):
+        ref = build_bql_capability_reference()
+        assert 'number > 100' in ref
+        assert '禁止 units(position) > N' in ref
+        assert 'beancount.github.io' in ref
+
+
 class TestBuildSystemPrompt:
     def test_includes_reference_date_and_examples(self):
         prompt = build_system_prompt(date(2026, 6, 16))
         assert '基准日期（今天）: 2026-06-16' in prompt
         assert 'BQL 查询示例' in prompt
         assert '【BQL】' in prompt
-        assert '优先模仿下方示例结构' in prompt
+        assert 'BQL 能力说明' in prompt
+        assert 'number > 100' in prompt
 
 
 @pytest.mark.django_db
@@ -41,4 +58,5 @@ class TestGetLedgerContext:
         assert '【BQL】' in context
         assert 'year = 2026 AND month = 6' in context
         assert 'Expenses:Food' in context
-        assert '不要写 FROM 子句' in context
+        assert 'BQL 能力说明' in context
+        assert '禁止 units(position) > N' in context
