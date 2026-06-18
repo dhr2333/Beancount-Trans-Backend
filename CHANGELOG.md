@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.12](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.11...5.8.12) (2026-06-18)
+
+### Bug Fixes
+
+* 增强助手服务的 DSML 工具调用处理 ([3f45229](https://github.com/dhr2333/Beancount-Trans-Backend/commit/3f45229525082bfbb5b83b07cf2cd05cb379c55b))
+
 ## [5.8.11](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.10...5.8.11) (2026-06-18)
 
 ### Bug Fixes
