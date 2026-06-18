@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.8.11](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.10...5.8.11) (2026-06-18)
+
+### Bug Fixes
+
+* 提供基于标签的 BQL few-shot ([#91](https://github.com/dhr2333/Beancount-Trans-Backend/issues/91)) ([812b15f](https://github.com/dhr2333/Beancount-Trans-Backend/commit/812b15fd822089b52f7bbd8a7ff1e27e90ae78b2))
+
 ## [5.8.10](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.9...5.8.10) (2026-06-04)
 
 ### Bug Fixes
