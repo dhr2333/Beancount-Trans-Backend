@@ -10,7 +10,16 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【常用列】
 - 交易级：date, year, month, payee, narration, tags
-- posting 级：account, position, number（纯数值；Expenses 为正，Income 常为负）
+- posting 级：account, position, number（纯数值；符号含义见下方「复式记账符号约定」）
+
+【复式记账符号约定】
+- Beancount 为复式记账；sum(units(position)) 的符号有业务含义，与 Fava 一致
+- Expenses：累计为正 → 支出金额
+- Income：累计为负 → 收入金额（盈利）；累计为正 → 冲销/退款，不是新增收入
+- Liabilities：累计为负 → 欠款（负债余额）
+- Assets：累计为正 → 资产余额
+- 向用户展示 Income/Liabilities 时：用绝对值表述金额，可简短注明「账本中为负属正常」；禁止将 Income 负余额说成「亏损」
+- BQL 写法不变：收入汇总用 account ~ '^Income' + sum(units(position))；筛大额收入用 number < -N
 
 【WHERE 允许的比较】
 - 账户：account ~ 'Expenses' 或 account ~ '^Expenses'（正则）

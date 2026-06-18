@@ -64,6 +64,21 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             f"AND year = {last_year} AND month = {last_month}",
         ),
         (
+            '本月总收入是多少？',
+            f"SELECT sum(units(position)) WHERE account ~ '^Income' "
+            f"AND year = {year} AND month = {month}",
+        ),
+        (
+            '本月各收入科目分别是多少？',
+            f"SELECT account, sum(units(position)) WHERE account ~ '^Income' "
+            f"AND year = {year} AND month = {month} GROUP BY account",
+        ),
+        (
+            '本月工资收入多少？',
+            f"SELECT sum(units(position)) WHERE account ~ '^Income:Salary' "
+            f"AND year = {year} AND month = {month}",
+        ),
+        (
             '本月超过 100 元的大额消费有哪些？',
             f"SELECT date, payee, narration, account, units(position) "
             f"WHERE account ~ '^Expenses' AND year = {year} AND month = {month} "
@@ -114,6 +129,7 @@ def build_bql_examples(reference_date: date | None = None) -> str:
     lines.append(
         '说明：余额查询若 sum 列为空白，表示余额为 0（与 Fava 一致）。'
         'GROUP BY 时父账户行仅含直接 posting，不是子树总额；无 posting 的账户不会出现。'
+        'Income 的 sum 为负表示收入金额，向用户展示时取绝对值。'
     )
     return '\n'.join(lines).rstrip()
 
@@ -150,6 +166,20 @@ def build_user_specific_bql_examples(
         examples.append(
             (
                 f'本月{entry.description}花了多少？',
+                f"SELECT sum(units(position)) WHERE account ~ '^{entry.account}' "
+                f"AND year = {year} AND month = {month}",
+            )
+        )
+        break
+
+    for entry in load_account_catalog(user):
+        if not entry.account.startswith('Income:') or not entry.description:
+            continue
+        if entry.account not in ledger_set:
+            continue
+        examples.append(
+            (
+                f'本月{entry.description}收入多少？',
                 f"SELECT sum(units(position)) WHERE account ~ '^{entry.account}' "
                 f"AND year = {year} AND month = {month}",
             )

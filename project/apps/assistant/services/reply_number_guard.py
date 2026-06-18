@@ -68,6 +68,9 @@ def _amount_in_source(amount: Decimal, source_text: str, *, tolerance: Decimal) 
     for candidate in extract_amounts(source_text):
         if abs(candidate - amount) <= tolerance:
             return True
+        # 回复为正、BQL 为负：Income/Liabilities 展示取绝对值
+        if amount > 0 and candidate < 0 and abs(candidate + amount) <= tolerance:
+            return True
     return False
 
 

@@ -95,6 +95,8 @@ class TestAssistantService:
         assert '余额为 0' in prompt
         assert '账户层级' in prompt
         assert '父账户行仅含直接 posting' in prompt
+        assert '复式记账符号' in prompt
+        assert 'Income 累计为负表示收入' in prompt
 
     @pytest.mark.django_db
     def test_dispatch_tool_blocks_over_bql_limit(self, user, bean_file):

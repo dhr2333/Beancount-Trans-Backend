@@ -65,6 +65,14 @@ class TestBuildBqlExamples:
         assert 'units(position) >' not in text
         assert 'ORDER BY units(position) DESC' in text
 
+    def test_includes_income_examples(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '本月总收入是多少' in text
+        assert '本月各收入科目分别是多少' in text
+        assert '本月工资收入多少' in text
+        assert "account ~ '^Income'" in text
+        assert 'Income 的 sum 为负表示收入金额' in text
+
 
 class TestBuildUserSpecificBqlExamples:
     @pytest.mark.django_db
@@ -122,6 +130,12 @@ class TestBqlCapabilityReference:
         assert '子树总额' in ref
         assert '无 posting' in ref
 
+    def test_documents_double_entry_sign_convention(self):
+        ref = build_bql_capability_reference()
+        assert '复式记账符号约定' in ref
+        assert 'Income：累计为负' in ref
+        assert '禁止将 Income 负余额说成「亏损」' in ref
+
 
 class TestBuildSystemPrompt:
     def test_includes_reference_date_and_examples(self):
@@ -134,6 +148,8 @@ class TestBuildSystemPrompt:
         assert '^Assets:Savings:Cash' not in prompt
         assert '账户层级' in prompt
         assert '父账户行仅含直接 posting' in prompt
+        assert '复式记账符号' in prompt
+        assert 'Income 累计为负表示收入' in prompt
 
 
 @pytest.mark.django_db
