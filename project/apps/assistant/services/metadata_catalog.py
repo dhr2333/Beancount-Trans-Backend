@@ -128,7 +128,7 @@ def format_catalog_for_llm(
     lines.append('')
     lines.append(
         '说明：BQL 只能查询账本文件中实际存在的 posting；'
-        '上述目录用于将用户自然语言类别映射到 account ~ / tags ~ 条件。'
+        '上述目录用于将用户自然语言类别映射到 account ~ / \'完整标签路径\' IN tags 条件。'
     )
 
     return '\n'.join(lines)

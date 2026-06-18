@@ -53,3 +53,15 @@ class TestBQLValidator:
             "SELECT date, units(position) WHERE account ~ 'Expenses' AND number > 100"
         )
         assert 'number > 100' in q
+
+    def test_reject_tags_regex(self):
+        with pytest.raises(BQLValidationError, match='IN tags'):
+            validate_bql(
+                "SELECT date, payee WHERE tags ~ 'Discretionary' AND account ~ 'Expenses'"
+            )
+
+    def test_allow_tags_in_operator(self):
+        q = validate_bql(
+            "SELECT sum(units(position)) WHERE 'Discretionary' IN tags AND account ~ '^Expenses'"
+        )
+        assert "'Discretionary' IN tags" in q

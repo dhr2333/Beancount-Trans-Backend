@@ -86,7 +86,10 @@ class TestAssistantService:
         assert 'BQL 能力说明' in prompt
         assert '禁止心算' in prompt
         assert 'Markdown' in prompt
-        assert '平台账户目录' in prompt
+        assert '完整标签路径' in prompt
+        assert 'IN tags' in prompt
+        assert 'tags ~ 或' not in prompt
+        assert 'account ~ / tags ~' not in prompt
         assert '描述（账户路径）' in prompt
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')

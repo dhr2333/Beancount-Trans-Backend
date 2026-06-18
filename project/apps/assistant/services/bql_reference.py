@@ -17,10 +17,14 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 日期/整数：year = 2026 AND month = 6；date >= 2026-01-01
 - 金额过滤（支出）：number > 100
 - 金额过滤（收入绝对值）：number < -100
+- 标签（精确匹配）：'Discretionary' IN tags 或 'Event/2025-05-01' IN tags
+- 标签名须与「平台标签目录」中的完整路径一致（含父级，如 Category/EDUCATION）
+- 标签可与 account ~、year/month 等条件 AND 组合
 
 【WHERE 禁止写法】
 - 禁止 units(position) > N 或 units(position) < N（不支持，会编译失败）
 - 禁止 position > N 或 position < N
+- 禁止 tags ~ '...'（beanquery 不支持 set 正则匹配，会编译失败）
 - 禁止在 WHERE 中使用 sum/count/avg 等聚合函数
 - 禁止使用 HAVING 子句
 - 助手场景不要写 FROM 子句，直接用 WHERE 过滤 postings
@@ -41,6 +45,13 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 按交易对方汇总（需先锁定具体 account 正则）：
   SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable:Person' GROUP BY payee
 - 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询
+
+【标签筛选推荐写法】
+某标签本月支出总额：
+SELECT sum(units(position)) WHERE 'Discretionary' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M
+
+某标签交易明细：
+SELECT date, payee, narration, account, units(position) WHERE 'Event/2025-05-01' IN tags ORDER BY date DESC LIMIT 20
 
 【大额消费推荐写法】
 方式 A（按金额过滤支出）：

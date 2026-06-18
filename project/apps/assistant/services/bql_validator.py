@@ -23,6 +23,8 @@ _WHERE_AGGREGATE = re.compile(
 
 _HAVING_CLAUSE = re.compile(r'\bHAVING\b', re.IGNORECASE)
 
+_TAGS_REGEX = re.compile(r'\btags\s*~', re.IGNORECASE)
+
 
 class BQLValidationError(ValueError):
     """BQL 校验失败。"""
@@ -31,6 +33,12 @@ class BQLValidationError(ValueError):
 def _check_unsupported_patterns(normalized: str) -> None:
     if _HAVING_CLAUSE.search(normalized):
         raise BQLValidationError('BQL 不支持 HAVING 子句。请简化查询或只用 WHERE + GROUP BY。')
+
+    if _TAGS_REGEX.search(normalized):
+        raise BQLValidationError(
+            'WHERE 中不支持 tags ~ 正则匹配。'
+            '请改用 \'完整标签路径\' IN tags（标签路径见平台标签目录）。'
+        )
 
     if _UNITS_POSITION_COMPARE.search(normalized):
         raise BQLValidationError(

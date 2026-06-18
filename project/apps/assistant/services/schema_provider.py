@@ -81,6 +81,16 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             '某应收账户按交易对方汇总',
             "SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY payee",
         ),
+        (
+            '非必要支出本月花了多少？',
+            f"SELECT sum(units(position)) WHERE 'Discretionary' IN tags "
+            f"AND account ~ '^Expenses' AND year = {year} AND month = {month}",
+        ),
+        (
+            '某活动标签下的交易明细',
+            "SELECT date, payee, narration, account, units(position) "
+            "WHERE 'Event/2025-05-01' IN tags ORDER BY date DESC LIMIT 20",
+        ),
     ]
 
     lines = ['BQL 查询示例（请模仿结构，账户名以账本账户列表为准）：']

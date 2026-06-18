@@ -27,6 +27,13 @@ class TestBuildBqlExamples:
         assert '各负债账户欠款' in text
         assert '非 Fava 余额' not in text
 
+    def test_includes_tag_filter_examples(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert "'Discretionary' IN tags" in text
+        assert "'Event/2025-05-01' IN tags" in text
+        assert '非必要支出本月花了多少' in text
+        assert '某活动标签下的交易明细' in text
+
     def test_january_last_month_is_previous_december(self):
         text = build_bql_examples(date(2026, 1, 15))
         assert 'year = 2026 AND month = 1' in text
@@ -52,6 +59,13 @@ class TestBqlCapabilityReference:
         assert '余额与结构分析' in ref
         assert '^Assets:Receivable' in ref
         assert '禁止拉取大量明细行' in ref
+
+    def test_documents_tag_filter_syntax(self):
+        ref = build_bql_capability_reference()
+        assert "'Discretionary' IN tags" in ref
+        assert "'Event/2025-05-01' IN tags" in ref
+        assert '禁止 tags ~' in ref
+        assert '标签筛选推荐写法' in ref
 
 
 class TestBuildSystemPrompt:
