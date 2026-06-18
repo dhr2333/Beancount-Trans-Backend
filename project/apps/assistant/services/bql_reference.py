@@ -17,8 +17,7 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 日期/整数：year = 2026 AND month = 6；date >= 2026-01-01
 - 金额过滤（支出）：number > 100
 - 金额过滤（收入绝对值）：number < -100
-- 标签（精确匹配）：'Discretionary' IN tags 或 'Event/2025-05-01' IN tags
-- 标签名须与「平台标签目录」中的完整路径一致（含父级，如 Category/EDUCATION）
+- 标签（精确匹配）：'完整标签路径' IN tags（路径须与「平台标签目录」一致，含父级）
 - 标签可与 account ~、year/month 等条件 AND 组合
 
 【WHERE 禁止写法】
@@ -31,29 +30,30 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【SELECT 聚合】
 - 汇总：SELECT account, sum(units(position)) ... GROUP BY account
-- 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
+- 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets'
 - 聚合函数只能出现在 SELECT，不能出现在 WHERE
 
 【余额与结构分析（应收/资产/负债/收入）】
 - 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）
+- 子账户路径须先对照「平台账户目录」再写 account ~ 正则，勿臆造路径
 - 各子账户余额：
-  SELECT account, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY account
+  SELECT account, sum(units(position)) WHERE account ~ '^Assets' GROUP BY account
 - 某类账户总额：
-  SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
+  SELECT sum(units(position)) WHERE account ~ '^Assets:...'（... 替换为目录中的子路径）
 - 各负债账户欠款：
   SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account
 - 按交易对方汇总（需先锁定具体 account 正则）：
-  SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable:Person' GROUP BY payee
+  SELECT payee, sum(units(position)) WHERE account ~ '^Assets:...' GROUP BY payee
 - 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询
 - 零余额：返回账户行但 sum 列为空白 → 余额为 0（与 Fava 一致），不是查询失败；直接告知用户「当前余额为 0」，勿换 OR / $ 锚点反复重试
 - 区分两种「空」：(无结果)/无数据行 → 账户或时间可能不对；有账户行 + 空白 sum → 余额为 0
 
 【标签筛选推荐写法】
 某标签本月支出总额：
-SELECT sum(units(position)) WHERE 'Discretionary' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M
+SELECT sum(units(position)) WHERE '完整标签路径' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M
 
 某标签交易明细：
-SELECT date, payee, narration, account, units(position) WHERE 'Event/2025-05-01' IN tags ORDER BY date DESC LIMIT 20
+SELECT date, payee, narration, account, units(position) WHERE '完整标签路径' IN tags ORDER BY date DESC LIMIT 20
 
 【大额消费推荐写法】
 方式 A（按金额过滤支出）：

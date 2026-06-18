@@ -6,6 +6,7 @@ from project.apps.assistant.services.assistant_service import build_system_promp
 from project.apps.assistant.services.bql_reference import build_bql_capability_reference
 from project.apps.assistant.services.schema_provider import (
     build_bql_examples,
+    build_user_specific_bql_examples,
     get_ledger_context,
 )
 
@@ -19,40 +20,64 @@ class TestBuildBqlExamples:
         assert '【BQL】' in text
         assert "account ~ '^Expenses'" in text
 
-    def test_includes_receivable_and_liabilities_examples(self):
+    def test_includes_generic_assets_and_liabilities_examples(self):
         text = build_bql_examples(date(2026, 6, 16))
-        assert '^Assets:Receivable' in text
+        assert "^Assets'" in text or "account ~ '^Assets'" in text
         assert '^Liabilities' in text
-        assert '个人应收款各户余额' in text
         assert '各负债账户欠款' in text
         assert '非 Fava 余额' not in text
 
-    def test_includes_tag_filter_examples(self):
+    def test_uses_tag_placeholders_not_fixed_tags(self):
         text = build_bql_examples(date(2026, 6, 16))
-        assert "'Discretionary' IN tags" in text
-        assert "'Event/2025-05-01' IN tags" in text
-        assert '非必要支出本月花了多少' in text
-        assert '某活动标签下的交易明细' in text
+        assert "'完整标签路径' IN tags" in text
+        assert "'Discretionary' IN tags" not in text
+        assert "'Event/2025-05-01' IN tags" not in text
+        assert '某标签本月支出花了多少' in text
+
+    def test_does_not_include_user_specific_sub_accounts(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '^Assets:Receivable' not in text
+        assert '^Assets:Savings:Cash' not in text
+        assert '^Assets:Savings:Web:AliPay' not in text
+        assert '现金还有多少' not in text
+        assert '支付宝余额是多少' not in text
 
     def test_january_last_month_is_previous_december(self):
         text = build_bql_examples(date(2026, 1, 15))
         assert 'year = 2026 AND month = 1' in text
         assert 'year = 2025 AND month = 12' in text
 
-    def test_includes_cash_and_alipay_balance_examples(self):
+    def test_includes_generic_sub_account_placeholder(self):
         text = build_bql_examples(date(2026, 6, 16))
-        assert '现金还有多少' in text
-        assert '支付宝余额是多少' in text
-        assert "^Assets:Savings:Cash" in text
-        assert "^Assets:Savings:Web:AliPay" in text
+        assert "account ~ '^Assets:...'" in text
         assert 'sum 列为空白，表示余额为 0' in text
-
 
     def test_large_expense_uses_number_not_units_compare(self):
         text = build_bql_examples(date(2026, 6, 16))
         assert 'number > 100' in text
         assert 'units(position) >' not in text
         assert 'ORDER BY units(position) DESC' in text
+
+
+class TestBuildUserSpecificBqlExamples:
+    @pytest.mark.django_db
+    def test_generates_examples_from_user_catalog(self, user, bean_file, platform_metadata):
+        text = build_user_specific_bql_examples(
+            user,
+            reference_date=date(2026, 6, 16),
+            ledger_accounts=['Assets:Cash', 'Expenses:Food', 'Income:Salary'],
+        )
+        assert '账本相关 BQL 示例' in text
+        assert "^Assets:Cash'" in text
+        assert '现金余额是多少' in text
+        assert "^Expenses:Food'" in text
+        assert '本月餐饮花了多少' in text
+        assert "'Discretionary' IN tags" in text
+
+    @pytest.mark.django_db
+    def test_returns_empty_without_catalog_matches(self, user):
+        text = build_user_specific_bql_examples(user, ledger_accounts=[])
+        assert text == ''
 
 
 class TestBqlCapabilityReference:
@@ -65,13 +90,15 @@ class TestBqlCapabilityReference:
     def test_documents_balance_analysis_patterns(self):
         ref = build_bql_capability_reference()
         assert '余额与结构分析' in ref
-        assert '^Assets:Receivable' in ref
+        assert "account ~ '^Assets'" in ref
+        assert '^Assets:Receivable' not in ref
         assert '禁止拉取大量明细行' in ref
+        assert '平台账户目录' in ref
 
     def test_documents_tag_filter_syntax(self):
         ref = build_bql_capability_reference()
-        assert "'Discretionary' IN tags" in ref
-        assert "'Event/2025-05-01' IN tags" in ref
+        assert "'完整标签路径' IN tags" in ref
+        assert "'Discretionary' IN tags" not in ref
         assert '禁止 tags ~' in ref
         assert '标签筛选推荐写法' in ref
 
@@ -90,6 +117,7 @@ class TestBuildSystemPrompt:
         assert '【BQL】' in prompt
         assert 'BQL 能力说明' in prompt
         assert 'number > 100' in prompt
+        assert '^Assets:Savings:Cash' not in prompt
 
 
 @pytest.mark.django_db
@@ -102,6 +130,7 @@ class TestGetLedgerContext:
         assert 'Expenses:Food' in context
         assert 'BQL 能力说明' in context
         assert '禁止 units(position) > N' in context
+        assert '^Assets:Savings:Cash' not in context
 
     def test_includes_platform_catalog(self, user, bean_file, platform_metadata):
         context = get_ledger_context(user, reference_date=date(2026, 6, 16))
@@ -110,3 +139,9 @@ class TestGetLedgerContext:
         assert '平台标签目录' in context
         assert 'Discretionary → 非必要支出' in context
         assert '账本实际出现的账户' in context
+
+    def test_includes_user_specific_examples(self, user, bean_file, platform_metadata):
+        context = get_ledger_context(user, reference_date=date(2026, 6, 16))
+        assert '账本相关 BQL 示例' in context
+        assert "^Assets:Cash'" in context
+        assert '本月餐饮花了多少' in context
