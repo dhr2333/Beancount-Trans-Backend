@@ -51,6 +51,26 @@ class TestValidateReplyNumbers:
         result = validate_reply_numbers('约 **100.00** 元', queries, tolerance=Decimal('0.01'))
         assert result.ok is True
 
+    def test_passes_zero_balance_with_normalized_result(self):
+        queries = [_Preview('account | sum\nAssets:Savings:Cash  0.00 CNY\n')]
+        result = validate_reply_numbers('现金余额为 **0** 元。', queries)
+        assert result.ok is True
+
+    def test_passes_zero_balance_with_blank_sum_row(self):
+        queries = [_Preview('account           s\nAssets:Savings:Cash\n')]
+        result = validate_reply_numbers('支付宝当前余额 **0** 元。', queries)
+        assert result.ok is True
+
+    def test_passes_when_reply_uses_abs_of_negative_income(self):
+        queries = [_Preview('account | sum\nIncome:Salary | -8000.00 CNY\n')]
+        result = validate_reply_numbers('本月工资收入 **8000.00** 元。', queries)
+        assert result.ok is True
+
+    def test_fails_when_reply_negates_positive_bql_amount(self):
+        queries = [_Preview('account | sum\nIncome:Salary | 500.00 CNY\n')]
+        result = validate_reply_numbers('收入冲销 **-500.00** 元。', queries)
+        assert result.ok is False
+
 
 class TestApplyGuardDisclaimer:
     def test_appends_disclaimer_once(self):

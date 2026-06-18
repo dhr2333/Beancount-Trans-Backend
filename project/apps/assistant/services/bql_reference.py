@@ -10,15 +10,23 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【常用列】
 - 交易级：date, year, month, payee, narration, tags
-- posting 级：account, position, number（纯数值；Expenses 为正，Income 常为负）
+- posting 级：account, position, number（纯数值；符号含义见下方「复式记账符号约定」）
+
+【复式记账符号约定】
+- Beancount 为复式记账；sum(units(position)) 的符号有业务含义，与 Fava 一致
+- Expenses：累计为正 → 支出金额
+- Income：累计为负 → 收入金额（盈利）；累计为正 → 冲销/退款，不是新增收入
+- Liabilities：累计为负 → 欠款（负债余额）
+- Assets：累计为正 → 资产余额
+- 向用户展示 Income/Liabilities 时：用绝对值表述金额，可简短注明「账本中为负属正常」；禁止将 Income 负余额说成「亏损」
+- BQL 写法不变：收入汇总用 account ~ '^Income' + sum(units(position))；筛大额收入用 number < -N
 
 【WHERE 允许的比较】
 - 账户：account ~ 'Expenses' 或 account ~ '^Expenses'（正则）
 - 日期/整数：year = 2026 AND month = 6；date >= 2026-01-01
 - 金额过滤（支出）：number > 100
 - 金额过滤（收入绝对值）：number < -100
-- 标签（精确匹配）：'Discretionary' IN tags 或 'Event/2025-05-01' IN tags
-- 标签名须与「平台标签目录」中的完整路径一致（含父级，如 Category/EDUCATION）
+- 标签（精确匹配）：'完整标签路径' IN tags（路径须与「平台标签目录」一致，含父级）
 - 标签可与 account ~、year/month 等条件 AND 组合
 
 【WHERE 禁止写法】
@@ -31,27 +39,42 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【SELECT 聚合】
 - 汇总：SELECT account, sum(units(position)) ... GROUP BY account
-- 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
+- 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets'
 - 聚合函数只能出现在 SELECT，不能出现在 WHERE
 
 【余额与结构分析（应收/资产/负债/收入）】
 - 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）
+- 子账户路径须先对照「平台账户目录」再写 account ~ 正则，勿臆造路径
 - 各子账户余额：
-  SELECT account, sum(units(position)) WHERE account ~ '^Assets:Receivable' GROUP BY account
+  SELECT account, sum(units(position)) WHERE account ~ '^Assets' GROUP BY account
 - 某类账户总额：
-  SELECT sum(units(position)) WHERE account ~ '^Assets:Receivable'
+  SELECT sum(units(position)) WHERE account ~ '^Assets:...'（... 替换为目录中的子路径）
 - 各负债账户欠款：
   SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account
 - 按交易对方汇总（需先锁定具体 account 正则）：
-  SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable:Person' GROUP BY payee
+  SELECT payee, sum(units(position)) WHERE account ~ '^Assets:...' GROUP BY payee
 - 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询
+- 零余额：返回账户行但 sum 列为空白 → 余额为 0（与 Fava 一致），不是查询失败；直接告知用户「当前余额为 0」，勿换 OR / $ 锚点反复重试
+- 区分两种「空」：(无结果)/无数据行 → 账户或时间可能不对；有账户行 + 空白 sum → 余额为 0
+
+【账户层级与汇总口径】
+- GROUP BY account 每行 sum = 该账户**直接** posting；父账户行 ≠ 子树总额
+- 父账户若本身有 posting，会单独占一行（如 Expenses:Food）；子账户各自独立一行
+- 无 posting 的父/子账户不会出现在结果中（与「有 posting 净额 0、sum 列为空白」不同）
+- 问某类目总额（如「餐饮花了多少」）：
+  SELECT sum(units(position)) WHERE account ~ '^Expenses:Food'（前缀正则，含父账户 + 全部子孙 posting）
+- 问各子科目明细：
+  SELECT account, sum(units(position)) WHERE account ~ '^Expenses:Food' ... GROUP BY account
+  解读时各行独立；勿把父账户行当作该类目总额
+- 需要总额时优先用上述 sum 查询，禁止对 GROUP BY 多行手动求和
+- account = 'Expenses:Food' 仅父账户直接 posting；account ~ '^Expenses:Food' 含全部子孙
 
 【标签筛选推荐写法】
 某标签本月支出总额：
-SELECT sum(units(position)) WHERE 'Discretionary' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M
+SELECT sum(units(position)) WHERE '完整标签路径' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M
 
 某标签交易明细：
-SELECT date, payee, narration, account, units(position) WHERE 'Event/2025-05-01' IN tags ORDER BY date DESC LIMIT 20
+SELECT date, payee, narration, account, units(position) WHERE '完整标签路径' IN tags ORDER BY date DESC LIMIT 20
 
 【大额消费推荐写法】
 方式 A（按金额过滤支出）：
@@ -66,6 +89,7 @@ ORDER BY units(position) DESC LIMIT 20
 
 【失败处理】
 - 查询失败或 (无结果) 时最多再试 1 次，换更宽账户前缀或检查年月
+- sum 列为空白但已有账户行：视为余额 0，禁止为此重试
 
 完整参考（仅供人工查阅）：{BQL_DOCS_URL}
 """.strip()
