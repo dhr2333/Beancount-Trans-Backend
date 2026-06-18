@@ -11,12 +11,14 @@ from beanquery.query_render import render_text
 from django.conf import settings
 from django.contrib.auth.models import User
 
+from project.apps.translate.models import FormatConfig
 from project.utils.file import BeanFileManager
 
 from .bql_errors import format_bql_error
 from .bql_validator import BQLValidationError, validate_bql
 from .metadata_catalog import build_path_to_description_map
 from .result_enricher import enrich_bql_result_text
+from .result_normalizer import normalize_zero_balance_sums
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,8 @@ class LedgerQueryService:
             result_text = out.getvalue()
             if truncated:
                 result_text += f'\n... (结果已截断，仅显示前 {self.max_rows} 行，共 {row_count} 行)'
+            currency = FormatConfig.get_user_config(self.user).currency or 'CNY'
+            result_text = normalize_zero_balance_sums(result_text, bql, currency)
             if enrich and result_text:
                 path_map = build_path_to_description_map(self.user)
                 result_text = enrich_bql_result_text(result_text, path_map)

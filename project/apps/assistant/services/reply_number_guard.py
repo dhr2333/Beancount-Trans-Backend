@@ -8,6 +8,8 @@ _AMOUNT_PATTERN = re.compile(
     r'(?<![\d.])(-?\d{1,3}(?:,\d{3})+|-?\d+)(?:\.(\d{1,2}))?(?![\d.])',
 )
 _TOTAL_KEYWORD_PATTERN = re.compile(r'共计|合计|总计|加起来|总和|一共')
+_NORMALIZED_ZERO = re.compile(r'\b0\.00\s+[A-Z]{3}\b')
+_AMOUNT_SUFFIX = re.compile(r'\d+(?:\.\d+)?\s*[A-Z]{3}\s*$')
 
 GUARD_RETRY_MESSAGE = (
     '你的回答含有查询结果中未出现的金额或存在手动计算。'
@@ -69,6 +71,28 @@ def _amount_in_source(amount: Decimal, source_text: str, *, tolerance: Decimal) 
     return False
 
 
+def _allows_zero_amount(amount: Decimal, source_text: str, *, tolerance: Decimal) -> bool:
+    if amount != 0:
+        return False
+    if _amount_in_source(amount, source_text, tolerance=tolerance):
+        return True
+    if _NORMALIZED_ZERO.search(source_text):
+        return True
+    if 'account' not in source_text.lower():
+        return False
+    for line in source_text.splitlines():
+        stripped = line.strip()
+        if not stripped or set(stripped) <= {'-', ' '}:
+            continue
+        if stripped.lower().startswith('account') or 'sum' in stripped.lower():
+            continue
+        if stripped.startswith('... ('):
+            continue
+        if not _AMOUNT_SUFFIX.search(stripped):
+            return True
+    return False
+
+
 def validate_reply_numbers(
     reply: str,
     queries: list[_QueryPreview],
@@ -86,19 +110,25 @@ def validate_reply_numbers(
 
     source_text = '\n'.join(q.result_preview for q in queries)
     for amount in reply_amounts:
-        if not _amount_in_source(amount, source_text, tolerance=tolerance):
-            return NumberValidationResult(
-                ok=False,
-                reason=f'金额 {amount} 未出现在查询结果中',
-            )
+        if _amount_in_source(amount, source_text, tolerance=tolerance):
+            continue
+        if _allows_zero_amount(amount, source_text, tolerance=tolerance):
+            continue
+        return NumberValidationResult(
+            ok=False,
+            reason=f'金额 {amount} 未出现在查询结果中',
+        )
 
     if _TOTAL_KEYWORD_PATTERN.search(reply_body):
         for amount in reply_amounts:
-            if not _amount_in_source(amount, source_text, tolerance=tolerance):
-                return NumberValidationResult(
-                    ok=False,
-                    reason=f'合计相关金额 {amount} 未出现在查询结果中',
-                )
+            if _amount_in_source(amount, source_text, tolerance=tolerance):
+                continue
+            if _allows_zero_amount(amount, source_text, tolerance=tolerance):
+                continue
+            return NumberValidationResult(
+                ok=False,
+                reason=f'合计相关金额 {amount} 未出现在查询结果中',
+            )
 
     return NumberValidationResult(ok=True)
 

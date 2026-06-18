@@ -91,6 +91,14 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             "SELECT date, payee, narration, account, units(position) "
             "WHERE 'Event/2025-05-01' IN tags ORDER BY date DESC LIMIT 20",
         ),
+        (
+            '现金还有多少？',
+            "SELECT sum(units(position)) WHERE account ~ '^Assets:Savings:Cash'",
+        ),
+        (
+            '支付宝余额是多少？',
+            "SELECT sum(units(position)) WHERE account ~ '^Assets:Savings:Web:AliPay'",
+        ),
     ]
 
     lines = ['BQL 查询示例（请模仿结构，账户名以账本账户列表为准）：']
@@ -98,6 +106,7 @@ def build_bql_examples(reference_date: date | None = None) -> str:
         lines.append(f'【问题】{question}')
         lines.append(f'【BQL】{bql}')
         lines.append('')
+    lines.append('说明：余额查询若 sum 列为空白，表示余额为 0（与 Fava 一致）。')
     return '\n'.join(lines).rstrip()
 
 

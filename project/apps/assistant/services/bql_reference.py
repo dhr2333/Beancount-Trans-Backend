@@ -45,6 +45,8 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 按交易对方汇总（需先锁定具体 account 正则）：
   SELECT payee, sum(units(position)) WHERE account ~ '^Assets:Receivable:Person' GROUP BY payee
 - 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询
+- 零余额：返回账户行但 sum 列为空白 → 余额为 0（与 Fava 一致），不是查询失败；直接告知用户「当前余额为 0」，勿换 OR / $ 锚点反复重试
+- 区分两种「空」：(无结果)/无数据行 → 账户或时间可能不对；有账户行 + 空白 sum → 余额为 0
 
 【标签筛选推荐写法】
 某标签本月支出总额：
@@ -66,6 +68,7 @@ ORDER BY units(position) DESC LIMIT 20
 
 【失败处理】
 - 查询失败或 (无结果) 时最多再试 1 次，换更宽账户前缀或检查年月
+- sum 列为空白但已有账户行：视为余额 0，禁止为此重试
 
 完整参考（仅供人工查阅）：{BQL_DOCS_URL}
 """.strip()

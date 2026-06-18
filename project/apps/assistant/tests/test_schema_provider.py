@@ -39,6 +39,14 @@ class TestBuildBqlExamples:
         assert 'year = 2026 AND month = 1' in text
         assert 'year = 2025 AND month = 12' in text
 
+    def test_includes_cash_and_alipay_balance_examples(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '现金还有多少' in text
+        assert '支付宝余额是多少' in text
+        assert "^Assets:Savings:Cash" in text
+        assert "^Assets:Savings:Web:AliPay" in text
+        assert 'sum 列为空白，表示余额为 0' in text
+
 
     def test_large_expense_uses_number_not_units_compare(self):
         text = build_bql_examples(date(2026, 6, 16))
@@ -66,6 +74,12 @@ class TestBqlCapabilityReference:
         assert "'Event/2025-05-01' IN tags" in ref
         assert '禁止 tags ~' in ref
         assert '标签筛选推荐写法' in ref
+
+    def test_documents_zero_balance_semantics(self):
+        ref = build_bql_capability_reference()
+        assert '零余额' in ref
+        assert '空白 sum' in ref
+        assert '禁止为此重试' in ref
 
 
 class TestBuildSystemPrompt:
