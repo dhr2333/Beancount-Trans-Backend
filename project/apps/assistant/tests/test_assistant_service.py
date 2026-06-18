@@ -8,6 +8,7 @@ from project.apps.assistant.services.assistant_service import (
     AssistantService,
     StreamEvent,
     build_system_prompt,
+    get_max_bql_runs,
     merge_thinking_text,
 )
 from project.apps.translate.models import FormatConfig
@@ -96,38 +97,39 @@ class TestAssistantService:
         assert '父账户行仅含直接 posting' in prompt
 
     @pytest.mark.django_db
-    def test_dispatch_tool_blocks_fourth_bql(self, user, bean_file):
+    def test_dispatch_tool_blocks_over_bql_limit(self, user, bean_file):
         service = AssistantService(user)
         queries = []
         bql = "SELECT sum(units(position)) WHERE account ~ 'Assets'"
-        for _ in range(3):
+        for _ in range(service.max_bql_runs):
             service._dispatch_tool('run_bql', {'query': bql}, queries)
-        assert len(queries) == 3
+        assert len(queries) == service.max_bql_runs
         message = service._dispatch_tool('run_bql', {'query': bql}, queries)
         assert 'BQL 查询上限' in message
-        assert len(queries) == 3
+        assert len(queries) == service.max_bql_runs
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
-    def test_chat_stops_after_three_bql_runs(self, mock_openai_cls, user, bean_file):
+    def test_chat_stops_after_max_bql_runs(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
         config.deepseek_apikey = ''
         config.save()
 
+        max_runs = get_max_bql_runs()
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         mock_client.chat.completions.create.side_effect = [
-            _make_tool_call_stream('run_bql', '{"query": "SELECT 1"}', 'call_1'),
-            _make_tool_call_stream('run_bql', '{"query": "SELECT 2"}', 'call_2'),
-            _make_tool_call_stream('run_bql', '{"query": "SELECT 3"}', 'call_3'),
-            _make_tool_call_stream('run_bql', '{"query": "SELECT 4"}', 'call_4'),
+            *[
+                _make_tool_call_stream('run_bql', f'{{"query": "SELECT {i}"}}', f'call_{i}')
+                for i in range(1, max_runs + 2)
+            ],
             _make_text_stream('根据已有查询，现金与支付宝当前均无余额。'),
         ]
 
         service = AssistantService(user)
         result = service.chat([{'role': 'user', 'content': '我还有多少现金？'}])
 
-        assert len(result.queries) == 3
+        assert len(result.queries) == max_runs
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
