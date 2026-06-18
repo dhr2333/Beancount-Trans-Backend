@@ -51,6 +51,13 @@ class TestBuildBqlExamples:
         text = build_bql_examples(date(2026, 6, 16))
         assert "account ~ '^Assets:...'" in text
         assert 'sum 列为空白，表示余额为 0' in text
+        assert '父账户行仅含直接 posting' in text
+
+    def test_includes_parent_child_food_examples(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '本月餐饮（含子科目）总支出' in text
+        assert '本月餐饮各子科目分别花了多少' in text
+        assert "^Expenses:Food'" in text
 
     def test_large_expense_uses_number_not_units_compare(self):
         text = build_bql_examples(date(2026, 6, 16))
@@ -108,6 +115,13 @@ class TestBqlCapabilityReference:
         assert '空白 sum' in ref
         assert '禁止为此重试' in ref
 
+    def test_documents_account_hierarchy_semantics(self):
+        ref = build_bql_capability_reference()
+        assert '账户层级与汇总口径' in ref
+        assert '父账户' in ref
+        assert '子树总额' in ref
+        assert '无 posting' in ref
+
 
 class TestBuildSystemPrompt:
     def test_includes_reference_date_and_examples(self):
@@ -118,6 +132,8 @@ class TestBuildSystemPrompt:
         assert 'BQL 能力说明' in prompt
         assert 'number > 100' in prompt
         assert '^Assets:Savings:Cash' not in prompt
+        assert '账户层级' in prompt
+        assert '父账户行仅含直接 posting' in prompt
 
 
 @pytest.mark.django_db

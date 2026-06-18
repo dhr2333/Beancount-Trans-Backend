@@ -92,6 +92,8 @@ class TestAssistantService:
         assert 'account ~ / tags ~' not in prompt
         assert '描述（账户路径）' in prompt
         assert '余额为 0' in prompt
+        assert '账户层级' in prompt
+        assert '父账户行仅含直接 posting' in prompt
 
     @pytest.mark.django_db
     def test_dispatch_tool_blocks_fourth_bql(self, user, bean_file):

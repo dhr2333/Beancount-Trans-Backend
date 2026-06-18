@@ -48,6 +48,18 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 零余额：返回账户行但 sum 列为空白 → 余额为 0（与 Fava 一致），不是查询失败；直接告知用户「当前余额为 0」，勿换 OR / $ 锚点反复重试
 - 区分两种「空」：(无结果)/无数据行 → 账户或时间可能不对；有账户行 + 空白 sum → 余额为 0
 
+【账户层级与汇总口径】
+- GROUP BY account 每行 sum = 该账户**直接** posting；父账户行 ≠ 子树总额
+- 父账户若本身有 posting，会单独占一行（如 Expenses:Food）；子账户各自独立一行
+- 无 posting 的父/子账户不会出现在结果中（与「有 posting 净额 0、sum 列为空白」不同）
+- 问某类目总额（如「餐饮花了多少」）：
+  SELECT sum(units(position)) WHERE account ~ '^Expenses:Food'（前缀正则，含父账户 + 全部子孙 posting）
+- 问各子科目明细：
+  SELECT account, sum(units(position)) WHERE account ~ '^Expenses:Food' ... GROUP BY account
+  解读时各行独立；勿把父账户行当作该类目总额
+- 需要总额时优先用上述 sum 查询，禁止对 GROUP BY 多行手动求和
+- account = 'Expenses:Food' 仅父账户直接 posting；account ~ '^Expenses:Food' 含全部子孙
+
 【标签筛选推荐写法】
 某标签本月支出总额：
 SELECT sum(units(position)) WHERE '完整标签路径' IN tags AND account ~ '^Expenses' AND year = YYYY AND month = M

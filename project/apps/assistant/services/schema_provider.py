@@ -49,6 +49,16 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             f"AND year = {year} AND month = {month} GROUP BY account",
         ),
         (
+            '本月餐饮（含子科目）总支出？',
+            f"SELECT sum(units(position)) WHERE account ~ '^Expenses:Food' "
+            f"AND year = {year} AND month = {month}",
+        ),
+        (
+            '本月餐饮各子科目分别花了多少？',
+            f"SELECT account, sum(units(position)) WHERE account ~ '^Expenses:Food' "
+            f"AND year = {year} AND month = {month} GROUP BY account",
+        ),
+        (
             '上个月总支出是多少？',
             f"SELECT sum(units(position)) WHERE account ~ '^Expenses' "
             f"AND year = {last_year} AND month = {last_month}",
@@ -101,7 +111,10 @@ def build_bql_examples(reference_date: date | None = None) -> str:
         lines.append(f'【问题】{question}')
         lines.append(f'【BQL】{bql}')
         lines.append('')
-    lines.append('说明：余额查询若 sum 列为空白，表示余额为 0（与 Fava 一致）。')
+    lines.append(
+        '说明：余额查询若 sum 列为空白，表示余额为 0（与 Fava 一致）。'
+        'GROUP BY 时父账户行仅含直接 posting，不是子树总额；无 posting 的账户不会出现。'
+    )
     return '\n'.join(lines).rstrip()
 
 
@@ -168,7 +181,10 @@ def build_user_specific_bql_examples(
     if not examples:
         return ''
 
-    lines = ['账本相关 BQL 示例（账户/标签来自你的目录，可直接参考）：']
+    lines = [
+        '账本相关 BQL 示例（账户/标签来自你的目录，可直接参考；'
+        '支出类目总额含子科目，用前缀 account ~ 的 sum）：',
+    ]
     for question, bql in examples[:3]:
         lines.append(f'【问题】{question}')
         lines.append(f'【BQL】{bql}')
