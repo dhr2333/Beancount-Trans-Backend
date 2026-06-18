@@ -71,6 +71,33 @@ class TestValidateReplyNumbers:
         result = validate_reply_numbers('收入冲销 **-500.00** 元。', queries)
         assert result.ok is False
 
+    def test_passes_zero_when_all_queries_empty(self):
+        queries = [_Preview('(无结果)')]
+        result = validate_reply_numbers('5月餐饮支出为 **0** 元。', queries)
+        assert result.ok is True
+
+    def test_passes_qualitative_reply_when_all_queries_empty(self):
+        queries = [_Preview('(无结果)')]
+        result = validate_reply_numbers('2026年5月无餐饮相关记录。', queries)
+        assert result.ok is True
+
+    def test_empty_result_still_rejects_fabricated_amount(self):
+        queries = [_Preview('(无结果)')]
+        result = validate_reply_numbers('餐饮支出 **500** 元。', queries)
+        assert result.ok is False
+
+    def test_passes_zero_for_header_only_sum_result(self):
+        queries = [_Preview('s\n-')]
+        result = validate_reply_numbers('2026年5月餐饮支出为 **0** 元。', queries)
+        assert result.ok is True
+
+
+class TestExtractAmountsMonth:
+    def test_ignores_month_number(self):
+        amounts = extract_amounts('2026年5月餐饮支出')
+        assert Decimal('2026') not in amounts
+        assert Decimal('5') not in amounts
+
 
 class TestApplyGuardDisclaimer:
     def test_appends_disclaimer_once(self):

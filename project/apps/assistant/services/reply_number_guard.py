@@ -10,10 +10,13 @@ _AMOUNT_PATTERN = re.compile(
 _TOTAL_KEYWORD_PATTERN = re.compile(r'共计|合计|总计|加起来|总和|一共')
 _NORMALIZED_ZERO = re.compile(r'\b0\.00\s+[A-Z]{3}\b')
 _AMOUNT_SUFFIX = re.compile(r'\d+(?:\.\d+)?\s*[A-Z]{3}\s*$')
+_EMPTY_RESULT = '(无结果)'
 
 GUARD_RETRY_MESSAGE = (
     '你的回答含有查询结果中未出现的金额或存在手动计算。'
     '请仅根据上文 BQL 结果重新作答；需要合计请说明将使用哪条查询中的数字，不要心算。'
+    '禁止在回复中输出 DSML、XML 或任何工具调用原始标记。'
+    '若查询结果为 (无结果)，请说明该时间段/分类下查无数据，可说支出或余额为 0，不要编造非零金额。'
 )
 
 GUARD_DISCLAIMER = (
@@ -41,6 +44,49 @@ def _is_year_like(value: Decimal, raw: str) -> bool:
     return 1900 <= year <= 2100
 
 
+def _is_month_number(match: re.Match[str], text: str) -> bool:
+    """忽略日期表述中的月份数字（如 5月）。"""
+    end = match.end()
+    if end >= len(text) or text[end] != '月':
+        return False
+    raw = match.group(1).replace(',', '')
+    if '.' in raw:
+        return False
+    try:
+        month = int(raw.lstrip('-'))
+    except ValueError:
+        return False
+    return 1 <= month <= 12
+
+
+def _all_queries_empty(queries: list[_QueryPreview]) -> bool:
+    return bool(queries) and all(
+        _is_effectively_empty_result(q.result_preview) for q in queries
+    )
+
+
+def _is_effectively_empty_result(result_preview: str) -> bool:
+    """判断 BQL 结果是否等价于无数据（含仅有表头/分隔符的聚合空结果）。"""
+    text = result_preview.strip()
+    if not text or text == _EMPTY_RESULT:
+        return True
+    if _AMOUNT_SUFFIX.search(text) or _NORMALIZED_ZERO.search(text):
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or set(stripped) <= {'-', ' '}:
+            continue
+        lowered = stripped.lower()
+        if lowered in {'s', 'account', 'sum'} or lowered.startswith('account'):
+            continue
+        if 'sum' in lowered:
+            continue
+        if stripped.startswith('... ('):
+            continue
+        return False
+    return True
+
+
 def extract_amounts(text: str) -> list[Decimal]:
     """从文本中提取疑似金额的数字（忽略四位年份）。"""
     amounts: list[Decimal] = []
@@ -56,6 +102,8 @@ def extract_amounts(text: str) -> list[Decimal]:
         except InvalidOperation:
             continue
         if _is_year_like(value, raw):
+            continue
+        if _is_month_number(match, text):
             continue
         if value in seen:
             continue
@@ -112,7 +160,10 @@ def validate_reply_numbers(
         return NumberValidationResult(ok=False, reason='回复含金额但未执行 BQL 查询')
 
     source_text = '\n'.join(q.result_preview for q in queries)
+    all_empty = _all_queries_empty(queries)
     for amount in reply_amounts:
+        if all_empty and amount == 0:
+            continue
         if _amount_in_source(amount, source_text, tolerance=tolerance):
             continue
         if _allows_zero_amount(amount, source_text, tolerance=tolerance):
@@ -122,7 +173,7 @@ def validate_reply_numbers(
             reason=f'金额 {amount} 未出现在查询结果中',
         )
 
-    if _TOTAL_KEYWORD_PATTERN.search(reply_body):
+    if not all_empty and _TOTAL_KEYWORD_PATTERN.search(reply_body):
         for amount in reply_amounts:
             if _amount_in_source(amount, source_text, tolerance=tolerance):
                 continue

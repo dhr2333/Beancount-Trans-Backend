@@ -75,6 +75,25 @@ _FOOD_SUM_BQL = (
     '{"query": "SELECT sum(units(position)) WHERE account ~ \'^Expenses:Food\'"}'
 )
 
+_DSML_FOOD_BQL = (
+    '<｜｜DSML｜｜tool_calls>\n'
+    '<｜｜DSML｜｜invoke name="run_bql">\n'
+    '<｜｜DSML｜｜parameter name="query" string="true">'
+    "SELECT sum(units(position)) WHERE account ~ '^Expenses:Food'"
+    '<｜｜DSML｜｜parameter>\n'
+    '<｜｜DSML｜｜invoke>\n'
+    '<｜｜DSML｜｜tool_calls>'
+)
+
+_EMPTY_MONTH_FOOD_BQL = (
+    '{"query": "SELECT sum(units(position)) WHERE account ~ \'^Expenses:Food\' '
+    "AND year = 2026 AND month = 5\"}"
+)
+
+
+def _make_dsml_content_stream(dsml_text: str):
+    return iter([_make_stream_chunk(content=dsml_text)])
+
 
 @pytest.mark.django_db
 class TestAssistantService:
@@ -110,7 +129,7 @@ class TestAssistantService:
         assert 'BQL 查询上限' in message
         assert len(queries) == service.max_bql_runs
 
-    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test', ASSISTANT_MAX_BQL_RUNS=5)
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_stops_after_max_bql_runs(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
@@ -370,3 +389,52 @@ class TestAssistantService:
         assert done.event == 'done'
         assert mock_client.chat.completions.create.call_count == 2
         assert '9999' not in done.data['reply']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_dsml_in_content_executes_bql_without_leaking_markup(
+        self, mock_openai_cls, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_dsml_content_stream(_DSML_FOOD_BQL),
+            _make_text_stream('餐饮支出 **50** 元。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '餐饮花了多少？'}])
+        done = events[-1]
+
+        assert done.event == 'done'
+        assert 'DSML' not in done.data['reply']
+        assert len(done.data['queries']) == 1
+        assert '50' in done.data['reply']
+        assert 'tool_start' in [e.event for e in events]
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_empty_bql_result_zero_reply_skips_guard_disclaimer(
+        self, mock_openai_cls, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', _EMPTY_MONTH_FOOD_BQL),
+            _make_text_stream('2026年5月餐饮支出为 **0** 元。'),
+        ]
+
+        service = AssistantService(user)
+        result = service.chat([{'role': 'user', 'content': '上个月餐饮花了多少？'}])
+
+        assert mock_client.chat.completions.create.call_count == 2
+        assert '部分金额可能未完全来自' not in result.reply
+        assert '0' in result.reply
