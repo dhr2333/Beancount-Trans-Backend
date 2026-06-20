@@ -6,6 +6,7 @@ from project.apps.assistant.services.assistant_service import build_system_promp
 from project.apps.assistant.services.bql_reference import build_bql_capability_reference
 from project.apps.assistant.services.schema_provider import (
     build_bql_examples,
+    build_insight_bql_examples,
     build_user_specific_bql_examples,
     get_ledger_context,
 )
@@ -74,6 +75,18 @@ class TestBuildBqlExamples:
         assert 'Income 的 sum 为负表示收入金额' in text
 
 
+class TestBuildInsightBqlExamples:
+    def test_includes_cross_period_and_entries_patterns(self):
+        text = build_insight_bql_examples(date(2026, 6, 16))
+        assert '洞察模式 BQL 示例' in text
+        assert 'GROUP BY year, month' in text
+        assert 'FROM entries' in text
+        assert 'IN links' in text
+        assert "'完整标签路径' IN tags" in text
+        assert "type IN ('balance', 'pad')" in text
+        assert 'year = 2026 AND month = 6' in text
+
+
 class TestBuildUserSpecificBqlExamples:
     @pytest.mark.django_db
     def test_generates_examples_from_user_catalog(self, user, bean_file, platform_metadata):
@@ -136,6 +149,14 @@ class TestBqlCapabilityReference:
         assert 'Income：累计为负' in ref
         assert '禁止将 Income 负余额说成「亏损」' in ref
 
+    def test_insight_mode_includes_entries_and_links(self):
+        ref = build_bql_capability_reference(insight_mode=True)
+        assert '洞察分析推荐写法' in ref
+        assert 'FROM entries' in ref
+        assert 'IN links' in ref
+        assert 'Balance / Pad' in ref
+        assert 'postings.meta 不含 time' in ref
+
 
 class TestBuildSystemPrompt:
     def test_includes_reference_date_and_examples(self):
@@ -150,6 +171,18 @@ class TestBuildSystemPrompt:
         assert '父账户行仅含直接 posting' in prompt
         assert '复式记账符号' in prompt
         assert 'Income 累计为负表示收入' in prompt
+        assert '【洞察模式】' not in prompt
+
+    def test_insight_mode_includes_insight_block_and_examples(self):
+        prompt = build_system_prompt(date(2026, 6, 16), insight_mode=True)
+        assert '【洞察模式】' in prompt
+        assert '主动追溯' in prompt
+        assert '洞察模式 BQL 示例' in prompt
+        assert 'FROM entries' in prompt
+        assert 'IN links' in prompt
+        assert 'GROUP BY year, month' in prompt
+        assert '洞察分析推荐写法' in prompt
+        assert 'Balance / Pad' in prompt
 
 
 @pytest.mark.django_db

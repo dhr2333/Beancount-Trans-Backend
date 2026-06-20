@@ -22,6 +22,30 @@ SAMPLE_BEAN = """2024-01-01 open Assets:Cash CNY
   Income:Salary  -5000.00 CNY
 """
 
+INSIGHT_BEAN = """2024-01-01 open Assets:Cash CNY
+2024-01-01 open Expenses:Food CNY
+2024-01-01 open Expenses:Unknown CNY
+
+2024-01-05 * "山姆" "采购" ^order-001 #Discretionary
+  time: "20:15:00"
+  uuid: "abc-001"
+  Expenses:Food  200.00 CNY
+  Assets:Cash  -200.00 CNY
+
+2024-02-14 * "山姆" "采购" ^order-002 #Discretionary
+  time: "19:30:00"
+  Expenses:Food  150.00 CNY
+  Assets:Cash  -150.00 CNY
+
+2024-03-01 * "退款" "山姆退货" ^order-001
+  Expenses:Food  -50.00 CNY
+  Assets:Cash  50.00 CNY
+
+2024-01-31 balance Assets:Cash  1000.00 CNY
+
+2024-02-01 pad Assets:Cash  Expenses:Unknown
+"""
+
 
 @pytest.fixture
 def user(db):
@@ -38,6 +62,16 @@ def bean_file(tmp_path, settings, user, monkeypatch):
     assets_dir.mkdir(parents=True)
     main_bean = assets_dir / 'main.bean'
     main_bean.write_text(SAMPLE_BEAN, encoding='utf-8')
+    monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
+    return main_bean
+
+
+@pytest.fixture
+def insight_bean_file(tmp_path, settings, user, monkeypatch):
+    assets_dir = tmp_path / user.username
+    assets_dir.mkdir(parents=True)
+    main_bean = assets_dir / 'main.bean'
+    main_bean.write_text(INSIGHT_BEAN, encoding='utf-8')
     monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
     return main_bean
 

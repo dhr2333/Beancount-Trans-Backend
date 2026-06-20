@@ -134,6 +134,72 @@ def build_bql_examples(reference_date: date | None = None) -> str:
     return '\n'.join(lines).rstrip()
 
 
+def build_insight_bql_examples(reference_date: date | None = None) -> str:
+    """洞察模式专用 BQL few-shot 示例（跨期、payee/link/tag/meta/entries）。"""
+    today = reference_date or get_reference_date()
+    year, month = today.year, today.month
+
+    examples = [
+        (
+            '近 6 月每月总支出趋势',
+            f"SELECT year, month, sum(units(position)) "
+            f"WHERE account ~ '^Expenses' AND year = {year} "
+            f"GROUP BY year, month",
+        ),
+        (
+            '公共事业（水电气网物业）各月支出对比',
+            f"SELECT year, month, sum(units(position)) "
+            f"WHERE account ~ '^Expenses:Home:Utilities' AND year = {year} "
+            f"GROUP BY year, month",
+        ),
+        (
+            '某商家过去各月花了多少？',
+            "SELECT year, month, sum(units(position)) "
+            "WHERE payee ~ '山姆' AND account ~ '^Expenses' "
+            f"AND year = {year} GROUP BY year, month",
+        ),
+        (
+            '某 link 关联的所有支出',
+            "SELECT date, payee, narration, account, units(position), links "
+            "WHERE 'order-001' IN links AND account ~ '^Expenses' "
+            "ORDER BY date",
+        ),
+        (
+            '某标签各月支出趋势',
+            "SELECT year, month, sum(units(position)) "
+            "WHERE '完整标签路径' IN tags AND account ~ '^Expenses' "
+            f"AND year = {year} GROUP BY year, month",
+        ),
+        (
+            '本月交易及 time 等 meta 明细',
+            f"SELECT date, payee, narration, meta, tags, links "
+            f"FROM entries "
+            f"WHERE type = 'transaction' AND year = {year} AND month = {month} "
+            f"ORDER BY date DESC LIMIT 20",
+        ),
+        (
+            '最近 Balance 与 Pad 对账/补账记录',
+            "SELECT date, type, accounts "
+            "FROM entries "
+            "WHERE type IN ('balance', 'pad') "
+            "ORDER BY date DESC LIMIT 20",
+        ),
+    ]
+
+    lines = [
+        '洞察模式 BQL 示例（跨期对比与多维线索追溯；账户/标签路径以平台目录为准）：',
+    ]
+    for question, bql in examples:
+        lines.append(f'【问题】{question}')
+        lines.append(f'【BQL】{bql}')
+        lines.append('')
+    lines.append(
+        '说明：发现当期异常线索（突变 payee、罕见 tag、大额 link 等）后，'
+        '应再查一条历史/关联查询；meta 从 entries 结果解读，勿在 WHERE 过滤 meta。'
+    )
+    return '\n'.join(lines).rstrip()
+
+
 def build_user_specific_bql_examples(
     user: User,
     reference_date: date | None = None,

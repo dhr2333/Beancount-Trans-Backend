@@ -3,14 +3,21 @@
 BQL_DOCS_URL = 'https://beancount.github.io/docs/beancount_query_language/'
 
 
-def build_bql_capability_reference() -> str:
+def build_bql_capability_reference(*, insight_mode: bool = False) -> str:
     """返回精简、可执行的 BQL 能力文档。"""
-    return f"""
+    from_clause_note = (
+        '洞察模式下允许 FROM entries 查 meta/Balance/Pad（见下方「洞察分析」）；'
+        '常规金额查询默认 postings 表，不写 FROM'
+        if insight_mode
+        else '助手场景不要写 FROM 子句，直接用 WHERE 过滤 postings'
+    )
+    base = f"""
 BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守）：
 
 【常用列】
-- 交易级：date, year, month, payee, narration, tags
+- 交易级：date, year, month, payee, narration, tags, links
 - posting 级：account, position, number（纯数值；符号含义见下方「复式记账符号约定」）
+- entries 表（FROM entries）：type, meta, accounts；用于交易 meta、Balance、Pad
 
 【复式记账符号约定】
 - Beancount 为复式记账；sum(units(position)) 的符号有业务含义，与 Fava 一致
@@ -23,19 +30,23 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 
 【WHERE 允许的比较】
 - 账户：account ~ 'Expenses' 或 account ~ '^Expenses'（正则）
+- 商家/备注：payee ~ '关键词'、narration ~ '关键词'（正则语法同 account ~）
 - 日期/整数：year = 2026 AND month = 6；date >= 2026-01-01
 - 金额过滤（支出）：number > 100
 - 金额过滤（收入绝对值）：number < -100
 - 标签（精确匹配）：'完整标签路径' IN tags（路径须与「平台标签目录」一致，含父级）
+- 关联 link：'link-id' IN links（用于追同一笔 split/退款/转账的多行 posting）
 - 标签可与 account ~、year/month 等条件 AND 组合
 
 【WHERE 禁止写法】
 - 禁止 units(position) > N 或 units(position) < N（不支持，会编译失败）
 - 禁止 position > N 或 position < N
 - 禁止 tags ~ '...'（beanquery 不支持 set 正则匹配，会编译失败）
+- 禁止 links ~ '...'（同上，links 筛选用 IN）
 - 禁止在 WHERE 中使用 sum/count/avg 等聚合函数
 - 禁止使用 HAVING 子句
-- 助手场景不要写 FROM 子句，直接用 WHERE 过滤 postings
+- 禁止 meta ~ '...'（meta 为 dict，WHERE 不支持正则过滤，仅 SELECT 后解读）
+- {from_clause_note}
 
 【SELECT 聚合】
 - 汇总：SELECT account, sum(units(position)) ... GROUP BY account
@@ -92,4 +103,55 @@ ORDER BY units(position) DESC LIMIT 20
 - sum 列为空白但已有账户行：视为余额 0，禁止为此重试
 
 完整参考（仅供人工查阅）：{BQL_DOCS_URL}
+""".strip()
+    if insight_mode:
+        base = f'{base}\n\n{build_insight_bql_capability_supplement()}'
+    return base
+
+
+def build_insight_bql_capability_supplement() -> str:
+    """洞察模式追加的 BQL 写法说明。"""
+    return """
+【洞察分析推荐写法】
+跨期趋势（近 3–6 月）：
+SELECT year, month, sum(units(position))
+WHERE account ~ '^Expenses' AND year = YYYY
+GROUP BY year, month
+
+类目跨月对比：
+SELECT year, month, sum(units(position))
+WHERE account ~ '^Expenses:Home:Utilities' AND year = YYYY
+GROUP BY year, month
+
+payee 历史追溯（名称不一致时用较短关键词）：
+SELECT year, month, sum(units(position))
+WHERE payee ~ '山姆' AND account ~ '^Expenses'
+GROUP BY year, month
+
+同 link 关联交易：
+SELECT date, payee, narration, account, units(position), links
+WHERE 'order-001' IN links AND account ~ '^Expenses'
+ORDER BY date
+
+标签跨月：
+SELECT year, month, sum(units(position))
+WHERE '完整标签路径' IN tags AND account ~ '^Expenses'
+GROUP BY year, month
+
+交易 meta（time/uuid/status 等在 transaction meta，postings.meta 不含 time）：
+SELECT date, payee, narration, meta, tags, links
+FROM entries
+WHERE type = 'transaction' AND year = YYYY AND month = M
+ORDER BY date DESC LIMIT 20
+
+Balance / Pad 记录（解释对账偏差与补账；不直接产生 Expenses posting）：
+SELECT date, type, accounts
+FROM entries
+WHERE type IN ('balance', 'pad')
+ORDER BY date DESC LIMIT 20
+
+【洞察 BQL 边界】
+- balances 表不可用，Balance 断言统一走 FROM entries WHERE type='balance'
+- meta 不能在 WHERE 正则过滤，拉明细后从结果 dict 解读 time/uuid/status
+- links/tags 列为 set，筛选用 '值' IN links / '路径' IN tags
 """.strip()

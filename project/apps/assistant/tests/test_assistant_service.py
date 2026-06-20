@@ -8,6 +8,7 @@ from project.apps.assistant.services.assistant_service import (
     AssistantService,
     StreamEvent,
     build_system_prompt,
+    build_tools,
     get_max_bql_runs,
     merge_thinking_text,
 )
@@ -116,6 +117,24 @@ class TestAssistantService:
         assert '父账户行仅含直接 posting' in prompt
         assert '复式记账符号' in prompt
         assert 'Income 累计为负表示收入' in prompt
+
+    def test_insight_mode_system_prompt(self):
+        prompt = build_system_prompt(date(2026, 6, 16), insight_mode=True)
+        assert '【洞察模式】' in prompt
+        assert '主动追溯' in prompt
+        assert 'tags' in prompt
+        assert 'links' in prompt
+        assert 'FROM entries' in prompt
+        assert 'Balance / Pad' in prompt
+        assert '洞察模式 BQL 示例' in prompt
+
+    def test_build_tools_insight_mode_description(self):
+        tools = build_tools(insight_mode=True)
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+        desc = run_bql['function']['description']
+        assert '洞察模式' in desc
+        assert 'FROM entries' in desc
+        assert '追溯历史' in desc
 
     @pytest.mark.django_db
     def test_dispatch_tool_blocks_over_bql_limit(self, user, bean_file):

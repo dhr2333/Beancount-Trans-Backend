@@ -88,3 +88,63 @@ class TestZeroBalanceNormalization:
         )
         assert '0.00 CNY' in result.result_text
         assert result.result_text.count('0.00 CNY') >= 2
+
+
+@pytest.mark.django_db
+class TestInsightBqlQueries:
+    def test_cross_month_group_by(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT year, month, sum(units(position)) "
+            "WHERE account ~ '^Expenses' AND year = 2024 "
+            "GROUP BY year, month"
+        )
+        assert '2024' in result.result_text
+        assert '200' in result.result_text or '150' in result.result_text
+
+    def test_payee_history_query(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT year, month, sum(units(position)) "
+            "WHERE payee ~ '山姆' AND account ~ '^Expenses' "
+            "AND year = 2024 GROUP BY year, month"
+        )
+        assert '山姆' not in result.result_text or '200' in result.result_text
+
+    def test_link_query(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT date, payee, account, units(position), links "
+            "WHERE 'order-001' IN links AND account ~ '^Expenses' "
+            "ORDER BY date"
+        )
+        assert 'order-001' in result.result_text or '200' in result.result_text
+
+    def test_tag_cross_month_query(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT year, month, sum(units(position)) "
+            "WHERE 'Discretionary' IN tags AND account ~ '^Expenses' "
+            "AND year = 2024 GROUP BY year, month"
+        )
+        assert '2024' in result.result_text
+
+    def test_entries_meta_query(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT date, payee, narration, meta "
+            "FROM entries "
+            "WHERE type = 'transaction' AND year = 2024 AND month = 1 "
+            "ORDER BY date DESC LIMIT 20"
+        )
+        assert 'meta' in result.result_text.lower() or '20:15' in result.result_text
+
+    def test_balance_pad_entries_query(self, user, insight_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT date, type, accounts "
+            "FROM entries "
+            "WHERE type IN ('balance', 'pad') "
+            "ORDER BY date DESC LIMIT 20"
+        )
+        assert 'balance' in result.result_text.lower() or 'pad' in result.result_text.lower()
