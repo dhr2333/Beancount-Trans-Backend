@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.10.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.9.0...5.10.0) (2026-06-20)
+
+### Features
+
+* 更新 BQL 错误处理和能力说明 ([e6ea2dc](https://github.com/dhr2333/Beancount-Trans-Backend/commit/e6ea2dc0ca1dbfb25172826e13eafaa9007e5df7))
+* 添加工具调用轮次上限配置 ([fb48b10](https://github.com/dhr2333/Beancount-Trans-Backend/commit/fb48b108e123e10eba3c5f353ac9f0563b04ef13))
+* 添加深度思考模式支持 ([ef83ef3](https://github.com/dhr2333/Beancount-Trans-Backend/commit/ef83ef3ba7924b445a8c4045515758a68802196e))
+
 ## [5.9.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.12...5.9.0) (2026-06-20)
 
 ### Features
