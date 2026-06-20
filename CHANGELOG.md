@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.9.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.12...5.9.0) (2026-06-20)
+
+### Features
+
+* 增强助手服务以支持洞察模式和相关 BQL 示例 ([3de41b0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/3de41b0fffe73d7997164a9db17417fa7f8f4831))
+
 ## [5.8.12](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.8.11...5.8.12) (2026-06-18)
 
 ### Bug Fixes
