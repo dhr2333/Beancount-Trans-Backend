@@ -75,6 +75,10 @@ def get_max_bql_runs() -> int:
     return int(getattr(settings, 'ASSISTANT_MAX_BQL_RUNS', 5))
 
 
+def get_max_tool_rounds() -> int:
+    return int(getattr(settings, 'ASSISTANT_MAX_TOOL_ROUNDS', 8))
+
+
 def build_system_prompt(
     reference_date: date | None = None,
     *,
@@ -188,7 +192,6 @@ class _StreamRoundResult:
 
 
 class AssistantService:
-    MAX_TOOL_ROUNDS = 8
     MAX_MESSAGES = 20
 
     def __init__(
@@ -204,6 +207,7 @@ class AssistantService:
         self.deep_think = deep_think
         self.model = resolve_assistant_model(deep_think=deep_think)
         self.max_bql_runs = get_max_bql_runs()
+        self.max_tool_rounds = get_max_tool_rounds()
 
     def _build_client(self, api_key: str) -> OpenAI:
         return OpenAI(api_key=api_key, base_url='https://api.deepseek.com')
@@ -575,7 +579,7 @@ class AssistantService:
 
             if round_result.tool_calls:
                 tool_round += 1
-                if tool_round > self.MAX_TOOL_ROUNDS:
+                if tool_round > self.max_tool_rounds:
                     yield from self._iter_force_final_reply(
                         client,
                         llm_messages,

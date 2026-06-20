@@ -11,6 +11,7 @@ from project.apps.assistant.services.assistant_service import (
     build_system_prompt,
     build_tools,
     get_max_bql_runs,
+    get_max_tool_rounds,
     resolve_assistant_model,
 )
 from project.apps.translate.models import FormatConfig
@@ -232,9 +233,10 @@ class TestAssistantService:
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
+        max_tool_rounds = get_max_tool_rounds()
         tool_streams = [
             _make_tool_call_stream('run_bql', '{"query": "SELECT 1"}', f'call_{i}')
-            for i in range(AssistantService.MAX_TOOL_ROUNDS + 1)
+            for i in range(max_tool_rounds + 1)
         ]
         mock_client.chat.completions.create.side_effect = [
             *tool_streams,
@@ -246,7 +248,7 @@ class TestAssistantService:
 
         assert '查询详情' in result.reply
         assert '查询步骤过多' not in result.reply
-        assert mock_client.chat.completions.create.call_count == AssistantService.MAX_TOOL_ROUNDS + 2
+        assert mock_client.chat.completions.create.call_count == max_tool_rounds + 2
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='')
     def test_chat_without_api_key_raises(self, user, bean_file):
