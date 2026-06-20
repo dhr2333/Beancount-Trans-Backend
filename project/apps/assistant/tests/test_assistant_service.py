@@ -6,10 +6,12 @@ from django.test import override_settings
 
 from project.apps.assistant.services.assistant_service import (
     AssistantService,
+    REASONER_MODEL,
     StreamEvent,
     build_system_prompt,
     build_tools,
     get_max_bql_runs,
+    resolve_assistant_model,
 )
 from project.apps.translate.models import FormatConfig
 
@@ -59,6 +61,12 @@ def _make_reasoning_then_text_stream(reasoning: str, answer: str):
     chunks = [_make_stream_chunk(reasoning_content=char) for char in reasoning]
     chunks.extend(_make_stream_chunk(content=char) for char in answer)
     chunks.append(_make_stream_chunk(finish_reason='stop'))
+    return iter(chunks)
+
+
+def _make_reasoning_tool_stream(reasoning: str, tool_name: str, arguments: str, call_id='call_1'):
+    chunks = [_make_stream_chunk(reasoning_content=char) for char in reasoning]
+    chunks.append(_make_tool_call_chunk(0, call_id, tool_name, arguments))
     return iter(chunks)
 
 
@@ -453,3 +461,88 @@ class TestAssistantService:
         assert mock_client.chat.completions.create.call_count == 2
         assert '部分金额可能未完全来自' not in result.reply
         assert '0' in result.reply
+
+    def test_resolve_assistant_model(self):
+        with override_settings(ASSISTANT_MODEL='deepseek-chat'):
+            assert resolve_assistant_model(deep_think=False) == 'deepseek-chat'
+            assert resolve_assistant_model(deep_think=True) == REASONER_MODEL
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_deep_think_selects_reasoner_model(self, mock_openai_cls, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_text_stream('你好。'),
+        ]
+
+        service = AssistantService(user, deep_think=True)
+        service.chat([{'role': 'user', 'content': '你好'}])
+
+        first_kwargs = mock_client.chat.completions.create.call_args_list[0].kwargs
+        assert first_kwargs['model'] == REASONER_MODEL
+        assert 'temperature' not in first_kwargs
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_reasoner_tool_call_roundtrips_reasoning_content(
+        self, mock_openai_cls, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        reasoning = '先查餐饮总额。'
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_reasoning_tool_stream(reasoning, 'run_bql', _FOOD_SUM_BQL),
+            _make_text_stream('餐饮 **50** 元。'),
+        ]
+
+        service = AssistantService(user, deep_think=True)
+        events = _collect_events(service, [{'role': 'user', 'content': '餐饮多少？'}])
+        done = events[-1]
+
+        assert done.event == 'done'
+        assert mock_client.chat.completions.create.call_count == 2
+        second_messages = mock_client.chat.completions.create.call_args_list[1].kwargs['messages']
+        tool_assistant = next(
+            m for m in second_messages
+            if m.get('role') == 'assistant' and m.get('tool_calls')
+        )
+        assert tool_assistant['reasoning_content'] == reasoning
+        assert '50' in done.data['reply']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_chat_model_skips_reasoning_content_in_history(
+        self, mock_openai_cls, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        config.deepseek_apikey = ''
+        config.save()
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
+            _make_text_stream('餐饮 **50** 元。'),
+        ]
+
+        service = AssistantService(user, deep_think=False)
+        service.chat([{'role': 'user', 'content': '餐饮多少？'}])
+
+        second_messages = mock_client.chat.completions.create.call_args_list[1].kwargs['messages']
+        tool_assistant = next(
+            m for m in second_messages
+            if m.get('role') == 'assistant' and m.get('tool_calls')
+        )
+        assert 'reasoning_content' not in tool_assistant
+        first_kwargs = mock_client.chat.completions.create.call_args_list[0].kwargs
+        assert first_kwargs['model'] == 'deepseek-chat'
+        assert first_kwargs.get('temperature') == 0.1

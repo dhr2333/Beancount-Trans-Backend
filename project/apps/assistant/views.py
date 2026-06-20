@@ -76,9 +76,10 @@ class AssistantChatView(APIView):
             for msg in serializer.validated_data['messages']
         ]
         show_bql = serializer.validated_data.get('show_bql', False)
+        deep_think = serializer.validated_data.get('deep_think', False)
 
         try:
-            service = AssistantService(request.user)
+            service = AssistantService(request.user, deep_think=deep_think)
             result = service.chat(messages, show_bql=show_bql)
         except LedgerNotFoundError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
@@ -100,6 +101,7 @@ class AssistantChatView(APIView):
             'api_key_source': result.api_key_source,
             'thinking': result.thinking,
             'reasoning': result.reasoning,
+            'model': service.model,
         }
         return Response(AssistantChatResponseSerializer(response_data).data)
 
@@ -132,6 +134,7 @@ class AssistantChatStreamView(APIView):
             for msg in serializer.validated_data['messages']
         ]
         show_bql = serializer.validated_data.get('show_bql', False)
+        deep_think = serializer.validated_data.get('deep_think', False)
 
         resolved = resolve_api_key(request.user)
         if not resolved.api_key:
@@ -147,7 +150,7 @@ class AssistantChatStreamView(APIView):
             )
 
         def event_stream():
-            stream_service = AssistantService(request.user)
+            stream_service = AssistantService(request.user, deep_think=deep_think)
             yield from stream_service.chat_stream(messages, show_bql=show_bql)
 
         response = StreamingHttpResponse(

@@ -9,6 +9,7 @@ class ChatMessageSerializer(serializers.Serializer):
 class AssistantChatRequestSerializer(serializers.Serializer):
     messages = ChatMessageSerializer(many=True, min_length=1, max_length=20)
     show_bql = serializers.BooleanField(default=False, required=False)
+    deep_think = serializers.BooleanField(default=False, required=False)
 
     def validate_messages(self, value):
         if not any(msg['role'] == 'user' for msg in value):
@@ -27,6 +28,7 @@ class AssistantChatResponseSerializer(serializers.Serializer):
     api_key_source = serializers.ChoiceField(choices=['user', 'platform', 'none'])
     thinking = serializers.CharField(allow_blank=True, required=False, default='')
     reasoning = serializers.CharField(allow_blank=True, required=False, default='')
+    model = serializers.CharField(allow_blank=True, required=False, default='')
 
 
 class AssistantStatusSerializer(serializers.Serializer):

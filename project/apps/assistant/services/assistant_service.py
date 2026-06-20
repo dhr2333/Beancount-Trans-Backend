@@ -27,6 +27,20 @@ from .schema_provider import build_bql_examples, build_insight_bql_examples, get
 
 logger = logging.getLogger(__name__)
 
+REASONER_MODEL = 'deepseek-reasoner'
+DEFAULT_CHAT_MODEL = 'deepseek-chat'
+
+
+def resolve_assistant_model(*, deep_think: bool = False) -> str:
+    if deep_think:
+        return REASONER_MODEL
+    return getattr(settings, 'ASSISTANT_MODEL', DEFAULT_CHAT_MODEL)
+
+
+def is_reasoner_model(model: str) -> bool:
+    return model == REASONER_MODEL or model.endswith('-reasoner')
+
+
 SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
 
 {reference_date_context}
@@ -177,11 +191,18 @@ class AssistantService:
     MAX_TOOL_ROUNDS = 8
     MAX_MESSAGES = 20
 
-    def __init__(self, user: User, reference_date: date | None = None):
+    def __init__(
+        self,
+        user: User,
+        reference_date: date | None = None,
+        *,
+        deep_think: bool = False,
+    ):
         self.user = user
         self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
-        self.model = getattr(settings, 'ASSISTANT_MODEL', 'deepseek-chat')
+        self.deep_think = deep_think
+        self.model = resolve_assistant_model(deep_think=deep_think)
         self.max_bql_runs = get_max_bql_runs()
 
     def _build_client(self, api_key: str) -> OpenAI:
@@ -263,6 +284,7 @@ class AssistantService:
             'api_key_source': reply.api_key_source,
             'thinking': reply.thinking,
             'reasoning': reply.reasoning,
+            'model': self.model,
         }
 
     def _build_thinking_reply(
@@ -297,9 +319,10 @@ class AssistantService:
         kwargs: dict[str, Any] = {
             'model': self.model,
             'messages': llm_messages,
-            'temperature': 0.1,
             'stream': True,
         }
+        if not is_reasoner_model(self.model):
+            kwargs['temperature'] = 0.1
         if tools is not None:
             kwargs['tools'] = tools
         if tool_choice is not None:
@@ -349,10 +372,13 @@ class AssistantService:
     def _assistant_message_from_tool_calls(
         self,
         tool_calls: list[_AccumulatedToolCall],
+        *,
+        reasoning_content: str = '',
+        content: str = '',
     ) -> dict[str, Any]:
-        return {
+        message: dict[str, Any] = {
             'role': 'assistant',
-            'content': None,
+            'content': content or None,
             'tool_calls': [
                 {
                     'id': tc.id,
@@ -362,6 +388,9 @@ class AssistantService:
                 for tc in tool_calls
             ],
         }
+        if is_reasoner_model(self.model):
+            message['reasoning_content'] = reasoning_content
+        return message
 
     def _iter_force_final_reply(
         self,
@@ -559,7 +588,11 @@ class AssistantService:
                     return
 
                 yield StreamEvent('status', {'phase': 'querying'})
-                llm_messages.append(self._assistant_message_from_tool_calls(round_result.tool_calls))
+                llm_messages.append(self._assistant_message_from_tool_calls(
+                    round_result.tool_calls,
+                    reasoning_content=''.join(round_result.reasoning_parts),
+                    content=''.join(round_result.content_parts),
+                ))
 
                 for tool_call in round_result.tool_calls:
                     fn_name = tool_call.name

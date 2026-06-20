@@ -6369,6 +6369,11 @@
           "show_bql": {
             "type": "boolean",
             "default": false
+          },
+          "deep_think": {
+            "type": "boolean",
+            "default": false,
+            "description": "启用深度思考（deepseek-reasoner），展示完整推理链，响应更慢"
           }
         },
         "required": [
@@ -6397,6 +6402,10 @@
           "reasoning": {
             "type": "string",
             "description": "模型推理链（deepseek-reasoner 时非空）"
+          },
+          "model": {
+            "type": "string",
+            "description": "本次对话使用的模型名称"
           }
         },
         "required": [
