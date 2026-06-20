@@ -10,7 +10,6 @@ from project.apps.assistant.services.assistant_service import (
     build_system_prompt,
     build_tools,
     get_max_bql_runs,
-    merge_thinking_text,
 )
 from project.apps.translate.models import FormatConfig
 
@@ -272,12 +271,14 @@ class TestAssistantService:
         assert event_types[0] == 'status'
         assert 'tool_start' in event_types
         assert 'tool_end' in event_types
-        assert 'thinking_delta' in event_types
+        assert 'thinking_delta' not in event_types
         assert 'delta' in event_types
         assert event_types[-1] == 'done'
         assert '50' in events[-1].data['reply']
-        assert '执行查询' in events[-1].data['thinking']
-        assert 'Expenses:Food' in events[-1].data['thinking']
+        assert '执行查询' not in events[-1].data['thinking']
+        assert 'Expenses:Food' not in events[-1].data['thinking']
+        assert len(events[-1].data['queries']) == 1
+        assert 'Expenses:Food' in events[-1].data['queries'][0]['bql']
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
@@ -320,11 +321,6 @@ class TestAssistantService:
         assert events[writing_idx].data['phase'] == 'writing'
         assert writing_idx < first_delta_idx
         assert event_types[-1] == 'done'
-
-    def test_merge_thinking_text(self):
-        assert merge_thinking_text('推理', '步骤') == '推理\n\n---\n\n步骤'
-        assert merge_thinking_text('', '步骤') == '步骤'
-        assert merge_thinking_text('推理', '') == '推理'
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')

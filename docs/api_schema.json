@@ -1179,7 +1179,7 @@
               "text/event-stream": {
                 "schema": {
                   "type": "string",
-                  "description": "SSE 事件流：status, reasoning_delta, thinking_delta, thinking_set, tool_start, tool_end, delta, done, error"
+                  "description": "SSE 事件流：status, reasoning_delta, thinking_set, tool_start, tool_end, delta, done, error。thinking/thinking_set.content 仅为推理与规划文本；BQL 通过 tool_end 与 done.queries 返回。"
                 }
               }
             },

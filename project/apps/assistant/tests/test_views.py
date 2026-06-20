@@ -76,4 +76,4 @@ class TestAssistantAPI:
         body = b''.join(response.streaming_content).decode('utf-8')
         assert 'event: done' in body
         assert 'event: delta' in body
-        assert 'event: thinking_delta' in body
+        assert 'event: tool_end' in body

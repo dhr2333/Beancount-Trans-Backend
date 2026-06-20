@@ -27,38 +27,6 @@ from .schema_provider import build_bql_examples, build_insight_bql_examples, get
 
 logger = logging.getLogger(__name__)
 
-THINKING_PREVIEW_MAX_LEN = 800
-
-
-def merge_thinking_text(reasoning: str, agent: str) -> str:
-    reasoning = reasoning.strip()
-    agent = agent.strip()
-    if reasoning and agent:
-        return f'{reasoning}\n\n---\n\n{agent}'
-    return reasoning or agent
-
-
-def truncate_thinking_preview(text: str) -> str:
-    if len(text) <= THINKING_PREVIEW_MAX_LEN:
-        return text
-    return f'{text[:THINKING_PREVIEW_MAX_LEN]}\n…（已截断，完整结果见「查询详情」）'
-
-
-def format_tool_thinking_start(fn_name: str, fn_args: dict[str, Any]) -> str:
-    if fn_name == 'get_ledger_context':
-        return '\n\n### 获取账本上下文\n'
-    if fn_name == 'run_bql':
-        query = fn_args.get('query', '')
-        return f'\n\n### 执行查询\n```bql\n{query}\n```\n'
-    return f'\n\n### 调用 {fn_name}\n'
-
-
-def format_tool_thinking_end(fn_name: str, tool_result: str) -> str:
-    if fn_name == 'get_ledger_context':
-        return ''
-    preview = truncate_thinking_preview(tool_result)
-    return f'\n**结果预览**\n```\n{preview}\n```\n'
-
 SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
 
 {reference_date_context}
@@ -305,18 +273,15 @@ class AssistantService:
         api_key_source: str,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
-        thinking_parts: list[str],
     ) -> AssistantReply:
         reasoning_text = self._merged_reasoning_text(api_reasoning_parts, planning_parts)
-        agent_text = ''.join(thinking_parts)
-        merged = merge_thinking_text(reasoning_text, agent_text)
         return self._finalize_reply(
             reply_text,
             queries,
             show_bql,
             api_key_source,
             reasoning=reasoning_text,
-            thinking=merged,
+            thinking=reasoning_text,
         )
 
     def _run_llm_round(
@@ -407,7 +372,6 @@ class AssistantService:
         api_key_source: str,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
-        thinking_parts: list[str],
     ) -> Iterator[StreamEvent]:
         synthesis_messages = [
             *llm_messages,
@@ -441,7 +405,6 @@ class AssistantService:
             api_key_source,
             api_reasoning_parts,
             planning_parts,
-            thinking_parts,
         )
         yield from self._yield_validated_final(
             client,
@@ -450,7 +413,6 @@ class AssistantService:
             show_bql,
             api_reasoning_parts,
             planning_parts,
-            thinking_parts,
         )
 
     def _merged_reasoning_text(
@@ -472,7 +434,6 @@ class AssistantService:
         show_bql: bool,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
-        thinking_parts: list[str],
     ) -> Iterator[StreamEvent]:
         validation = validate_reply_numbers(final.reply, final.queries)
         if validation.ok:
@@ -500,7 +461,6 @@ class AssistantService:
             final.api_key_source,
             api_reasoning_parts,
             planning_parts,
-            thinking_parts,
         )
         validation = validate_reply_numbers(final.reply, final.queries)
 
@@ -551,7 +511,6 @@ class AssistantService:
         tool_round = 0
         api_reasoning_parts: list[str] = []
         planning_parts: list[str] = []
-        thinking_parts: list[str] = []
 
         while True:
             round_result: _StreamRoundResult | None = None
@@ -596,7 +555,6 @@ class AssistantService:
                         resolved.source,
                         api_reasoning_parts,
                         planning_parts,
-                        thinking_parts,
                     )
                     return
 
@@ -615,18 +573,8 @@ class AssistantService:
                         tool_start['query'] = fn_args.get('query', '')
                     yield StreamEvent('tool_start', tool_start)
 
-                    thinking_start = format_tool_thinking_start(fn_name, fn_args)
-                    if thinking_start:
-                        thinking_parts.append(thinking_start)
-                        yield StreamEvent('thinking_delta', {'content': thinking_start})
-
                     queries_before = len(queries)
                     tool_result = self._dispatch_tool(fn_name, fn_args, queries)
-
-                    thinking_end = format_tool_thinking_end(fn_name, tool_result)
-                    if thinking_end:
-                        thinking_parts.append(thinking_end)
-                        yield StreamEvent('thinking_delta', {'content': thinking_end})
 
                     tool_end: dict[str, Any] = {'name': fn_name}
                     if fn_name == 'run_bql' and len(queries) > queries_before:
@@ -643,14 +591,11 @@ class AssistantService:
                 continue
 
             planning_parts[planning_len_before:] = []
-            merged_thinking = merge_thinking_text(
-                self._merged_reasoning_text(api_reasoning_parts, planning_parts),
-                ''.join(thinking_parts),
-            )
-            if merged_thinking.strip():
+            reasoning_text = self._merged_reasoning_text(api_reasoning_parts, planning_parts)
+            if reasoning_text.strip():
                 yield StreamEvent('thinking_set', {
-                    'content': merged_thinking,
-                    'reasoning': self._merged_reasoning_text(api_reasoning_parts, planning_parts),
+                    'content': reasoning_text,
+                    'reasoning': reasoning_text,
                 })
 
             yield StreamEvent('status', {'phase': 'writing'})
@@ -665,7 +610,6 @@ class AssistantService:
                 resolved.source,
                 api_reasoning_parts,
                 planning_parts,
-                thinking_parts,
             )
             yield from self._yield_validated_final(
                 client,
@@ -674,7 +618,6 @@ class AssistantService:
                 show_bql,
                 api_reasoning_parts,
                 planning_parts,
-                thinking_parts,
             )
             return
 
