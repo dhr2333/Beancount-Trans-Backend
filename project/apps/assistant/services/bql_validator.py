@@ -17,8 +17,13 @@ _POSITION_COMPARE = re.compile(
 )
 
 _WHERE_AGGREGATE = re.compile(
-    r'\bWHERE\b.*\b(sum|count|avg|min|max)\s*\(',
-    re.IGNORECASE | re.DOTALL,
+    r'\b(sum|count|avg|min|max)\s*\(',
+    re.IGNORECASE,
+)
+
+_WHERE_CLAUSE_END = re.compile(
+    r'\b(GROUP BY|ORDER BY|LIMIT)\b',
+    re.IGNORECASE,
 )
 
 _HAVING_CLAUSE = re.compile(r'\bHAVING\b', re.IGNORECASE)
@@ -28,6 +33,24 @@ _TAGS_REGEX = re.compile(r'\btags\s*~', re.IGNORECASE)
 
 class BQLValidationError(ValueError):
     """BQL 校验失败。"""
+
+_WHERE_AGGREGATE_ERROR = (
+    'WHERE 中不能使用聚合函数（sum/count 等）。'
+    '请移到 SELECT 并使用 GROUP BY；若需按金额排序，'
+    '在 GROUP BY 后使用 ORDER BY sum(units(position)) DESC。'
+)
+
+
+def _extract_where_clause(normalized: str) -> str:
+    """返回 WHERE 与 GROUP BY/ORDER BY/LIMIT 之间的条件子串（不含 WHERE 关键字）。"""
+    where_match = re.search(r'\bWHERE\b', normalized, re.IGNORECASE)
+    if not where_match:
+        return ''
+    rest = normalized[where_match.end():]
+    end_match = _WHERE_CLAUSE_END.search(rest)
+    if end_match:
+        return rest[:end_match.start()]
+    return rest
 
 
 def _check_unsupported_patterns(normalized: str) -> None:
@@ -52,10 +75,9 @@ def _check_unsupported_patterns(normalized: str) -> None:
             '请改用 number > N 或 ORDER BY units(position) DESC LIMIT N。'
         )
 
-    if _WHERE_AGGREGATE.search(normalized):
-        raise BQLValidationError(
-            'WHERE 中不能使用聚合函数（sum/count 等）。请移到 SELECT 并使用 GROUP BY。'
-        )
+    where_clause = _extract_where_clause(normalized)
+    if where_clause and _WHERE_AGGREGATE.search(where_clause):
+        raise BQLValidationError(_WHERE_AGGREGATE_ERROR)
 
 
 def validate_bql(query: str) -> str:

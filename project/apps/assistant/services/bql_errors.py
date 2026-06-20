@@ -15,7 +15,8 @@ def format_bql_error(exc: Exception) -> str:
     if 'CompilationError' in type(exc).__name__ or 'compilation' in message.lower():
         return (
             f'查询失败: {message}。'
-            '请参考 BQL 能力说明：简化 WHERE 条件，避免在 WHERE 使用聚合函数或 HAVING。'
+            '请参考 BQL 能力说明：简化 WHERE 条件，避免在 WHERE 使用聚合函数或 HAVING；'
+            '按聚合结果排序请用 GROUP BY 后 ORDER BY sum(units(position)) DESC。'
         )
 
     return f'查询失败: {message}'

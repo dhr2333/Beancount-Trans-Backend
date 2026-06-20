@@ -66,6 +66,11 @@ class TestBuildBqlExamples:
         assert 'units(position) >' not in text
         assert 'ORDER BY units(position) DESC' in text
 
+    def test_includes_group_by_order_by_sum_example(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert '本月支出科目按金额从高到低排序' in text
+        assert 'ORDER BY sum(units(position)) DESC' in text
+
     def test_includes_income_examples(self):
         text = build_bql_examples(date(2026, 6, 16))
         assert '本月总收入是多少' in text
@@ -135,6 +140,11 @@ class TestBqlCapabilityReference:
         assert '零余额' in ref
         assert '空白 sum' in ref
         assert '禁止为此重试' in ref
+
+    def test_documents_order_by_sum_after_group_by(self):
+        ref = build_bql_capability_reference()
+        assert 'ORDER BY sum(units(position)) DESC' in ref
+        assert '无数据行' in ref
 
     def test_documents_account_hierarchy_semantics(self):
         ref = build_bql_capability_reference()

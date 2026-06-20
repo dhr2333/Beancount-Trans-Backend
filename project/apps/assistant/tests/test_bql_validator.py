@@ -48,6 +48,21 @@ class TestBQLValidator:
                 "SELECT date WHERE account ~ 'Expenses' AND sum(units(position)) > 0"
             )
 
+    def test_reject_aggregate_in_where_with_group_by(self):
+        with pytest.raises(BQLValidationError, match='聚合'):
+            validate_bql(
+                "SELECT account, sum(units(position)) WHERE account ~ 'Expenses' "
+                "AND sum(units(position)) > 0 GROUP BY account"
+            )
+
+    def test_allow_order_by_sum_after_group_by(self):
+        q = validate_bql(
+            "SELECT account, sum(units(position)) WHERE account ~ '^Expenses' "
+            "AND year = 2026 AND month = 6 GROUP BY account "
+            "ORDER BY sum(units(position)) DESC"
+        )
+        assert 'ORDER BY sum(units(position)) DESC' in q
+
     def test_allow_number_compare(self):
         q = validate_bql(
             "SELECT date, units(position) WHERE account ~ 'Expenses' AND number > 100"

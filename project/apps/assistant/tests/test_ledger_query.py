@@ -18,6 +18,18 @@ class TestLedgerQueryService:
         assert 'Expenses:Food' in result.result_text
         assert '50.00' in result.result_text or '50' in result.result_text
 
+    def test_execute_group_by_order_by_sum(self, user, rank_bean_file):
+        service = LedgerQueryService(user)
+        result = service.execute(
+            "SELECT account, sum(units(position)) WHERE account ~ '^Expenses' "
+            "GROUP BY account ORDER BY sum(units(position)) DESC"
+        )
+        home_idx = result.result_text.index('Expenses:Home')
+        food_idx = result.result_text.index('Expenses:Food')
+        assert home_idx < food_idx
+        assert '200' in result.result_text
+        assert '50' in result.result_text
+
     def test_reject_invalid_bql(self, user, bean_file):
         service = LedgerQueryService(user)
         with pytest.raises(BQLValidationError):
@@ -51,6 +63,30 @@ class TestLedgerQueryService:
             "SELECT account, sum(position) WHERE account ~ 'Expenses' GROUP BY account"
         )
         assert '餐饮（Expenses:Food）' in result.result_text
+
+
+RANK_BEAN = """2024-01-01 open Assets:Cash CNY
+2024-01-01 open Expenses:Food CNY
+2024-01-01 open Expenses:Home CNY
+
+2024-06-01 * "午餐"
+  Expenses:Food  50.00 CNY
+  Assets:Cash  -50.00 CNY
+
+2024-06-02 * "物业"
+  Expenses:Home  200.00 CNY
+  Assets:Cash  -200.00 CNY
+"""
+
+
+@pytest.fixture
+def rank_bean_file(tmp_path, settings, user, monkeypatch):
+    assets_dir = tmp_path / user.username
+    assets_dir.mkdir(parents=True)
+    main_bean = assets_dir / 'main.bean'
+    main_bean.write_text(RANK_BEAN, encoding='utf-8')
+    monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
+    return main_bean
 
 
 ZERO_BALANCE_BEAN = """2024-01-01 open Assets:Savings:Cash CNY

@@ -52,6 +52,9 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - 汇总：SELECT account, sum(units(position)) ... GROUP BY account
 - 单列总额：SELECT sum(units(position)) WHERE account ~ '^Assets'
 - 聚合函数只能出现在 SELECT，不能出现在 WHERE
+- GROUP BY 后允许 ORDER BY sum(units(position)) DESC 做类目/商家金额排名
+- 禁止在 WHERE 中写 sum(...) > N（无 HAVING；需阈值时拉明细用 number > N，或 GROUP BY 后在回答中解读排序结果）
+- GROUP BY 仅返回表头、无数据行 → 该时间范围内无匹配 posting，不是语法错误
 
 【余额与结构分析（应收/资产/负债/收入）】
 - 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）

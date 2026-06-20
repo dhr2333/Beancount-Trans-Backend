@@ -49,6 +49,12 @@ def build_bql_examples(reference_date: date | None = None) -> str:
             f"AND year = {year} AND month = {month} GROUP BY account",
         ),
         (
+            '本月支出科目按金额从高到低排序',
+            f"SELECT account, sum(units(position)) WHERE account ~ '^Expenses' "
+            f"AND year = {year} AND month = {month} "
+            f"GROUP BY account ORDER BY sum(units(position)) DESC",
+        ),
+        (
             '本月餐饮（含子科目）总支出？',
             f"SELECT sum(units(position)) WHERE account ~ '^Expenses:Food' "
             f"AND year = {year} AND month = {month}",
