@@ -42,6 +42,11 @@
       "tag_path": "Pet",
       "description": "宠物相关",
       "enable": false
+    },
+    {
+      "tag_path": "Project/Marry",
+      "description": "结婚相关",
+      "enable": true
     }
   ]
 }

@@ -20,6 +20,8 @@ class AlipayInitStrategy(InitStrategy):
 
         try:
             for row in data_rows:
+                if not row or row[0].strip().startswith('交易时间'):
+                    continue
                 transaction_type = "/" if row[5] == "不计收支" else row[5]
                 payment_method = "余额" if row[7].strip() == '' else row[7].strip()
                 notes = "/" if row[11].strip() == '' else row[11].strip()
