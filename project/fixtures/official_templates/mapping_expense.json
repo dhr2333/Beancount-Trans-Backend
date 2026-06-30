@@ -1,8 +1,8 @@
 {
   "name": "官方支出映射",
   "description": "中国用户常用支出映射",
-  "version": "1.0.0",
-  "update_notes": null,
+  "version": "1.0.1",
+  "update_notes": "示例账单故事化：新增社保/美年/知乎/奇莫/维修映射；房租/物业费/订阅/会员/88VIP/全民K歌/王者荣耀/体检补标签",
   "items": [
     {
       "key": "高跟鞋",
@@ -435,7 +435,10 @@
       "key": "全民K歌",
       "payee": "",
       "account": "Expenses:Culture:Entertainment",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Discretionary"
+      ]
     },
     {
       "key": "云视听",
@@ -714,7 +717,10 @@
       "key": "物业费",
       "payee": "",
       "account": "Expenses:Home:Utilities",
-      "currency": null
+      "currency": null,
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "物业",
@@ -807,7 +813,8 @@
       "key": "会员",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": []
     },
     {
       "key": "华为软件技术有限公司",
@@ -1197,7 +1204,10 @@
       "key": "体检",
       "payee": "",
       "account": "Expenses:Health:Medical",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "药业",
@@ -1233,7 +1243,10 @@
       "key": "订阅",
       "payee": "",
       "account": "Expenses:Culture:Subscription",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Discretionary"
+      ]
     },
     {
       "key": "爱奇艺",
@@ -1905,7 +1918,8 @@
       "key": "电影票",
       "payee": "",
       "account": "Expenses:Culture:Entertainment",
-      "currency": ""
+      "currency": "",
+      "tags": ["Discretionary"]
     },
     {
       "key": "游戏",
@@ -2336,7 +2350,8 @@
       "account": "Expenses:Culture:Subscription",
       "currency": "",
       "tags": [
-        "Online"
+        "Online",
+        "Discretionary"
       ]
     },
     {
@@ -2799,7 +2814,10 @@
       "key": "房租",
       "payee": "",
       "account": "Expenses:Home:Rent",
-      "currency": null
+      "currency": null,
+      "tags": [
+        "Fixed"
+      ]
     },
     {
       "key": "民宿",
@@ -2888,7 +2906,7 @@
     {
       "key": "自如",
       "payee": "",
-      "account": "Expenses:Culture",
+      "account": "Expenses:Home:Rent",
       "currency": ""
     },
     {
@@ -3927,7 +3945,10 @@
       "key": "王者荣耀",
       "payee": "",
       "account": "Expenses:Culture:Entertainment",
-      "currency": ""
+      "currency": "",
+      "tags": [
+        "Discretionary"
+      ]
     },
     {
       "key": "冈本",
@@ -4071,6 +4092,72 @@
       "key": "小桔充电",
       "payee": "",
       "account": "",
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "社保",
+      "payee": "",
+      "account": "Expenses:Finance:Insurance",
+      "currency": null,
+      "tags": [
+        "Fixed"
+      ]
+    },
+    {
+      "key": "美年",
+      "payee": "",
+      "account": "Expenses:Health:Medical",
+      "currency": null,
+      "tags": [
+        "Fixed"
+      ]
+    },
+    {
+      "key": "知乎",
+      "payee": "",
+      "account": "Expenses:Culture:Subscription",
+      "currency": null,
+      "tags": [
+        "Fixed",
+        "Discretionary"
+      ]
+    },
+    {
+      "key": "奇莫",
+      "payee": "",
+      "account": "Expenses:Shopping:Daily",
+      "currency": null
+    },
+    {
+      "key": "维修",
+      "payee": "",
+      "account": "Expenses:TransPort:Private",
+      "currency": null,
+      "tags": [
+        "Emergency"
+      ]
+    },
+    {
+      "key": "婚",
+      "payee": "",
+      "account": "",
+      "currency": null,
+      "tags": [
+        "Project/Marry"
+      ]
+    },
+    {
+      "key": "华为全屋智能",
+      "payee": "",
+      "account": "Expenses:Shopping:Digital",
+      "currency": null,
+      "tags": []
+    },
+    {
+      "key": "摄影",
+      "payee": "",
+      "account": "Expenses:Culture",
       "currency": null,
       "tags": []
     }

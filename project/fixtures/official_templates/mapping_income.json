@@ -1,8 +1,8 @@
 {
   "name": "官方收入映射",
   "description": "中国用户常用收入映射",
-  "version": "1.0.0",
-  "update_notes": null,
+  "version": "1.0.1",
+  "update_notes": "示例账单故事化：新增项目/份子收入映射",
   "items": [
     {
       "key": "小荷包",
@@ -33,6 +33,16 @@
       "key": "收钱码经营版收款",
       "payer": null,
       "account": "Income:Active:Business"
+    },
+    {
+      "key": "项目",
+      "payer": null,
+      "account": "Income:Active:Freelance"
+    },
+    {
+      "key": "份子",
+      "payer": null,
+      "account": "Income:Transfer:Relationship"
     },
     {
       "key": "/",
