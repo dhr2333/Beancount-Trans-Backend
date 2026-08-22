@@ -72,6 +72,9 @@ class InitializeBillStep(Step):
             # 工厂方法创建策略
             strategy = InitFactory.create_strategy(first_line)
 
+            # 识别账单类型后回到文件开头，避免 readline 导致首行数据偏移
+            csv_file.seek(0)
+
             # 策略执行初始化
             initialized_bill = strategy.init(csv_file, card_number=card_number, year=year)
 
