@@ -16,7 +16,7 @@ class FavaInstance(models.Model):
     container_id = models.CharField(max_length=64, blank=True)
     container_name = models.CharField(max_length=128, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='stopped')
-    last_accessed = models.DateTimeField(auto_now=True)  # 记录最后访问时间用来生命周期管理
+    last_accessed = models.DateTimeField(auto_now=True)  # 打开 Fava 时刷新；登录预热只写入创建时间。闲置超过 FAVA_CONTAINER_LIFETIME 回收，JWT 续期不续命。
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  # 用于生成唯一的URL路径
 
     class Meta:

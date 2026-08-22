@@ -7,7 +7,6 @@ from project.apps.fava_instances.services.fava_manager import FavaContainerManag
 from project.utils.fava_static import resolve_static_fava_url
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
-import os
 from django.conf import settings
 import logging
 
@@ -45,69 +44,14 @@ class FavaRedirectView(APIView):
                 data={'url': url, 'deploy_mode': 'static'},
             )
 
-        manager = FavaContainerManager()
-        
-        # 检查现有运行实例
-        running_instance = FavaInstance.objects.filter(
-            owner=user,
-            status='running'
-        ).first()
-
-        if running_instance:
-            # 验证容器是否真实存在
-            if manager.verify_and_cleanup_instance(running_instance):
-                # 容器存在，直接返回重定向
-                running_instance.save()
-                logger.info(f"用户 {user.username} 的实例 {running_instance.uuid} 容器运行正常，返回重定向")
-                return Response(
-                    status=status.HTTP_302_FOUND,
-                    headers={'Location': f'/{running_instance.uuid}/'}
-                )
-            else:
-                # 容器不存在，已清理数据库记录，继续创建新实例
-                logger.info(f"用户 {user.username} 的实例 {running_instance.uuid} 容器不存在，已清理数据库记录")
-
-        # 清理用户的所有旧实例（包括 starting、error 等状态）
-        logger.info(f"清理用户 {user.username} 的所有旧实例")
-        manager.cleanup_user_containers(user)
-
-        # 创建新实例
-        instance = FavaInstance(owner=user, status='starting')
-        instance.save()
-        logger.info(f"为用户 {user.username} 创建新实例 {instance.uuid}")
-
-        # 准备bean文件路径
-        from project.utils.file import BeanFileManager
-        user_assets_path = BeanFileManager.get_user_assets_path(user)
-        bean_file = os.path.join(settings.ASSETS_HOST_PATH, os.path.basename(user_assets_path))
-
-        # 启动容器
         try:
-            container_id, container_name = manager.start_container(user, bean_file, instance)
-
-            instance.container_id = container_id
-            instance.container_name = container_name
-            instance.status = 'running'
-            instance.save()
-            logger.info(f"用户 {user.username} 的实例 {instance.uuid} 容器启动成功")
-
+            instance = FavaContainerManager().ensure_running(user, touch_last_accessed=True)
             return Response(
                 status=status.HTTP_302_FOUND,
                 headers={'Location': f'/{instance.uuid}/'}
             )
-
         except Exception as e:
-            logger.error(f"用户 {user.username} 的实例 {instance.uuid} 容器启动失败: {str(e)}")
-            # 启动失败，清理新实例记录
-            try:
-                instance.container_id = ''
-                instance.container_name = ''
-                instance.status = 'error'
-                instance.save()
-                logger.info(f"已清理启动失败的实例 {instance.uuid} 的记录")
-            except Exception as cleanup_error:
-                logger.error(f"清理失败实例 {instance.uuid} 时出错: {str(cleanup_error)}")
-            
+            logger.error(f"用户 {user.username} 启动 Fava 容器失败: {str(e)}")
             return Response(
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 data={'error': str(e)}

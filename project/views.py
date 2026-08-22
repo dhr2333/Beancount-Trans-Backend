@@ -41,6 +41,9 @@ def authenticateByToken(request):
         refresh = RefreshToken.for_user(user)
         access = str(refresh.access_token)
 
+        from project.apps.fava_instances.tasks import schedule_fava_warmup
+        schedule_fava_warmup(user)
+
         warnings = []
         phone_binding_required = False
         if settings.PHONE_BINDING_REQUIRED and not phone_verified:

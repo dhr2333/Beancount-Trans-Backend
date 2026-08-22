@@ -16,6 +16,7 @@ from allauth.socialaccount.models import SocialAccount
 
 from project.apps.authentication.models import UserProfile
 from project.apps.authentication.utils import generate_unique_username, extract_local_phone_number
+from project.apps.fava_instances.tasks import schedule_fava_warmup
 from project.apps.authentication.serializers import (
     PhoneSendCodeSerializer,
     PhoneLoginByCodeSerializer,
@@ -34,6 +35,12 @@ from project.apps.authentication.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _issue_refresh_token(user):
+    """签发 JWT，并在事务提交后异步预热 Fava 容器。"""
+    schedule_fava_warmup(user)
+    return RefreshToken.for_user(user)
 
 
 def _sms_disabled_response():
@@ -175,7 +182,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             is_new_user = previous_last_login is None
 
         # 生成 JWT token
-        refresh = RefreshToken.for_user(user)
+        refresh = _issue_refresh_token(user)
 
         logger.info(f"用户 {user.username} 通过验证码登录成功")
 
@@ -258,7 +265,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
             user.save(update_fields=['last_login'])
 
             # 生成 JWT token
-            refresh = RefreshToken.for_user(user)
+            refresh = _issue_refresh_token(user)
 
             logger.info(f"用户 {user.username} 通过手机号密码登录成功")
 
@@ -340,7 +347,7 @@ class PhoneAuthViewSet(viewsets.GenericViewSet):
                     # 不阻断注册流程，只记录警告
 
                 # 生成 JWT token
-                refresh = RefreshToken.for_user(user)
+                refresh = _issue_refresh_token(user)
 
                 logger.info(f"用户 {username} 注册成功")
                 return Response({
@@ -424,7 +431,7 @@ class UsernameAuthViewSet(viewsets.GenericViewSet):
             user.save(update_fields=['last_login'])
 
             # 生成 JWT token
-            refresh = RefreshToken.for_user(user)
+            refresh = _issue_refresh_token(user)
 
             logger.info(f"用户 {user.username} 通过用户名/邮箱密码登录成功")
 
@@ -492,7 +499,7 @@ class EmailAuthViewSet(viewsets.GenericViewSet):
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
 
-            refresh = RefreshToken.for_user(user)
+            refresh = _issue_refresh_token(user)
 
             logger.info(f"用户 {user.username} 通过邮箱验证码登录成功")
 
