@@ -147,8 +147,9 @@ def parse_single_file_task(self, file_id, user_id, args):
                 tag_details = parsed_entry.get('tag_details') or cached_parsed.get('tag_details', [])
                 
                 enhanced_entry = {
-                    # parsed_entry 中 uuid 键恒存在，无支付宝/微信 uuid 时为 None；.get('uuid', cache_key) 会错误地得到 None
-                    'uuid': parsed_entry.get('uuid') or cache_key,
+                    # 审核条目身份必须用 cache_key：交易订单号（parsed uuid）可能重复。
+                    # 无订单号时 cache_key 为 md5；parsed_entry['uuid'] 可能为 None，不能用 .get('uuid', cache_key)。
+                    'uuid': cache_key or parsed_entry.get('uuid'),
                     'formatted': entry.get('formatted', ''),
                     'edited_formatted': entry.get('formatted', ''),  # 初始状态默认为 formatted
                     'selected_expense_key': entry.get('selected_expense_key', ''),

@@ -121,13 +121,88 @@ class TestParseSingleFileTask:
         assert 'review_expires_at' in cached_data
         assert cached_data['review_expires_at'] > time.time()
         
-        # 验证缓存数据包含必要的字段
+        # 验证缓存数据包含必要的字段；审核身份使用 cache_key 而非原始订单号
         entry = cached_data['formatted_data'][0]
         assert 'uuid' in entry
+        assert entry['uuid'] == 'cache-key-1'
         assert 'formatted' in entry
         assert 'edited_formatted' in entry
         assert 'original_row' in entry
-    
+
+    @patch('project.apps.translate.tasks.get_storage_client')
+    @patch('project.apps.translate.tasks.AnalyzeService')
+    @patch('project.utils.tools.get_user_config')
+    def test_parse_task_review_mode_duplicate_order_uuid(
+        self, mock_get_config, mock_analyze_service, mock_storage_client, user, parse_file
+    ):
+        """相同交易订单号时，审核条目 uuid 使用互不碰撞的 cache_key。"""
+        mock_storage = MagicMock()
+        mock_file_data = Mock()
+        mock_file_data.read.return_value = b'test,file,content'
+        mock_storage.download_file.return_value = mock_file_data
+        mock_storage_client.return_value = mock_storage
+
+        from project.apps.translate.models import FormatConfig
+        FormatConfig.objects.get_or_create(
+            owner=user,
+            defaults={'parsing_mode_preference': 'review'}
+        )
+        mock_get_config.return_value = MagicMock()
+
+        mock_service = MagicMock()
+        mock_service.analyze_single_file.return_value = {
+            'formatted_data': [
+                {
+                    'id': 'ORDER123',
+                    'formatted': 'entry-a',
+                    'selected_expense_key': 'A',
+                    'expense_candidates_with_score': [],
+                },
+                {
+                    'id': 'ORDER123--2',
+                    'formatted': 'entry-b',
+                    'selected_expense_key': 'B',
+                    'expense_candidates_with_score': [],
+                },
+            ],
+            'parsed_data': [
+                {'cache_key': 'ORDER123', 'uuid': 'ORDER123', 'tag_details': []},
+                {'cache_key': 'ORDER123--2', 'uuid': 'ORDER123', 'tag_details': []},
+            ],
+        }
+        mock_analyze_service.return_value = mock_service
+
+        from django.core.cache import cache
+        cache.set('ORDER123', {'original_row': {'amount': 80}}, timeout=3600)
+        cache.set('ORDER123--2', {'original_row': {'amount': 20}}, timeout=3600)
+
+        content_type = ContentType.objects.get_for_model(ParseFile)
+        ScheduledTask.objects.create(
+            task_type='parse_review',
+            content_type=content_type,
+            object_id=parse_file.file_id,
+            status='inactive',
+        )
+
+        args = {
+            'write': False,
+            'cmb_credit_ignore': True,
+            'boc_debit_ignore': True,
+            'password': None,
+            'balance': False,
+            'isCSVOnly': False,
+        }
+        parse_single_file_task.apply(
+            args=[parse_file.file_id, user.id, args],
+            task_id='test-task-dup-uuid',
+        )
+
+        cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
+        uuids = [e['uuid'] for e in cached_data['formatted_data']]
+        assert uuids == ['ORDER123', 'ORDER123--2']
+        assert cached_data['formatted_data'][0]['original_row']['amount'] == 80
+        assert cached_data['formatted_data'][1]['original_row']['amount'] == 20
+
     @patch('project.apps.translate.tasks.get_storage_client')
     @patch('project.apps.translate.tasks.AnalyzeService')
     @patch('project.utils.tools.get_user_config')
