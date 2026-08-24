@@ -126,6 +126,9 @@ class FormatData:
             formatted_str += f" \"{entry['note']}\""
         if entry['tag'] is not None and config.show_tag:
             formatted_str += f" {entry['tag']}"
+        for link in entry.get('links') or []:
+            if link:
+                formatted_str += f" ^{link}"
         if config.show_time:
             formatted_str += f"\n    time: \"{entry['time']}\""
         if entry['uuid'] is not None and config.show_uuid:

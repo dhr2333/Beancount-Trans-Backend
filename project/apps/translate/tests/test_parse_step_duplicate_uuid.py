@@ -85,6 +85,9 @@ class TestParseStepDuplicateOrderUuid:
         assert parsed[1]["cache_key"] == "ORDER123--2"
         assert parsed[0]["_original_row"]["payment_method"] == "花呗"
         assert parsed[1]["_original_row"]["payment_method"] == "余额"
+        # 同订单号多行应共享 ^ORDER123
+        assert parsed[0].get("links") == ["ORDER123"]
+        assert parsed[1].get("links") == ["ORDER123"]
 
     @patch("project.apps.translate.services.steps.build_ledger_index_for_user", return_value={})
     @patch(
@@ -103,3 +106,6 @@ class TestParseStepDuplicateOrderUuid:
         assert parsed[0]["cache_key"] == "OID-A"
         assert parsed[1]["cache_key"] == "OID-B"
         assert mock_parse.call_count == 2
+        # 孤立订单不加 link
+        assert parsed[0].get("links") in (None, [])
+        assert parsed[1].get("links") in (None, [])

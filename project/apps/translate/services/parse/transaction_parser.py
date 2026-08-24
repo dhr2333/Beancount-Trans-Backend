@@ -110,6 +110,7 @@ def single_parse_transaction(
             "note": note,
             "tag": merged_tag,  # 使用合并后的标签
             "tag_details": tag_details,
+            "links": [],  # Beancount ^link，由 ParseStep 二次扫描填入原单号
             "balance": balance,
             "balance_date": balance_date,
             "expense": expense,

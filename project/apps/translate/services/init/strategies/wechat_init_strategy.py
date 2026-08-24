@@ -37,6 +37,7 @@ class WeChatPayInitStrategy(InitStrategy):
                     'notes': row[10],  # 备注
                     'bill_identifier': BILL_WECHAT,  # 账单类型
                     'uuid': row[8],  # 交易单号
+                    'merchant_order': row[9],  # 商户单号（转账/红包关联原单）
                     'discount': False
                 }
                 records.append(record)
