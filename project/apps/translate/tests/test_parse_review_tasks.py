@@ -132,6 +132,77 @@ class TestParseSingleFileTask:
     @patch('project.apps.translate.tasks.get_storage_client')
     @patch('project.apps.translate.tasks.AnalyzeService')
     @patch('project.utils.tools.get_user_config')
+    def test_parse_task_review_mode_keeps_installment_fields(
+        self, mock_get_config, mock_analyze_service, mock_storage_client, user, parse_file
+    ):
+        mock_storage = MagicMock()
+        mock_file_data = Mock()
+        mock_file_data.read.return_value = b'test,file,content'
+        mock_storage.download_file.return_value = mock_file_data
+        mock_storage_client.return_value = mock_storage
+
+        config, _ = FormatConfig.objects.get_or_create(
+            owner=user,
+            defaults={'parsing_mode_preference': 'review'}
+        )
+        mock_get_config.return_value = config
+
+        mock_service = MagicMock()
+        mock_service.analyze_single_file.return_value = {
+            'formatted_data': [
+                {
+                    'id': 'ORDER--2',
+                    'formatted': 'installment',
+                    'selected_expense_key': None,
+                    'expense_candidates_with_score': [],
+                    'installment_role': 'installment',
+                    'installment_period': 0,
+                }
+            ],
+            'parsed_data': [
+                {
+                    'cache_key': 'ORDER--2',
+                    'uuid': 'ORDER',
+                    'installment_role': 'installment',
+                    'installment_period': 0,
+                    'tag_details': [],
+                }
+            ]
+        }
+        mock_analyze_service.return_value = mock_service
+        from django.core.cache import cache
+        cache.set('ORDER--2', {'original_row': {'uuid': 'ORDER'}}, timeout=3600)
+
+        content_type = ContentType.objects.get_for_model(ParseFile)
+        ScheduledTask.objects.create(
+            task_type='parse_review',
+            content_type=content_type,
+            object_id=parse_file.file_id,
+            status='inactive'
+        )
+        args = {
+            'write': False,
+            'cmb_credit_ignore': True,
+            'boc_debit_ignore': True,
+            'password': None,
+            'balance': False,
+            'isCSVOnly': False
+        }
+        result = parse_single_file_task.apply(
+            args=[parse_file.file_id, user.id, args],
+            task_id='installment-review-task',
+        )
+        if hasattr(result, 'result'):
+            result = result.result
+        assert result['status'] == 'pending_review'
+        cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
+        entry = cached_data['formatted_data'][0]
+        assert entry['installment_role'] == 'installment'
+        assert entry['installment_period'] == 0
+
+    @patch('project.apps.translate.tasks.get_storage_client')
+    @patch('project.apps.translate.tasks.AnalyzeService')
+    @patch('project.utils.tools.get_user_config')
     def test_parse_task_review_mode_duplicate_order_uuid(
         self, mock_get_config, mock_analyze_service, mock_storage_client, user, parse_file
     ):

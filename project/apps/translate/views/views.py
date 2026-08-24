@@ -24,7 +24,11 @@ from project.apps.translate.utils import FormatData
 from project.apps.translate.tasks import parse_single_file_task
 from project.apps.translate.services.analyze_service import AnalyzeService
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
-from project.apps.translate.services.parse.installment_expander import resolve_reparse_entry
+from project.apps.translate.services.parse.installment_expander import (
+    expand_parsed_entry,
+    pick_reparse_slice,
+    resolve_reparse_entry,
+)
 from project.apps.translate.services.alipay_refund_peer import resolve_refund_peer_for_row
 from project.apps.reconciliation.models import ScheduledTask
 from django.contrib.contenttypes.models import ContentType
@@ -673,21 +677,52 @@ class ParseReviewReparseView(ParseReviewViewSet):
             base_parsed = single_parse_transaction(
                 original_row, owner_id, config, selected_key, refund_peer=refund_peer
             )
-            parsed_entry = resolve_reparse_entry(
-                base_parsed,
-                original_row,
-                installment_role=target_entry.get('installment_role'),
-                installment_period=target_entry.get('installment_period'),
+            base_parsed['_original_row'] = original_row
+            expanded = expand_parsed_entry(base_parsed, set())
+            parsed_entry = pick_reparse_slice(
+                expanded,
+                target_entry.get('installment_role'),
+                target_entry.get('installment_period'),
             )
             formatted = FormatData.format_instance(parsed_entry, config=config)
             
-            # 更新缓存（保留 tag_overrides）
+            # 更新缓存（保留 tag_overrides）；分期还款行不写入分类关键字
+            is_installment = parsed_entry.get('installment_role') == 'installment'
             ParseReviewService.update_entry_formatted(
                 parse_file.file_id,
                 entry_uuid,
                 formatted,
                 tag_details=parsed_entry.get('tag_details', []),
+                selected_expense_key=(
+                    None if is_installment else selected_key
+                ),
+                expense_candidates_with_score=parsed_entry.get(
+                    'expense_candidates_with_score', []
+                ),
             )
+
+            # 改支出分类时，同步同单分期还款行的标签/商家，保持 Payables 结构
+            if parsed_entry.get('installment_role') == 'purchase' and len(expanded) > 1:
+                cached_after = ParseReviewService.get_parse_result_migrated(parse_file.file_id) or {}
+                for sibling in ParseReviewService.iter_same_order_installment_entries(
+                    cached_after.get('formatted_data') or [],
+                    original_row,
+                    entry_uuid,
+                ):
+                    sib_entry = pick_reparse_slice(
+                        expanded,
+                        'installment',
+                        sibling.get('installment_period'),
+                    )
+                    sib_formatted = FormatData.format_instance(sib_entry, config=config)
+                    ParseReviewService.update_entry_formatted(
+                        parse_file.file_id,
+                        sibling.get('uuid'),
+                        sib_formatted,
+                        tag_details=sib_entry.get('tag_details', []),
+                        selected_expense_key=None,
+                        expense_candidates_with_score=[],
+                    )
             
             # 返回更新后的结果
             updated_result = ParseReviewService.get_parse_result(parse_file.file_id)

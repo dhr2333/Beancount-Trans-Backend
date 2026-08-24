@@ -116,6 +116,28 @@ class TestParseReviewService:
         assert updated_entry is not None
         assert updated_entry['formatted'] == new_formatted
         assert updated_entry['edited_formatted'] == new_formatted  # 应该同时更新
+
+    def test_update_entry_formatted_persists_classification(self, mock_parse_result_data):
+        file_id = 1
+        ParseReviewService.save_parse_result(file_id, mock_parse_result_data)
+        uuid = 'entry-1'
+        new_formatted = '2025-01-20 * "Updated" "Transaction"\n    Expenses:Updated  150.00 CNY\n    Assets:Test  -150.00 CNY\n'
+
+        result = ParseReviewService.update_entry_formatted(
+            file_id,
+            uuid,
+            new_formatted,
+            selected_expense_key='装修',
+            expense_candidates_with_score=[{'key': '装修', 'score': 0.8}],
+        )
+
+        assert result is True
+        updated_entry = next(
+            e for e in ParseReviewService.get_parse_result(file_id)['formatted_data']
+            if e['uuid'] == uuid
+        )
+        assert updated_entry['selected_expense_key'] == '装修'
+        assert updated_entry['expense_candidates_with_score'] == [{'key': '装修', 'score': 0.8}]
     
     def test_update_entry_formatted_cache_not_exists(self):
         """测试更新时缓存不存在的情况"""

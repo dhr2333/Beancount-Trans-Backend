@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_UNSET = object()
+
 
 class ParseReviewService:
     """解析结果缓存服务"""
@@ -138,6 +140,7 @@ class ParseReviewService:
             selected_key = None
 
         from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+        from project.apps.translate.services.parse.installment_expander import resolve_reparse_entry
         from project.apps.translate.services.alipay_refund_peer import resolve_refund_peer_for_row
 
         try:
@@ -154,6 +157,12 @@ class ParseReviewService:
                 config,
                 selected_key,
                 refund_peer=refund_peer,
+            )
+            parsed = resolve_reparse_entry(
+                parsed,
+                original_row,
+                installment_role=entry.get('installment_role'),
+                installment_period=entry.get('installment_period'),
             )
         except Exception as exc:
             logger.warning('回填 tag_details 失败: %s', exc)
@@ -320,6 +329,8 @@ class ParseReviewService:
         uuid: str,
         formatted: str,
         tag_details: Optional[List[Dict[str, Any]]] = None,
+        selected_expense_key: Any = _UNSET,
+        expense_candidates_with_score: Any = _UNSET,
     ) -> bool:
         """更新单条记录的 formatted（重解析时使用，保留 tag_overrides）。"""
         cache_key = cls._get_cache_key(file_id)
@@ -335,6 +346,10 @@ class ParseReviewService:
                     entry['formatted'] = formatted
                     if tag_details is not None:
                         entry['tag_details'] = tag_details
+                    if selected_expense_key is not _UNSET:
+                        entry['selected_expense_key'] = selected_expense_key
+                    if expense_candidates_with_score is not _UNSET:
+                        entry['expense_candidates_with_score'] = expense_candidates_with_score
                     cls.normalize_entry_tag_fields(entry)
                     cls.rebuild_entry_edited_formatted(entry)
                     break
@@ -344,6 +359,27 @@ class ParseReviewService:
 
         timeout = cls._ttl_for_resave(file_id)
         return cls.save_parse_result(file_id, cached_data, timeout=timeout)
+
+    @classmethod
+    def iter_same_order_installment_entries(
+        cls,
+        formatted_data: List[Dict[str, Any]],
+        original_row: Optional[Dict[str, Any]],
+        exclude_uuid: str,
+    ):
+        """同一原单下的分期还款条目（不含当前重解析目标）。"""
+        order_uuid = str((original_row or {}).get('uuid') or '').strip()
+        if not order_uuid:
+            return
+        for entry in formatted_data:
+            if entry.get('uuid') == exclude_uuid:
+                continue
+            if entry.get('installment_role') != 'installment':
+                continue
+            row = entry.get('original_row') or {}
+            if str(row.get('uuid') or '').strip() != order_uuid:
+                continue
+            yield entry
     
     @classmethod
     def update_entry_edited_formatted(cls, file_id: int, uuid: str, edited_formatted: str) -> bool:
