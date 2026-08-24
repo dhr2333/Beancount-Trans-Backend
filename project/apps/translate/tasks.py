@@ -157,6 +157,8 @@ def parse_single_file_task(self, file_id, user_id, args):
                     'original_row': original_row,
                     'tag_details': tag_details,
                     'tag_overrides': ParseReviewService.default_tag_overrides(),
+                    'installment_role': parsed_entry.get('installment_role') or entry.get('installment_role'),
+                    'installment_period': parsed_entry.get('installment_period') if parsed_entry.get('installment_period') is not None else entry.get('installment_period'),
                 }
                 enhanced_formatted_data.append(enhanced_entry)
             

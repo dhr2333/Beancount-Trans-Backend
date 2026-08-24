@@ -24,6 +24,7 @@ from project.apps.translate.utils import FormatData
 from project.apps.translate.tasks import parse_single_file_task
 from project.apps.translate.services.analyze_service import AnalyzeService
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.services.parse.installment_expander import resolve_reparse_entry
 from project.apps.translate.services.alipay_refund_peer import resolve_refund_peer_for_row
 from project.apps.reconciliation.models import ScheduledTask
 from django.contrib.contenttypes.models import ContentType
@@ -205,6 +206,7 @@ class ReparseEntryView(APIView):
             return Response({'error': '缓存已过期或记录不存在'}, status=status.HTTP_404_NOT_FOUND)
 
         original_row = cache_data['original_row']
+        cached_parsed = cache_data.get('parsed_entry') or {}
         owner_id = get_token_user_id(request)
         user = User.objects.get(id=owner_id)
         config = get_user_config(user)
@@ -213,8 +215,14 @@ class ReparseEntryView(APIView):
             refund_peer = resolve_refund_peer_for_row(
                 original_row, user, owner_id, config, selected_key
             )
-            parsed_entry = single_parse_transaction(
+            base_parsed = single_parse_transaction(
                 original_row, owner_id, config, selected_key, refund_peer=refund_peer
+            )
+            parsed_entry = resolve_reparse_entry(
+                base_parsed,
+                original_row,
+                installment_role=cached_parsed.get('installment_role'),
+                installment_period=cached_parsed.get('installment_period'),
             )
 
             formatted = FormatData.format_instance(parsed_entry, config=config)
@@ -227,8 +235,8 @@ class ReparseEntryView(APIView):
             return Response({
                 "id": entry_id,
                 "formatted": formatted,
-                "ai_choose": selected_key,
-                "ai_candidates": parsed_entry['expense_candidates_with_score'],
+                "ai_choose": selected_key if parsed_entry.get('installment_role') != 'installment' else None,
+                "ai_candidates": parsed_entry.get('expense_candidates_with_score') or [],
                 "counterparty": original_row.get("counterparty", ""),
                 "commodity": original_row.get("commodity", ""),
             }, status=status.HTTP_200_OK)
@@ -662,8 +670,14 @@ class ParseReviewReparseView(ParseReviewViewSet):
             refund_peer = resolve_refund_peer_for_row(
                 original_row, request.user, owner_id, config, selected_key
             )
-            parsed_entry = single_parse_transaction(
+            base_parsed = single_parse_transaction(
                 original_row, owner_id, config, selected_key, refund_peer=refund_peer
+            )
+            parsed_entry = resolve_reparse_entry(
+                base_parsed,
+                original_row,
+                installment_role=target_entry.get('installment_role'),
+                installment_period=target_entry.get('installment_period'),
             )
             formatted = FormatData.format_instance(parsed_entry, config=config)
             
@@ -704,7 +718,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 'uuid': entry_uuid,
                 'formatted': formatted_result,
                 'edited_formatted': edited_formatted_result,
-                'selected_expense_key': selected_key,
+                'selected_expense_key': selected_key if parsed_entry.get('installment_role') != 'installment' else None,
                 'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', []),
                 **tag_payload,
             }, status=status.HTTP_200_OK)
