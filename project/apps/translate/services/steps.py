@@ -6,6 +6,11 @@ from project.apps.translate.services.pipeline import Step
 from project.apps.translate.services.init.bill_init_factory import InitFactory
 from project.apps.translate.services.parse.filters import TransactionFilter
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.services.parse.link_resolver import assign_transaction_links
+from project.apps.translate.services.parse.installment_expander import (
+    collect_refund_parent_uuids,
+    expand_parsed_entry,
+)
 from project.apps.translate.services.alipay_refund_peer import (
     build_ledger_index_for_user,
     build_raw_payment_index,
@@ -24,6 +29,20 @@ import os
 
 
 logger = logging.getLogger(__name__)
+
+
+def allocate_unique_cache_key(base: str, seen: Dict[str, int]) -> str:
+    """同一批账单内 cache_key 必须唯一。
+
+    交易订单号可能重复（组合支付、多笔关联），审核页与 Redis 都以 cache_key 定位条目。
+    首次保持原值，后续追加 ``--n``（URL 安全，避免与支付宝退款 ``parent_suffix`` 冲突）。
+    """
+    count = seen.get(base, 0) + 1
+    seen[base] = count
+    if count == 1:
+        return base
+    return f"{base}--{count}"
+
 
 class ConvertToCSVStep(Step):
     """对象转换步骤：将上传文件转换为CSV格式的文件对象"""
@@ -71,6 +90,9 @@ class InitializeBillStep(Step):
         try:
             # 工厂方法创建策略
             strategy = InitFactory.create_strategy(first_line)
+
+            # 识别账单类型后回到文件开头，避免 readline 导致首行数据偏移
+            csv_file.seek(0)
 
             # 策略执行初始化
             initialized_bill = strategy.init(csv_file, card_number=card_number, year=year)
@@ -122,9 +144,17 @@ class ParseStep(Step):
             ledger_index = build_ledger_index_for_user(user) if user else {}
             raw_payment_index = build_raw_payment_index(bill_data)
             parse_cache: Dict[str, Dict] = {}
+            seen_cache_keys: Dict[str, int] = {}
+            refund_parent_uuids = collect_refund_parent_uuids(bill_data)
 
             def _lazy_parse_payment(payment_row: Dict) -> Dict:
-                return single_parse_transaction(payment_row, owner_id, config, None)
+                entry = single_parse_transaction(payment_row, owner_id, config, None)
+                entry['_original_row'] = payment_row
+                expanded = expand_parsed_entry(entry, refund_parent_uuids)
+                for item in expanded:
+                    if item.get('installment_role') in (None, 'purchase'):
+                        return item
+                return expanded[0]
 
             for row in bill_data:
                 refund_peer = None
@@ -137,32 +167,38 @@ class ParseStep(Step):
                         _lazy_parse_payment,
                     )
 
-                payment_uuid = (row.get('uuid') or '').strip()
-                if (
-                    payment_uuid
-                    and payment_uuid in parse_cache
-                    and not alipay_is_refund_row(row)
-                ):
-                    parsed_entry = dict(parse_cache[payment_uuid])
-                    parsed_entry['_original_row'] = row
-                    parsed_entry['cache_key'] = payment_uuid
-                else:
-                    parsed_entry = single_parse_transaction(
-                        row, owner_id, config, None, refund_peer=refund_peer
-                    )
-                    parsed_entry['_original_row'] = row
-                    if parsed_entry.get('uuid'):
-                        cache_key = parsed_entry['uuid']
-                    else:
-                        row_str = str(row)
-                        cache_key = hashlib.md5(row_str.encode()).hexdigest()
-                    parsed_entry['cache_key'] = cache_key
-                    if payment_uuid and not alipay_is_refund_row(row):
-                        parse_cache[payment_uuid] = parsed_entry
+                # 每条账单行独立解析。parse_cache 仅供退款关联原单，不可复用为当前行结果
+                # （组合支付会共享交易订单号，复用会导致金额/账户被覆盖并在审核页撞 uuid）。
+                parsed_entry = single_parse_transaction(
+                    row, owner_id, config, None, refund_peer=refund_peer
+                )
+                parsed_entry['_original_row'] = row
+                expanded_entries = expand_parsed_entry(parsed_entry, refund_parent_uuids)
 
                 if 'parsed_data' not in context:
                     context['parsed_data'] = []
-                context['parsed_data'].append(parsed_entry)
+
+                payment_uuid = (row.get('uuid') or '').strip()
+                for entry in expanded_entries:
+                    if entry.get('uuid'):
+                        base_key = str(entry['uuid'])
+                    else:
+                        base_key = hashlib.md5(str(row).encode()).hexdigest()
+                    entry['cache_key'] = allocate_unique_cache_key(base_key, seen_cache_keys)
+
+                    if (
+                        payment_uuid
+                        and not alipay_is_refund_row(row)
+                        and payment_uuid not in parse_cache
+                        and entry.get('installment_role') in (None, 'purchase')
+                    ):
+                        parse_cache[payment_uuid] = entry
+
+                    context['parsed_data'].append(entry)
+
+            # 二次扫描：为同订单/退款关联条目挂 Beancount ^原单号（需在 CacheStep pop _original_row 之前）
+            if context.get('parsed_data'):
+                assign_transaction_links(context['parsed_data'])
         except Exception as e:
             import traceback
             logger.error(f"解析步骤详细错误: {traceback.format_exc()}")
@@ -231,6 +267,8 @@ class FormatStep(Step):
                 "commodity": entry.get("commodity", ""),
                 # "uuid": entry.get("uuid"),
                 "id": entry.get("cache_key"),
+                "installment_role": entry.get("installment_role"),
+                "installment_period": entry.get("installment_period"),
             }
             context['formatted_data'].append(formatted_dict)
         return context

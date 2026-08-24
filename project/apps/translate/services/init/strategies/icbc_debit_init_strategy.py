@@ -11,7 +11,7 @@ class ICBCDebitInitStrategy(InitStrategy):
 
     SOURCE_FILE_IDENTIFIER = "中国工商银行借记账户历史明细"
     HEADER_MARKER = "中国工商银行储蓄卡账单明细"
-    SKIP_ROWS = 1
+    SKIP_ROWS = 2
 
     def init(self, bill: Any, **kwargs) -> List[Dict[str, Any]]:
         csv_reader = csv.reader(bill)

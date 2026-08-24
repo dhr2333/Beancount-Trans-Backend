@@ -1,8 +1,10 @@
 # Beancount-Trans-Backend/project/apps/fava_instances/services/fava_manager.py
+import os
 import docker
 import time
 import logging
 from django.conf import settings
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +189,110 @@ class FavaContainerManager:
         
         logger.info(f"用户 {user.username} 共清理了 {cleaned_count} 个旧实例")
         return cleaned_count
+
+    def _wait_for_running(self, instance, timeout=10, interval=0.5):
+        """等待另一进程把实例切到 running。超时或失败返回 None。"""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            instance.refresh_from_db()
+            if instance.status == 'running':
+                if self.verify_and_cleanup_instance(instance):
+                    return instance
+                return None
+            if instance.status in ('error', 'stopped', 'stopping'):
+                return None
+            time.sleep(interval)
+        logger.warning(f"等待实例 {instance.uuid} 启动超时")
+        return None
+
+    def ensure_running(self, user, *, touch_last_accessed=False):
+        """
+        确保用户有一个真实运行中的 Fava 容器（幂等）。
+
+        登录预热与打开报表走同一入口，避免并发各起一个容器。
+        touch_last_accessed=True 时刷新 last_accessed（用户打开 Fava）；
+        预热已有容器时不刷新，闲置回收仍按 FAVA_CONTAINER_LIFETIME。
+        """
+        from project.apps.fava_instances.models import FavaInstance
+        from project.utils.file import BeanFileManager
+
+        if settings.FAVA_DEPLOY_MODE == 'static':
+            return None
+
+        def _touch(inst):
+            if touch_last_accessed:
+                inst.save()
+            return inst
+
+        running = FavaInstance.objects.filter(owner=user, status='running').first()
+        if running and self.verify_and_cleanup_instance(running):
+            logger.info(f"用户 {user.username} 的实例 {running.uuid} 容器运行正常")
+            return _touch(running)
+
+        with transaction.atomic():
+            locked_running = (
+                FavaInstance.objects.select_for_update()
+                .filter(owner=user, status='running')
+                .first()
+            )
+            locked_starting = (
+                FavaInstance.objects.select_for_update()
+                .filter(owner=user, status='starting')
+                .first()
+            )
+            should_start = False
+            instance = None
+            if locked_running:
+                instance = locked_running
+            elif locked_starting:
+                instance = locked_starting
+            else:
+                logger.info(f"清理用户 {user.username} 的所有旧实例")
+                self.cleanup_user_containers(user)
+                instance = FavaInstance(owner=user, status='starting')
+                instance.save()
+                should_start = True
+                logger.info(f"为用户 {user.username} 创建新实例 {instance.uuid}")
+
+        if instance.status == 'running':
+            if self.verify_and_cleanup_instance(instance):
+                return _touch(instance)
+            should_start = True
+
+        if instance.status == 'starting' and not should_start:
+            waited = self._wait_for_running(instance)
+            if waited:
+                logger.info(f"用户 {user.username} 的实例 {waited.uuid} 已由其他进程启动")
+                return _touch(waited)
+            should_start = True
+
+        if should_start:
+            if instance.status != 'starting' or instance.container_id:
+                logger.info(f"清理用户 {user.username} 的所有旧实例")
+                self.cleanup_user_containers(user)
+                instance = FavaInstance(owner=user, status='starting')
+                instance.save()
+                logger.info(f"为用户 {user.username} 创建新实例 {instance.uuid}")
+
+            user_assets_path = BeanFileManager.get_user_assets_path(user)
+            bean_file = os.path.join(settings.ASSETS_HOST_PATH, os.path.basename(user_assets_path))
+            try:
+                container_id, container_name = self.start_container(user, bean_file, instance)
+                instance.container_id = container_id
+                instance.container_name = container_name
+                instance.status = 'running'
+                instance.save()
+                logger.info(f"用户 {user.username} 的实例 {instance.uuid} 容器启动成功")
+                return instance
+            except Exception:
+                logger.exception(f"用户 {user.username} 的实例 {instance.uuid} 容器启动失败")
+                instance.container_id = ''
+                instance.container_name = ''
+                instance.status = 'error'
+                instance.save()
+                raise
+
+        raise Exception("Fava container failed to start")
 
     def stop_container(self, container_id):
         """

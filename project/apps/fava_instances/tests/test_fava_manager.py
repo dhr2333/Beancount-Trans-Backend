@@ -241,3 +241,130 @@ class TestFavaContainerManager:
         
         assert result is False
 
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    def test_ensure_running_returns_existing(self, mock_docker_from_env, mock_docker_client, mock_container, user):
+        """已有健康容器时直接返回，不刷新 last_accessed"""
+        from datetime import timedelta
+        from django.utils import timezone
+
+        mock_docker_from_env.return_value = mock_docker_client
+        mock_docker_client.containers.get.return_value = mock_container
+
+        instance = FavaInstance.objects.create(
+            owner=user,
+            status='running',
+            container_id='test-container-id',
+            container_name='test-container-name',
+        )
+        FavaInstance.objects.filter(pk=instance.pk).update(
+            last_accessed=timezone.now() - timedelta(hours=1)
+        )
+        instance.refresh_from_db()
+        original_accessed = instance.last_accessed
+
+        manager = FavaContainerManager()
+        result = manager.ensure_running(user, touch_last_accessed=False)
+
+        assert result.uuid == instance.uuid
+        instance.refresh_from_db()
+        assert instance.last_accessed == original_accessed
+
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    def test_ensure_running_touch_last_accessed(self, mock_docker_from_env, mock_docker_client, mock_container, user):
+        """打开 Fava 时刷新 last_accessed"""
+        from datetime import timedelta
+        from django.utils import timezone
+
+        mock_docker_from_env.return_value = mock_docker_client
+        mock_docker_client.containers.get.return_value = mock_container
+
+        instance = FavaInstance.objects.create(
+            owner=user,
+            status='running',
+            container_id='test-container-id',
+            container_name='test-container-name',
+        )
+        FavaInstance.objects.filter(pk=instance.pk).update(
+            last_accessed=timezone.now() - timedelta(hours=1)
+        )
+        instance.refresh_from_db()
+        original_accessed = instance.last_accessed
+
+        manager = FavaContainerManager()
+        manager.ensure_running(user, touch_last_accessed=True)
+
+        instance.refresh_from_db()
+        assert instance.last_accessed > original_accessed
+
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    @patch('project.utils.file.BeanFileManager')
+    def test_ensure_running_starts_new(self, mock_bean_manager, mock_docker_from_env, mock_docker_client, user):
+        """无运行实例时启动新容器"""
+        mock_docker_from_env.return_value = mock_docker_client
+        mock_bean_manager.get_user_assets_path.return_value = '/path/to/assets'
+
+        manager = FavaContainerManager()
+        manager.start_container = MagicMock(return_value=('new-id', 'new-name'))
+
+        result = manager.ensure_running(user)
+
+        assert result.status == 'running'
+        assert result.container_id == 'new-id'
+        assert result.container_name == 'new-name'
+        manager.start_container.assert_called_once()
+
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    @patch('project.utils.file.BeanFileManager')
+    def test_ensure_running_start_failed(self, mock_bean_manager, mock_docker_from_env, mock_docker_client, user):
+        """启动失败时实例标记为 error"""
+        mock_docker_from_env.return_value = mock_docker_client
+        mock_bean_manager.get_user_assets_path.return_value = '/path/to/assets'
+
+        manager = FavaContainerManager()
+        manager.start_container = MagicMock(side_effect=Exception('Container start failed'))
+
+        with pytest.raises(Exception, match='Container start failed'):
+            manager.ensure_running(user)
+
+        failed = FavaInstance.objects.filter(owner=user, status='error').first()
+        assert failed is not None
+        assert failed.container_id == ''
+
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    def test_ensure_running_static_mode(self, mock_docker_from_env, user):
+        """静态模式不创建容器"""
+        from django.test import override_settings
+
+        mock_docker_from_env.return_value = MagicMock()
+        manager = FavaContainerManager()
+        with override_settings(FAVA_DEPLOY_MODE='static'):
+            assert manager.ensure_running(user) is None
+        assert FavaInstance.objects.filter(owner=user).count() == 0
+
+    @patch('project.apps.fava_instances.services.fava_manager.docker.from_env')
+    def test_ensure_running_waits_for_starting(self, mock_docker_from_env, mock_docker_client, mock_container, user):
+        """已有 starting 实例时等待其变为 running"""
+        mock_docker_from_env.return_value = mock_docker_client
+        mock_docker_client.containers.get.return_value = mock_container
+
+        instance = FavaInstance.objects.create(
+            owner=user,
+            status='starting',
+            container_id='starting-id',
+            container_name='starting-name',
+        )
+
+        def wait(inst, timeout=10, interval=0.5):
+            inst.status = 'running'
+            inst.save(update_fields=['status'])
+            return inst
+
+        manager = FavaContainerManager()
+        manager._wait_for_running = wait
+        result = manager.ensure_running(user)
+
+        assert result.uuid == instance.uuid
+        instance.refresh_from_db()
+        assert instance.status == 'running'
+        assert instance.container_id == 'starting-id'
+

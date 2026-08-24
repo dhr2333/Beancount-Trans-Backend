@@ -201,7 +201,109 @@ class TestParseReviewReparseView:
     #     )
         
     #     assert response.status_code == status.HTTP_404_NOT_FOUND
-    #     assert '解析结果不存在或已过期' in response.data['error']
+    #             assert '解析结果不存在或已过期' in response.data['error']
+    
+    
+    @patch('project.apps.translate.views.views.resolve_refund_peer_for_row', return_value=None)
+    @patch('project.apps.translate.views.views.get_user_config')
+    @patch('project.apps.translate.views.views.single_parse_transaction')
+    def test_reparse_purchase_keeps_installment_siblings(
+        self, mock_parse, mock_get_config, _mock_peer, user, parse_review_task, parse_file
+    ):
+        """审核页改分类只更新 purchase 切片，分期还款行仍是 Payables↔信用卡。"""
+        from project.apps.translate.utils import BILL_ALI, FormatConfig
+
+        self.client.force_authenticate(user=user)
+        mock_get_config.return_value = FormatConfig()
+        order = '2024030122001174561405075488'
+        original_row = {
+            'transaction_time': '2024-03-01 21:08:08',
+            'transaction_category': '家居家装',
+            'counterparty': '公牛旗舰店',
+            'commodity': '轨道插座',
+            'transaction_type': '支出',
+            'amount': 444.00,
+            'payment_method': '中信银行信用卡分期(6428) 3期',
+            'transaction_status': '交易成功',
+            'notes': '/',
+            'bill_identifier': BILL_ALI,
+            'uuid': order,
+            'discount': False,
+        }
+        mock_parse.side_effect = lambda row, *_args, **_kwargs: {
+            'date': '2024-03-01',
+            'time': '21:08:08',
+            'uuid': order,
+            'status': 'ALiPay - 交易成功',
+            'payee': '公牛旗舰店',
+            'note': '轨道插座',
+            'tag': '#Project/Decoration',
+            'links': [order],
+            'balance': None,
+            'balance_date': '2024-03-02',
+            'expense': 'Expenses:Shopping:Digital',
+            'expenditure_sign': '',
+            'account': 'Liabilities:CreditCard:Bank:CITIC:C6428',
+            'account_sign': '-',
+            'amount': '444.00',
+            'discount': False,
+            'currency': 'CNY',
+            'selected_expense_key': '公牛',
+            'expense_candidates_with_score': [{'key': '公牛', 'score': 0.99}],
+            'tag_details': [{'path': 'Project/Decoration', 'sources': [{'type': 'manual'}]}],
+        }
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [
+                {
+                    'uuid': order,
+                    'formatted': 'purchase',
+                    'edited_formatted': 'purchase',
+                    'selected_expense_key': '公牛',
+                    'expense_candidates_with_score': [{'key': '公牛', 'score': 0.99}],
+                    'original_row': original_row,
+                    'installment_role': 'purchase',
+                    'installment_period': 0,
+                    'tag_details': [],
+                    'tag_overrides': {'removed_paths': [], 'added_paths': []},
+                },
+                {
+                    'uuid': f'{order}--2',
+                    'formatted': 'installment-0',
+                    'edited_formatted': 'installment-0',
+                    'selected_expense_key': None,
+                    'expense_candidates_with_score': [],
+                    'original_row': original_row,
+                    'installment_role': 'installment',
+                    'installment_period': 0,
+                    'tag_details': [],
+                    'tag_overrides': {'removed_paths': [], 'added_paths': []},
+                },
+            ],
+            'created_at': time.time(),
+            'review_expires_at': time.time() + 86400,
+        })
+
+        response = self.client.post(
+            f'/api/translate/parse-review/{parse_review_task.id}/reparse',
+            {'entry_uuid': order, 'selected_key': '装修'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['selected_expense_key'] == '装修'
+        assert 'Liabilities:Payables' in response.data['formatted']
+        assert 'Expenses:Shopping:Digital' in response.data['formatted']
+
+        cached = ParseReviewService.get_parse_result(parse_file.file_id)
+        purchase = next(e for e in cached['formatted_data'] if e['uuid'] == order)
+        installment = next(e for e in cached['formatted_data'] if e['uuid'] == f'{order}--2')
+        assert purchase['selected_expense_key'] == '装修'
+        assert 'Liabilities:Payables' in purchase['formatted']
+        assert installment['selected_expense_key'] is None
+        assert 'Liabilities:Payables' in installment['formatted']
+        assert 'Liabilities:CreditCard:Bank:CITIC:C6428' in installment['formatted']
+        assert 'Expenses:Shopping:Digital' not in installment['formatted']
 
 
 @pytest.mark.django_db

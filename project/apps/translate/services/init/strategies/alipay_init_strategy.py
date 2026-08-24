@@ -4,27 +4,36 @@ from typing import List, Dict, Any
 from project.apps.translate.utils import BILL_ALI
 import logging
 import csv
-import itertools
 
 
 class AlipayInitStrategy(InitStrategy):
     """支付宝账单初始化策略"""
 
     HEADER_MARKER = "-" * 84
-    SKIP_ROWS = 24
+    COLUMN_HEADER = "交易时间"
 
     def init(self, bill: Any, **kwargs) -> List[Dict[str, Any]]:
+        if hasattr(bill, "seek"):
+            bill.seek(0)
+
         csv_reader = csv.reader(bill)
-        data_rows = itertools.islice(csv_reader, self.SKIP_ROWS, None)  # 跳过前指定行
         records = []
+        data_started = False
 
         try:
-            for row in data_rows:
-                if not row or row[0].strip().startswith('交易时间'):
+            for row in csv_reader:
+                if not row:
                     continue
+                first_cell = row[0].strip()
+                if first_cell.startswith(self.COLUMN_HEADER):
+                    data_started = True
+                    continue
+                if not data_started or len(row) < 10:
+                    continue
+
                 transaction_type = "/" if row[5] == "不计收支" else row[5]
                 payment_method = "余额" if row[7].strip() == '' else row[7].strip()
-                notes = "/" if row[11].strip() == '' else row[11].strip()
+                notes = "/" if len(row) <= 11 or row[11].strip() == '' else row[11].strip()
 
                 record = {
                     'transaction_time': row[0].strip(),  # 交易时间

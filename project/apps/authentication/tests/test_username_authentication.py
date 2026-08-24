@@ -35,6 +35,27 @@ class TestUsernameAuthentication:
         assert 'access' in response.data
         assert response.data['user']['username'] == 'testuser'
 
+    @patch('project.apps.authentication.views.schedule_fava_warmup')
+    def test_login_schedules_fava_warmup(self, mock_warmup):
+        """登录成功后后台预热 Fava 容器"""
+        user = User.objects.create_user(
+            username='favauser',
+            password='TestPass123!',
+            email='fava@example.com'
+        )
+        user.profile.phone_number = '+8613800138099'
+        user.profile.phone_verified = True
+        user.profile.save()
+
+        response = self.client.post('/api/auth/username/login-by-password/', {
+            'username': 'favauser',
+            'password': 'TestPass123!'
+        })
+
+        assert response.status_code == 200
+        mock_warmup.assert_called_once()
+        assert mock_warmup.call_args[0][0].pk == user.pk
+
     def test_login_by_email_success(self):
         """测试邮箱登录成功"""
         user = User.objects.create_user(
