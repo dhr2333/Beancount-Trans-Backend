@@ -11,7 +11,7 @@ class BOCDebitInitStrategy(InitStrategy):
 
     SOURCE_FILE_IDENTIFIER = "中国银行交易流水明细清单"
     HEADER_MARKER = "中国银行储蓄卡账单明细"
-    SKIP_ROWS = 1
+    SKIP_ROWS = 2
 
     def init(self, bill: Any, **kwargs) -> List[Dict[str, Any]]:
         csv_reader = csv.reader(bill)
