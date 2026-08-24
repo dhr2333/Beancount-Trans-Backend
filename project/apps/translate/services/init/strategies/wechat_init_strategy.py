@@ -4,29 +4,43 @@ from typing import List, Dict, Any
 from project.apps.translate.utils import BILL_WECHAT
 import logging
 import csv
-import itertools
+import re
 
 
 class WeChatPayInitStrategy(InitStrategy):
     """微信账单初始化策略"""
 
     HEADER_MARKER = "微信支付账单明细,,,,,,,,"
-    SKIP_ROWS = 16
+    TRANSACTION_TIME_HEADER = "交易时间"
+    DETAIL_LIST_MARKER = "微信支付账单明细列表"
+    _DATETIME_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
 
     def init(self, bill: Any, **kwargs) -> List[Dict[str, Any]]:
         csv_reader = csv.reader(bill)
-        data_rows = itertools.islice(csv_reader, self.SKIP_ROWS, None)  # 跳过前指定行
         records = []
+        data_started = False
 
         try:
-            for row in data_rows:
+            for row in csv_reader:
                 if len(row) < 11:
                     continue
                 row = [c.strip().strip("\t") if isinstance(c, str) else c for c in row]
-                if row[0] == "交易时间":
+                first_cell = row[0]
+
+                if not data_started:
+                    if first_cell == self.TRANSACTION_TIME_HEADER:
+                        data_started = True
                     continue
+
+                if not first_cell:
+                    continue
+                if self.DETAIL_LIST_MARKER in first_cell or first_cell.startswith("-"):
+                    continue
+                if not self._DATETIME_PATTERN.match(first_cell):
+                    continue
+
                 record = {
-                    'transaction_time': row[0],  # 交易时间
+                    'transaction_time': first_cell,  # 交易时间
                     'transaction_category': row[1],  # 交易类型
                     'counterparty': row[2],  # 交易对方
                     'commodity': row[3],  # 商品
