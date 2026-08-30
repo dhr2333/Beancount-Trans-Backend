@@ -1,26 +1,41 @@
 import logging
+from collections.abc import Iterator
 
 from django.http import StreamingHttpResponse
 from drf_spectacular.utils import OpenApiResponse, extend_schema
-from rest_framework import status
+from rest_framework import mixins, status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from .models import ChatSession
 from .serializers import (
     AssistantChatRequestSerializer,
     AssistantChatResponseSerializer,
     AssistantFeedbackRequestSerializer,
     AssistantFeedbackResponseSerializer,
     AssistantStatusSerializer,
+    ChatSessionDetailSerializer,
+    ChatSessionListSerializer,
+    ChatSessionUpdateSerializer,
 )
 from .models import AssistantFeedback
 from .services.api_key_resolver import resolve_llm_provider
-from .services.assistant_service import AssistantService
+from .services.assistant_service import AssistantService, format_sse
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from .services.reference_date import get_reference_date
+from .services.session_service import (
+    append_user_message,
+    build_llm_messages,
+    create_session_with_user_message,
+    feedback_map_for_messages,
+    get_user_session,
+    list_user_sessions,
+    save_assistant_message,
+    update_session_title,
+)
 from .throttles import AssistantChatThrottle
 
 logger = logging.getLogger(__name__)
@@ -58,6 +73,63 @@ class AssistantStatusView(APIView):
         return Response(serializer.data)
 
 
+class ChatSessionViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return ChatSession.objects.filter(user=self.request.user).order_by('-modified')
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ChatSessionListSerializer
+        if self.action == 'partial_update':
+            return ChatSessionUpdateSerializer
+        return ChatSessionDetailSerializer
+
+    def list(self, request, *args, **kwargs):
+        search = request.query_params.get('search', '')
+        sessions = list_user_sessions(request.user, search=search)
+        serializer = ChatSessionListSerializer(sessions, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        session = self.get_object()
+        message_ids = list(session.messages.values_list('id', flat=True))
+        feedback_map = feedback_map_for_messages(request.user, message_ids)
+        serializer = ChatSessionDetailSerializer(
+            session,
+            context={'feedback_map': feedback_map},
+        )
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        session = self.get_object()
+        serializer = ChatSessionUpdateSerializer(session, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        session = update_session_title(session, serializer.validated_data['title'])
+        message_ids = list(session.messages.values_list('id', flat=True))
+        feedback_map = feedback_map_for_messages(request.user, message_ids)
+        detail = ChatSessionDetailSerializer(
+            session,
+            context={'feedback_map': feedback_map},
+        )
+        return Response(detail.data)
+
+    def destroy(self, request, *args, **kwargs):
+        session = self.get_object()
+        session.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class AssistantChatView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -74,7 +146,7 @@ class AssistantChatView(APIView):
 
         messages = [
             {'role': msg['role'], 'content': msg['content']}
-            for msg in serializer.validated_data['messages']
+            for msg in serializer.validated_data.get('messages') or []
         ]
         show_bql = serializer.validated_data.get('show_bql', False)
         deep_think = serializer.validated_data.get('deep_think', False)
@@ -118,7 +190,7 @@ class AssistantChatStreamView(APIView):
             200: OpenApiResponse(
                 description=(
                     'SSE 流式响应 (text/event-stream)。事件类型：'
-                    'status, reasoning_delta, thinking_set, tool_start, tool_end, '
+                    'session, status, reasoning_delta, thinking_set, tool_start, tool_end, '
                     'delta, done, error'
                 ),
             ),
@@ -129,12 +201,12 @@ class AssistantChatStreamView(APIView):
         serializer = AssistantChatRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        messages = [
-            {'role': msg['role'], 'content': msg['content']}
-            for msg in serializer.validated_data['messages']
-        ]
-        show_bql = serializer.validated_data.get('show_bql', False)
-        deep_think = serializer.validated_data.get('deep_think', False)
+        validated = serializer.validated_data
+        show_bql = validated.get('show_bql', False)
+        deep_think = validated.get('deep_think', False)
+        session_id = validated.get('session_id')
+        content = validated.get('content')
+        legacy_messages = validated.get('messages')
 
         provider = resolve_llm_provider(request.user)
         if not provider.configured:
@@ -149,9 +221,69 @@ class AssistantChatStreamView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        def event_stream():
+        persist_session = None
+        user_message = None
+        llm_messages = None
+
+        if session_id is not None or content:
+            text = (content or '').strip()
+            try:
+                if session_id is None:
+                    persist_session, user_message = create_session_with_user_message(
+                        request.user,
+                        text,
+                    )
+                else:
+                    persist_session = get_user_session(request.user, session_id)
+                    user_message = append_user_message(persist_session, text)
+                llm_messages = build_llm_messages(persist_session)
+            except ChatSession.DoesNotExist:
+                return Response({'detail': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            llm_messages = [
+                {'role': msg['role'], 'content': msg['content']}
+                for msg in legacy_messages or []
+            ]
+
+        def event_stream() -> Iterator[str]:
             stream_service = AssistantService(request.user, deep_think=deep_think)
-            yield from stream_service.chat_stream(messages, show_bql=show_bql)
+            if persist_session is not None and user_message is not None:
+                yield format_sse('session', {
+                    'id': str(persist_session.id),
+                    'title': persist_session.title,
+                    'user_message_id': str(user_message.id),
+                })
+
+            done_payload = None
+            try:
+                for event in stream_service._iter_chat_events(llm_messages, show_bql=show_bql):
+                    if event.event == 'done' and persist_session is not None and user_message is not None:
+                        assistant_message = save_assistant_message(
+                            persist_session,
+                            content=event.data['reply'],
+                            thinking=event.data.get('thinking', ''),
+                            reasoning=event.data.get('reasoning', ''),
+                            queries=event.data.get('queries', []),
+                        )
+                        event.data = {
+                            **event.data,
+                            'session_id': str(persist_session.id),
+                            'user_message_id': str(user_message.id),
+                            'assistant_message_id': str(assistant_message.id),
+                        }
+                        done_payload = event.data
+                    yield format_sse(event.event, event.data)
+            except (ValueError, LedgerNotFoundError) as exc:
+                yield format_sse('error', {'detail': str(exc)})
+            except Exception as exc:
+                logger.exception('AI 助手流式调用失败')
+                yield format_sse('error', {'detail': f'AI 助手暂时不可用: {exc}'})
+
+            if done_payload is None and persist_session is not None:
+                logger.warning(
+                    'Assistant stream ended without done event for session %s',
+                    persist_session.id,
+                )
 
         response = StreamingHttpResponse(
             event_stream(),
