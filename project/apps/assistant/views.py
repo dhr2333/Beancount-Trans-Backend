@@ -17,7 +17,7 @@ from .serializers import (
     AssistantStatusSerializer,
 )
 from .models import AssistantFeedback
-from .services.api_key_resolver import resolve_api_key
+from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from .services.reference_date import get_reference_date
@@ -44,11 +44,12 @@ class AssistantStatusView(APIView):
         summary='获取 AI 账本助手状态',
     )
     def get(self, request):
-        resolved = resolve_api_key(request.user)
+        provider = resolve_llm_provider(request.user)
         ledger_service = LedgerQueryService(request.user)
         data = {
-            'api_key_configured': resolved.api_key is not None,
-            'api_key_source': resolved.source,
+            'api_key_configured': provider.configured,
+            'assistant_model': provider.model if provider.configured else '',
+            'deep_think_supported': provider.supports_thinking_param,
             'ledger_exists': ledger_service.ledger_exists(),
             'ledger_path': ledger_service.ledger_path if ledger_service.ledger_exists() else '',
             'reference_date': get_reference_date(),
@@ -98,7 +99,6 @@ class AssistantChatView(APIView):
                 {'bql': q.bql, 'result_preview': q.result_preview}
                 for q in result.queries
             ],
-            'api_key_source': result.api_key_source,
             'thinking': result.thinking,
             'reasoning': result.reasoning,
             'model': service.model,
@@ -136,10 +136,10 @@ class AssistantChatStreamView(APIView):
         show_bql = serializer.validated_data.get('show_bql', False)
         deep_think = serializer.validated_data.get('deep_think', False)
 
-        resolved = resolve_api_key(request.user)
-        if not resolved.api_key:
+        provider = resolve_llm_provider(request.user)
+        if not provider.configured:
             return Response(
-                {'detail': '未配置 DeepSeek API Key，请在「输出配置」中填写，或联系管理员配置平台 Key。'},
+                {'detail': '尚未配置助手模型，请在「输出配置」的账本助手中填写接口与密钥（Ollama 可省略密钥）。'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         ledger_service = LedgerQueryService(request.user)

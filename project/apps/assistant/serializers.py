@@ -25,7 +25,6 @@ class QueryRecordSerializer(serializers.Serializer):
 class AssistantChatResponseSerializer(serializers.Serializer):
     reply = serializers.CharField()
     queries = QueryRecordSerializer(many=True)
-    api_key_source = serializers.ChoiceField(choices=['user', 'platform', 'none'])
     thinking = serializers.CharField(allow_blank=True, required=False, default='')
     reasoning = serializers.CharField(allow_blank=True, required=False, default='')
     model = serializers.CharField(allow_blank=True, required=False, default='')
@@ -33,7 +32,8 @@ class AssistantChatResponseSerializer(serializers.Serializer):
 
 class AssistantStatusSerializer(serializers.Serializer):
     api_key_configured = serializers.BooleanField()
-    api_key_source = serializers.ChoiceField(choices=['user', 'platform', 'none'])
+    assistant_model = serializers.CharField(allow_blank=True, required=False, default='')
+    deep_think_supported = serializers.BooleanField()
     ledger_exists = serializers.BooleanField()
     ledger_path = serializers.CharField(allow_blank=True)
     reference_date = serializers.DateField(help_text='助手使用的基准日期（今天）')

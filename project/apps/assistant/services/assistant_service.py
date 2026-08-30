@@ -10,7 +10,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from openai import OpenAI
 
-from .api_key_resolver import resolve_api_key
+from .api_key_resolver import LlmProvider, resolve_llm_provider
+from .thinking_params import build_completion_extras, is_thinking_enabled
 from .bql_reference import build_bql_capability_reference
 from .bql_validator import BQLValidationError
 from .dsml_tool_parser import extract_dsml_tool_calls, strip_dsml_markup
@@ -27,18 +28,9 @@ from .schema_provider import build_bql_examples, build_insight_bql_examples, get
 
 logger = logging.getLogger(__name__)
 
-REASONER_MODEL = 'deepseek-reasoner'
-DEFAULT_CHAT_MODEL = 'deepseek-chat'
-
-
-def resolve_assistant_model(*, deep_think: bool = False) -> str:
-    if deep_think:
-        return REASONER_MODEL
-    return getattr(settings, 'ASSISTANT_MODEL', DEFAULT_CHAT_MODEL)
-
-
-def is_reasoner_model(model: str) -> bool:
-    return model == REASONER_MODEL or model.endswith('-reasoner')
+PROVIDER_NOT_CONFIGURED_MESSAGE = (
+    '尚未配置助手模型，请在「输出配置」的账本助手中填写接口与密钥（Ollama 可省略密钥）。'
+)
 
 
 SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你只能基于工具返回的真实数据回答用户问题。
@@ -166,7 +158,6 @@ class QueryRecord:
 class AssistantReply:
     reply: str
     queries: list[QueryRecord] = field(default_factory=list)
-    api_key_source: str = 'none'
     thinking: str = ''
     reasoning: str = ''
 
@@ -205,12 +196,14 @@ class AssistantService:
         self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
         self.deep_think = deep_think
-        self.model = resolve_assistant_model(deep_think=deep_think)
+        self.provider = resolve_llm_provider(user)
+        self.model = self.provider.model
+        self.thinking_enabled = is_thinking_enabled(self.provider, deep_think=deep_think)
         self.max_bql_runs = get_max_bql_runs()
         self.max_tool_rounds = get_max_tool_rounds()
 
-    def _build_client(self, api_key: str) -> OpenAI:
-        return OpenAI(api_key=api_key, base_url='https://api.deepseek.com')
+    def _build_client(self, provider: LlmProvider) -> OpenAI:
+        return OpenAI(api_key=provider.api_key, base_url=provider.base_url)
 
     def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
         if name == 'get_ledger_context':
@@ -255,7 +248,6 @@ class AssistantService:
         reply_text: str,
         queries: list[QueryRecord],
         show_bql: bool,
-        api_key_source: str,
         *,
         reasoning: str = '',
         thinking: str = '',
@@ -273,7 +265,6 @@ class AssistantService:
         return AssistantReply(
             reply=reply_text,
             queries=queries,
-            api_key_source=api_key_source,
             thinking=thinking,
             reasoning=reasoning,
         )
@@ -285,7 +276,6 @@ class AssistantService:
                 {'bql': q.bql, 'result_preview': q.result_preview}
                 for q in reply.queries
             ],
-            'api_key_source': reply.api_key_source,
             'thinking': reply.thinking,
             'reasoning': reply.reasoning,
             'model': self.model,
@@ -296,7 +286,6 @@ class AssistantService:
         reply_text: str,
         queries: list[QueryRecord],
         show_bql: bool,
-        api_key_source: str,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
     ) -> AssistantReply:
@@ -305,7 +294,6 @@ class AssistantService:
             reply_text,
             queries,
             show_bql,
-            api_key_source,
             reasoning=reasoning_text,
             thinking=reasoning_text,
         )
@@ -324,8 +312,9 @@ class AssistantService:
             'model': self.model,
             'messages': llm_messages,
             'stream': True,
+            **build_completion_extras(self.provider, deep_think=self.deep_think),
         }
-        if not is_reasoner_model(self.model):
+        if not self.thinking_enabled:
             kwargs['temperature'] = 0.1
         if tools is not None:
             kwargs['tools'] = tools
@@ -392,7 +381,7 @@ class AssistantService:
                 for tc in tool_calls
             ],
         }
-        if is_reasoner_model(self.model):
+        if self.thinking_enabled:
             message['reasoning_content'] = reasoning_content
         return message
 
@@ -402,7 +391,6 @@ class AssistantService:
         llm_messages: list[dict[str, Any]],
         queries: list[QueryRecord],
         show_bql: bool,
-        api_key_source: str,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
     ) -> Iterator[StreamEvent]:
@@ -435,7 +423,6 @@ class AssistantService:
             reply_text,
             queries,
             show_bql,
-            api_key_source,
             api_reasoning_parts,
             planning_parts,
         )
@@ -491,7 +478,6 @@ class AssistantService:
             reply_text,
             final.queries,
             show_bql,
-            final.api_key_source,
             api_reasoning_parts,
             planning_parts,
         )
@@ -503,7 +489,6 @@ class AssistantService:
                 apply_guard_disclaimer(base_reply),
                 final.queries,
                 show_bql,
-                final.api_key_source,
                 reasoning=final.reasoning,
                 thinking=final.thinking,
             )
@@ -515,11 +500,9 @@ class AssistantService:
         messages: list[dict[str, str]],
         show_bql: bool = False,
     ) -> Iterator[StreamEvent]:
-        resolved = resolve_api_key(self.user)
-        if not resolved.api_key:
-            raise ValueError(
-                '未配置 DeepSeek API Key，请在「输出配置」中填写，或联系管理员配置平台 Key。'
-            )
+        provider = self.provider
+        if not provider.configured:
+            raise ValueError(PROVIDER_NOT_CONFIGURED_MESSAGE)
 
         if not self.ledger_query.ledger_exists():
             raise LedgerNotFoundError('账本文件尚未创建，请先上传并解析账单。')
@@ -527,7 +510,7 @@ class AssistantService:
         if len(messages) > self.MAX_MESSAGES:
             messages = messages[-self.MAX_MESSAGES:]
 
-        client = self._build_client(resolved.api_key)
+        client = self._build_client(provider)
         queries: list[QueryRecord] = []
         last_user_message = get_last_user_message(messages)
         insight_mode = detect_insight_mode(last_user_message)
@@ -585,7 +568,6 @@ class AssistantService:
                         llm_messages,
                         queries,
                         show_bql,
-                        resolved.source,
                         api_reasoning_parts,
                         planning_parts,
                     )
@@ -644,7 +626,6 @@ class AssistantService:
                 reply_text,
                 queries,
                 show_bql,
-                resolved.source,
                 api_reasoning_parts,
                 planning_parts,
             )
@@ -668,7 +649,6 @@ class AssistantService:
                         QueryRecord(bql=q['bql'], result_preview=q['result_preview'])
                         for q in event.data['queries']
                     ],
-                    api_key_source=event.data['api_key_source'],
                     thinking=event.data.get('thinking', ''),
                     reasoning=event.data.get('reasoning', ''),
                 )

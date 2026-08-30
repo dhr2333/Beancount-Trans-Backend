@@ -590,7 +590,8 @@ PHONENUMBER_DB_FORMAT = 'E164'
 
 # AI 账本助手
 ASSISTANT_DEEPSEEK_API_KEY = os.environ.get('ASSISTANT_DEEPSEEK_API_KEY', '')
-ASSISTANT_MODEL = os.environ.get('ASSISTANT_MODEL', 'deepseek-chat')
+ASSISTANT_BASE_URL = os.environ.get('ASSISTANT_BASE_URL', 'https://api.deepseek.com')
+ASSISTANT_MODEL = os.environ.get('ASSISTANT_MODEL', 'deepseek-v4-flash')
 ASSISTANT_MAX_BQL_ROWS = int(os.environ.get('ASSISTANT_MAX_BQL_ROWS', '100'))
 ASSISTANT_MAX_BQL_RUNS = int(os.environ.get('ASSISTANT_MAX_BQL_RUNS', '5'))
 ASSISTANT_MAX_TOOL_ROUNDS = int(os.environ.get('ASSISTANT_MAX_TOOL_ROUNDS', '8'))

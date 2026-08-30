@@ -35,6 +35,15 @@ class FormatConfig(models.Model):
     )
     ai_model = models.CharField(max_length=16, default='BERT', null=False, help_text="AI模型")
     deepseek_apikey = models.CharField(max_length=128, null=True, blank=True, help_text="DeepSeek API密钥")
+    assistant_base_url = models.CharField(
+        max_length=256, null=True, blank=True, help_text="账本助手 API 接口地址"
+    )
+    assistant_api_key = models.CharField(
+        max_length=256, null=True, blank=True, help_text="账本助手 API 密钥"
+    )
+    assistant_model = models.CharField(
+        max_length=64, null=True, blank=True, help_text="账本助手模型名称"
+    )
     parsing_mode_preference = models.CharField(
         max_length=16,
         default='review',
