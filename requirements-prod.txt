@@ -23,5 +23,4 @@ psycopg2-binary==2.9.12
 PyPDF2==3.0.1
 python-dotenv==1.2.2
 qrcode==8.2
-spacy==3.8.14
 transformers==5.7.0

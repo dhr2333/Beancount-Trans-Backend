@@ -1,5 +1,4 @@
 # project/apps/translate/services/similarity.py
-import spacy
 import torch
 import logging
 from pathlib import Path
@@ -79,30 +78,6 @@ class BertSimilarity(SimilarityModel):
             f.write(json.dumps(data_point, ensure_ascii=False) + "\n")
 
         return f"已收集 {len(candidates)} 个样本"
-
-
-class SpacySimilarity(SimilarityModel):
-    """spaCy相似度计算实现"""
-    _nlp = None
-
-    @classmethod
-    def load_model(cls):
-        if cls._nlp is None:
-            cls._nlp = spacy.load("zh_core_web_md", exclude=["parser", "ner", "lemmatizer"])
-        return cls._nlp
-
-    def calculate_similarity(self, text: str, candidates: List[str]) -> Dict[str, float]:
-        """返回每个候选词的相似度分数及最高分条目"""
-        nlp = self.load_model()
-        doc = nlp(text)
-        scores = {}
-
-        for candidate in candidates:
-            cand_doc = nlp(candidate)
-            scores[candidate] = doc.similarity(cand_doc)
-
-        best_match = max(scores.items(), key=lambda x: x[1])[0]
-        return {"best_match": best_match, "scores": scores}
 
 
 class DeepSeekSimilarity(SimilarityModel):

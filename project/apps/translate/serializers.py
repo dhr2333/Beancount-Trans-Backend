@@ -29,6 +29,12 @@ class FormatConfigSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_ai_model(self, value):
+        """spaCy 已移除，自动迁移到 BERT"""
+        if value == 'spaCy':
+            return 'BERT'
+        return value
+
     def create(self, validated_data):
         """创建时自动关联当前用户"""
         user = self.context['request'].user

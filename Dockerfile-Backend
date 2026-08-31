@@ -25,9 +25,6 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # 从命名构建上下文复制预训练模型（需要 BuildKit）
 COPY --from=pretrained_models / /build/pretrained_models
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --user /build/pretrained_models/zh_core_web_md-3.8.0-py3-none-any.whl
-
 COPY requirements-prod.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -i https://repo.huaweicloud.com/repository/pypi/simple/ --no-cache-dir --user -r requirements-prod.txt

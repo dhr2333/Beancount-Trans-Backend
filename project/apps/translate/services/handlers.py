@@ -11,7 +11,7 @@ from project.apps.translate.views.BOC_Debit import *
 from project.apps.translate.views.CMB_Credit import *
 from project.apps.translate.views.ICBC_Debit import *
 from project.apps.translate.views.CCB_Debit import *
-from project.apps.translate.services.similarity import BertSimilarity, SpacySimilarity, DeepSeekSimilarity
+from project.apps.translate.services.similarity import BertSimilarity, DeepSeekSimilarity
 from project.apps.translate.services.mapping_provider import get_mapping_provider
 import logging
 
@@ -179,10 +179,8 @@ class ExpenseHandler:
         self._asset_mappings = []  # 缓存资产映射数据
 
         # 初始化相似度计算模型
-        if model == "BERT":
+        if model == "BERT" or model == "spaCy":
             self.similarity_model = BertSimilarity()
-        elif model == "spaCy":
-            self.similarity_model = SpacySimilarity()
         elif model == "DeepSeek":
             if not api_key:
                 raise ValueError("使用DeepSeek模型需要API密钥")
