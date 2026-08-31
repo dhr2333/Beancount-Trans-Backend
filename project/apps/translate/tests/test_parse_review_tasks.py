@@ -82,8 +82,6 @@ class TestParseSingleFileTask:
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
             'password': None,
-            'balance': False,
-            'isCSVOnly': False
         }
         
         # 创建模拟的 Celery 任务请求
@@ -185,8 +183,6 @@ class TestParseSingleFileTask:
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
             'password': None,
-            'balance': False,
-            'isCSVOnly': False
         }
         result = parse_single_file_task.apply(
             args=[parse_file.file_id, user.id, args],
@@ -260,8 +256,6 @@ class TestParseSingleFileTask:
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
             'password': None,
-            'balance': False,
-            'isCSVOnly': False,
         }
         parse_single_file_task.apply(
             args=[parse_file.file_id, user.id, args],
@@ -317,8 +311,6 @@ class TestParseSingleFileTask:
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
             'password': None,
-            'balance': False,
-            'isCSVOnly': False
         }
         
         # 手动调用任务函数

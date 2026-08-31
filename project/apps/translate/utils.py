@@ -160,20 +160,6 @@ class FormatData:
 
         return formatted_str + "\n"
 
-    def balance_instance(entry):
-        formatted_str = ""
-
-        formatted_str += f"{entry['balance_date']}"
-        formatted_str += f" balance"
-        formatted_str += f" {entry['account']}"
-        formatted_str += f" {entry['balance']} CNY"
-        formatted_str += f"\n{entry['date']}"
-        formatted_str += f" pad"
-        formatted_str += f" {entry['account']}"
-        formatted_str += f" Assets:Other"
-
-        return formatted_str + "\n"
-
     def installment_instance(entry):
         formatted_str = ""
 

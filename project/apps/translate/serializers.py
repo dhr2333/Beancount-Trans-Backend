@@ -9,8 +9,6 @@ class AnalyzeSerializer(serializers.Serializer):
     write = serializers.BooleanField(required=False, default=False)
     password = serializers.CharField(required=False, allow_blank=True)
     passwords = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False)
-    balance = serializers.BooleanField(required=False, default=False)
-    isCSVOnly = serializers.BooleanField(required=False, default=False)
     csrfmiddlewaretoken = serializers.CharField(required=False, allow_blank=False)
     # 加密类型：auto（按扩展名自动识别）、pdf_password、zip_password、none
     encryption_type = serializers.CharField(required=False, allow_blank=True, default='auto')

@@ -250,15 +250,11 @@ class FormatStep(Step):
     """交易格式化步骤：将交易数据格式化为.bean文本格式"""
     def execute(self,  context: Dict) -> Dict:
         parsed_data = context['filtered_data']
-        args = context['args']
         config = context['config']
         if 'formatted_data' not in context:
             context['formatted_data'] = []
         for entry in parsed_data:
-            if args['balance'] is True:
-                formatted = FormatData.balance_instance(entry)
-            else:
-                formatted = FormatData.format_instance(entry,config=config)
+            formatted = FormatData.format_instance(entry, config=config)
             formatted_dict = {
                 "formatted": formatted,
                 "selected_expense_key": entry.get("selected_expense_key"),
