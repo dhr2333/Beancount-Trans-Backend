@@ -1,7 +1,64 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
 from project.models import BaseModel
+
+
+class ChatSession(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assistant_sessions',
+    )
+    title = models.CharField(max_length=120, blank=True, default='')
+    title_locked = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = '助手会话'
+        verbose_name_plural = '助手会话'
+        ordering = ['-modified']
+        indexes = [
+            models.Index(fields=['user', '-modified']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.user_id} {self.title or self.id}'
+
+
+class ChatMessage(BaseModel):
+    ROLE_USER = 'user'
+    ROLE_ASSISTANT = 'assistant'
+    ROLE_CHOICES = [
+        (ROLE_USER, '用户'),
+        (ROLE_ASSISTANT, '助手'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(
+        ChatSession,
+        on_delete=models.CASCADE,
+        related_name='messages',
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES)
+    content = models.TextField()
+    thinking = models.TextField(blank=True, default='')
+    reasoning = models.TextField(blank=True, default='')
+    queries = models.JSONField(default=list, blank=True)
+    position = models.PositiveIntegerField()
+
+    class Meta:
+        verbose_name = '助手消息'
+        verbose_name_plural = '助手消息'
+        ordering = ['position']
+        indexes = [
+            models.Index(fields=['session', 'position']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.session_id} {self.role} #{self.position}'
 
 
 class AssistantFeedback(BaseModel):

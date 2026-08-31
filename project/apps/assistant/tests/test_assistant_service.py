@@ -4,15 +4,14 @@ import pytest
 from datetime import date
 from django.test import override_settings
 
+from project.apps.assistant.services.api_key_resolver import DEFAULT_ASSISTANT_MODEL
 from project.apps.assistant.services.assistant_service import (
     AssistantService,
-    REASONER_MODEL,
     StreamEvent,
     build_system_prompt,
     build_tools,
     get_max_bql_runs,
     get_max_tool_rounds,
-    resolve_assistant_model,
 )
 from project.apps.translate.models import FormatConfig
 
@@ -83,6 +82,14 @@ def _collect_events(service, messages, show_bql=False):
 _FOOD_SUM_BQL = (
     '{"query": "SELECT sum(units(position)) WHERE account ~ \'^Expenses:Food\'"}'
 )
+
+
+def _clear_assistant_provider(config: FormatConfig) -> None:
+    config.deepseek_apikey = ''
+    config.assistant_api_key = ''
+    config.assistant_base_url = ''
+    config.assistant_model = ''
+    config.save()
 
 _DSML_FOOD_BQL = (
     '<｜｜DSML｜｜tool_calls>\n'
@@ -160,8 +167,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_stops_after_max_bql_runs(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         max_runs = get_max_bql_runs()
         mock_client = MagicMock()
@@ -183,8 +189,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_with_tool_calls(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -198,14 +203,11 @@ class TestAssistantService:
 
         assert '50' in result.reply
         assert len(result.queries) == 1
-        assert result.api_key_source == 'platform'
-
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_with_multiple_tool_rounds_before_reply(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -228,8 +230,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_forces_synthesis_when_tool_limit_exceeded(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -253,19 +254,17 @@ class TestAssistantService:
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='')
     def test_chat_without_api_key_raises(self, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         service = AssistantService(user)
-        with pytest.raises(ValueError, match='未配置 DeepSeek API Key'):
+        with pytest.raises(ValueError, match='尚未配置助手模型'):
             service.chat([{'role': 'user', 'content': '你好'}])
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_iter_chat_events_emits_sse_sequence(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -294,8 +293,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_stream_yields_formatted_sse(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -313,8 +311,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_text_reply_streams_deltas_during_llm_round(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -336,8 +333,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_reasoning_delta_emitted_and_in_done(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -363,8 +359,7 @@ class TestAssistantService:
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_planning_text_before_tool_call_in_reasoning(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         planning = '我先获取账本上下文，了解账户结构。'
         mock_client = MagicMock()
@@ -397,8 +392,7 @@ class TestAssistantService:
         self, mock_openai_cls, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -421,8 +415,7 @@ class TestAssistantService:
         self, mock_openai_cls, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -447,8 +440,7 @@ class TestAssistantService:
         self, mock_openai_cls, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -464,16 +456,12 @@ class TestAssistantService:
         assert '部分金额可能未完全来自' not in result.reply
         assert '0' in result.reply
 
-    def test_resolve_assistant_model(self):
-        with override_settings(ASSISTANT_MODEL='deepseek-chat'):
-            assert resolve_assistant_model(deep_think=False) == 'deepseek-chat'
-            assert resolve_assistant_model(deep_think=True) == REASONER_MODEL
-
-    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test', ASSISTANT_MODEL='deepseek-v4-flash')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
-    def test_deep_think_selects_reasoner_model(self, mock_openai_cls, user, bean_file):
+    def test_deep_think_uses_thinking_param_not_model_swap(self, mock_openai_cls, user, bean_file):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
+        config.assistant_api_key = ''
+        config.assistant_base_url = ''
         config.save()
 
         mock_client = MagicMock()
@@ -486,7 +474,8 @@ class TestAssistantService:
         service.chat([{'role': 'user', 'content': '你好'}])
 
         first_kwargs = mock_client.chat.completions.create.call_args_list[0].kwargs
-        assert first_kwargs['model'] == REASONER_MODEL
+        assert first_kwargs['model'] == 'deepseek-v4-flash'
+        assert first_kwargs['extra_body'] == {'thinking': {'type': 'enabled'}}
         assert 'temperature' not in first_kwargs
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
@@ -495,8 +484,7 @@ class TestAssistantService:
         self, mock_openai_cls, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
-        config.save()
+        _clear_assistant_provider(config)
 
         reasoning = '先查餐饮总额。'
         mock_client = MagicMock()
@@ -520,13 +508,14 @@ class TestAssistantService:
         assert tool_assistant['reasoning_content'] == reasoning
         assert '50' in done.data['reply']
 
-    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test', ASSISTANT_MODEL='deepseek-v4-flash')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
     def test_chat_model_skips_reasoning_content_in_history(
         self, mock_openai_cls, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
-        config.deepseek_apikey = ''
+        config.assistant_api_key = ''
+        config.assistant_base_url = ''
         config.save()
 
         mock_client = MagicMock()
@@ -546,5 +535,6 @@ class TestAssistantService:
         )
         assert 'reasoning_content' not in tool_assistant
         first_kwargs = mock_client.chat.completions.create.call_args_list[0].kwargs
-        assert first_kwargs['model'] == 'deepseek-chat'
+        assert first_kwargs['model'] == DEFAULT_ASSISTANT_MODEL
         assert first_kwargs.get('temperature') == 0.1
+        assert 'extra_body' not in first_kwargs

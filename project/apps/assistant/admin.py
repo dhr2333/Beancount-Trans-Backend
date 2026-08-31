@@ -1,6 +1,24 @@
 from django.contrib import admin
 
-from .models import AssistantFeedback
+from .models import AssistantFeedback, ChatMessage, ChatSession
+
+
+class ChatMessageInline(admin.TabularInline):
+    model = ChatMessage
+    extra = 0
+    readonly_fields = ('id', 'role', 'position', 'created')
+    fields = ('position', 'role', 'content', 'created')
+    ordering = ('position',)
+
+
+@admin.register(ChatSession)
+class ChatSessionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'title', 'title_locked', 'modified', 'created')
+    list_filter = ('title_locked', 'created')
+    search_fields = ('title', 'user__username')
+    readonly_fields = ('created', 'modified')
+    ordering = ('-modified',)
+    inlines = [ChatMessageInline]
 
 
 @admin.register(AssistantFeedback)

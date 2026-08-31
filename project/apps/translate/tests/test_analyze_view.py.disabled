@@ -59,7 +59,6 @@ def test_alipay_end_to_end_processing(client, loaded_expenses):
         # 4. 构建完整请求参数
         post_data = {
             "password": "",
-            "isCSVOnly": "false",
             "balance": "false",
             "write": "false",
             "cmb_credit_ignore": "false",

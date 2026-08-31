@@ -299,8 +299,6 @@ class MultiBillAnalyzeView(APIView):
             'cmb_credit_ignore': True,
             'boc_debit_ignore': True,
             'password': request.data.get('password') or None,
-            'balance': False,
-            'isCSVOnly': False
         }
 
         for file_id in file_ids:
@@ -1051,8 +1049,6 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
                 'cmb_credit_ignore': True,
                 'boc_debit_ignore': True,
                 'password': None,
-                'balance': False,
-                'isCSVOnly': False
             }
             
             # 异步执行解析任务
