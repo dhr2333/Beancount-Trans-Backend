@@ -5,6 +5,7 @@ from .views import (
     AssistantChatStreamView,
     AssistantChatView,
     AssistantFeedbackView,
+    AssistantKeyTestView,
     AssistantStatusView,
     ChatSessionViewSet,
 )
@@ -17,5 +18,6 @@ urlpatterns = [
     path('chat/stream/', AssistantChatStreamView.as_view(), name='assistant-chat-stream'),
     path('feedback/', AssistantFeedbackView.as_view(), name='assistant-feedback'),
     path('status/', AssistantStatusView.as_view(), name='assistant-status'),
+    path('test-key/', AssistantKeyTestView.as_view(), name='assistant-test-key'),
     path('', include(router.urls)),
 ]

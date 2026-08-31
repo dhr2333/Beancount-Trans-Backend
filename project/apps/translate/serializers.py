@@ -35,10 +35,32 @@ class FormatConfigSerializer(serializers.ModelSerializer):
             return 'BERT'
         return value
 
+    def validate(self, attrs):
+        ai_model = attrs.get('ai_model', getattr(self.instance, 'ai_model', None))
+        assistant_key = attrs.get(
+            'assistant_api_key',
+            getattr(self.instance, 'assistant_api_key', None) if self.instance else None,
+        )
+        if ai_model == 'DeepSeek' and not (assistant_key or '').strip():
+            raise serializers.ValidationError({
+                'ai_model': '云端解析需要先在 Copilot 填写 API 密钥',
+            })
+        return attrs
+
     def create(self, validated_data):
         """创建时自动关联当前用户"""
         user = self.context['request'].user
+        assistant_key = (validated_data.get('assistant_api_key') or '').strip() or None
+        if 'assistant_api_key' in validated_data:
+            validated_data['deepseek_apikey'] = assistant_key
         return FormatConfig.objects.create(owner=user, **validated_data)
+
+    def update(self, instance, validated_data):
+        if 'assistant_api_key' in validated_data:
+            validated_data['deepseek_apikey'] = (
+                (validated_data.get('assistant_api_key') or '').strip() or None
+            )
+        return super().update(instance, validated_data)
 
 
 # class ReparseSerializer(serializers.Serializer):

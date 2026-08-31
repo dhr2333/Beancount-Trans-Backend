@@ -110,3 +110,31 @@ class TestAssistantAPI:
         first_kwargs = mock_client.chat.completions.create.call_args_list[0].kwargs
         assert first_kwargs['model'] == 'deepseek-v4-flash'
         assert first_kwargs['extra_body'] == {'thinking': {'type': 'enabled'}}
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk')
+    def test_test_key_empty_allows_copilot_not_parse(self, api_client):
+        response = api_client.post(
+            reverse('assistant-test-key'),
+            {'api_key': '', 'base_url': '', 'model': ''},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert response.data['ok'] is True
+        assert response.data['copilot_available'] is True
+        assert response.data['parse_available'] is False
+
+    @patch('project.apps.assistant.services.key_tester.probe_llm_connection')
+    def test_test_key_filled_enables_parse(self, mock_probe, api_client):
+        response = api_client.post(
+            reverse('assistant-test-key'),
+            {
+                'api_key': 'user-sk-test',
+                'base_url': 'https://api.deepseek.com',
+                'model': 'deepseek-v4-flash',
+            },
+            format='json',
+        )
+        mock_probe.assert_called_once()
+        assert response.status_code == 200
+        assert response.data['ok'] is True
+        assert response.data['parse_available'] is True

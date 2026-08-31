@@ -16,6 +16,8 @@ from .serializers import (
     AssistantChatResponseSerializer,
     AssistantFeedbackRequestSerializer,
     AssistantFeedbackResponseSerializer,
+    AssistantKeyTestRequestSerializer,
+    AssistantKeyTestResponseSerializer,
     AssistantStatusSerializer,
     ChatSessionDetailSerializer,
     ChatSessionListSerializer,
@@ -24,6 +26,7 @@ from .serializers import (
 from .models import AssistantFeedback
 from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService, format_sse
+from .services.key_tester import evaluate_assistant_key
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from .services.reference_date import get_reference_date
 from .services.session_service import (
@@ -339,3 +342,24 @@ class AssistantFeedbackView(APIView):
             'comment': feedback.comment,
         }
         return Response(AssistantFeedbackResponseSerializer(response_data).data)
+
+
+class AssistantKeyTestView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistantChatThrottle]
+
+    @extend_schema(
+        request=AssistantKeyTestRequestSerializer,
+        responses={200: AssistantKeyTestResponseSerializer},
+        summary='测试 Copilot API 密钥',
+    )
+    def post(self, request):
+        serializer = AssistantKeyTestRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = evaluate_assistant_key(
+            api_key=serializer.validated_data.get('api_key', ''),
+            base_url=serializer.validated_data.get('base_url', ''),
+            model=serializer.validated_data.get('model', ''),
+        )
+        return Response(AssistantKeyTestResponseSerializer(result.__dict__).data)

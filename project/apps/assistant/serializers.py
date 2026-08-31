@@ -49,6 +49,19 @@ class AssistantChatResponseSerializer(serializers.Serializer):
     assistant_message_id = serializers.UUIDField(required=False, allow_null=True)
 
 
+class AssistantKeyTestRequestSerializer(serializers.Serializer):
+    api_key = serializers.CharField(required=False, allow_blank=True, default='')
+    base_url = serializers.CharField(required=False, allow_blank=True, default='')
+    model = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class AssistantKeyTestResponseSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    copilot_available = serializers.BooleanField()
+    parse_available = serializers.BooleanField()
+    detail = serializers.CharField()
+
+
 class AssistantStatusSerializer(serializers.Serializer):
     api_key_configured = serializers.BooleanField()
     assistant_model = serializers.CharField(allow_blank=True, required=False, default='')

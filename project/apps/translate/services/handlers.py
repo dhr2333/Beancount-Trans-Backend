@@ -183,7 +183,7 @@ class ExpenseHandler:
             self.similarity_model = BertSimilarity()
         elif model == "DeepSeek":
             if not api_key:
-                raise ValueError("使用DeepSeek模型需要API密钥")
+                raise ValueError("解析使用 DeepSeek 时需要在「输出配置 → Copilot」填写 API 密钥")
             self.similarity_model = DeepSeekSimilarity(api_key)
         else:
             self.similarity_model = BertSimilarity()  # 默认使用BERT
