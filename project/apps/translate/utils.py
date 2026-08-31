@@ -160,29 +160,6 @@ class FormatData:
 
         return formatted_str + "\n"
 
-    def installment_instance(entry):
-        formatted_str = ""
-
-        formatted_str += f"{entry['date']}"
-        formatted_str += f" #"
-        formatted_str += f" \"{entry['payee']}"
-        formatted_str += f" ["
-        formatted_str += f"{entry['installment_granularity']}"
-        formatted_str += f" REPEAT"
-        formatted_str += f" {entry['installment_cycle']}"
-        formatted_str += f" TIMES]\""
-        formatted_str += f"\n    time: \"{entry['time']}\"\n"
-        if entry['uuid'] is not None:
-            formatted_str += f"    uuid: \"{entry['uuid']}\"\n"
-        formatted_str += f"    status: \"{entry['status']}\"\n"
-        formatted_str += f"    {entry['expense']}"
-        formatted_str += f" {entry['expenditure_sign']}"
-        formatted_str += f" {float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY\n"
-        formatted_str += f"    {entry['account']} {entry['account_sign']}"
-        formatted_str += f"{float(entry['amount'])/float(entry['installment_cycle']):.2f} CNY"
-
-        return formatted_str + "\n"
-
 
 # class IgnoreData:
 #     def __init__(self, data):

@@ -291,14 +291,6 @@ def alipay_get_commission(data):
     return data['notes'][4:]
 
 
-def alipay_installment_granularity(data):
-    return "MONTHLY"  # 默认以月进行支付 #TODO
-
-
-def alipay_installment_cycle(data):
-    return 3  #TODO ，硬编码，需修改
-
-
 def alipay_get_discount(data):
     return data['discount']
 

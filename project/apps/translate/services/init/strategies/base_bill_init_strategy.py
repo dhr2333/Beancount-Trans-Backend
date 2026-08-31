@@ -55,16 +55,6 @@ class InitStrategy(ABC):
     #     pass
 
     # @abstractmethod
-    # def get_installment_granularity(self, data: Dict) -> str:
-    #     """获取分期粒度"""
-    #     pass
-
-    # @abstractmethod
-    # def get_installment_cycle(self, data: Dict) -> int:
-    #     """获取分期周期"""
-    #     pass
-
-    # @abstractmethod
     # def get_discount(self, data: Dict) -> bool:
     #     """获取折扣信息"""
     #     pass

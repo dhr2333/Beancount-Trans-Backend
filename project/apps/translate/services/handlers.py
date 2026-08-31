@@ -746,19 +746,6 @@ def get_commission(data):
     return get_attribute(data, commission_handlers)
 
 
-def get_installment_granularity(data):
-    installment_granularity_handlers = {
-        BILL_ALI: alipay_installment_granularity,
-    }
-    return get_attribute(data, installment_granularity_handlers)
-
-
-def get_installment_cycle(data):
-    installment_cycle_handlers = {
-        BILL_ALI: alipay_installment_cycle,
-    }
-    return get_attribute(data, installment_cycle_handlers)
-
 def get_discount(data):
     tag_handlers = {
         BILL_ALI: alipay_get_discount,

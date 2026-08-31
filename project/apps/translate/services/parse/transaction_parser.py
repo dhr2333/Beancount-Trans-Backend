@@ -3,7 +3,7 @@ from datetime import timedelta, datetime
 from typing import Dict, Optional
 from project.apps.translate.services.handlers import AccountHandler, ExpenseHandler, PayeeHandler
 from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
-from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_installment_granularity, get_installment_cycle, get_discount
+from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_discount
 from project.apps.translate.services.tag_merger import merge_tags_with_details
 from project.apps.translate.utils import get_fallback_account
 
@@ -53,8 +53,6 @@ def single_parse_transaction(
         fallback_account = get_fallback_account(config)
         account = account_handler.get_account(row, owner_id, fallback_account=fallback_account)
         commission = get_commission(row)
-        installment_granularity = get_installment_granularity(row)
-        installment_cycle = get_installment_cycle(row)
         discount = get_discount(row)
         currency = expense_handler.get_currency()
 
@@ -94,8 +92,6 @@ def single_parse_transaction(
         #     "asset_sign": account_sign,  # 账户标志(如收入为"+"、支出为"-"，遵循复式记账原则)
         #     "cost": None,  # 成本(如有)
         #     "prices": amount,  # 交易金额
-        #     "installment_granularity": installment_granularity,  # 分期粒度(如月、周等)
-        #     "installment_cycle": installment_cycle,  # 分期周期(如每月、每周等)
         #     "discount": discount,  # 折扣信息
         #     "currencies": currency,  # 交易货币
         #     "selected_expense_key": selected_expense_key,  # AI模型选择的映射关键字
@@ -118,8 +114,6 @@ def single_parse_transaction(
             "account": account,
             "account_sign": account_sign,
             "amount": amount,
-            "installment_granularity": installment_granularity,
-            "installment_cycle": installment_cycle,
             "discount": discount,
             "currency": currency,
             "selected_expense_key": selected_expense_key,

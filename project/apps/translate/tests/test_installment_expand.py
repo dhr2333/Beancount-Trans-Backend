@@ -60,8 +60,6 @@ def _parsed_from_row(row, *_args, **_kwargs):
         "account": "Liabilities:CreditCard:Bank:CITIC:C6428",
         "account_sign": "-",
         "amount": f"{float(row['amount']):.2f}",
-        "installment_granularity": "MONTHLY",
-        "installment_cycle": 3,
         "discount": False,
         "currency": "CNY",
         "selected_expense_key": "公牛",
