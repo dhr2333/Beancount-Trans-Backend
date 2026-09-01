@@ -201,7 +201,7 @@ class TestParseReviewReparseView:
     #     )
         
     #     assert response.status_code == status.HTTP_404_NOT_FOUND
-    #             assert '解析结果不存在或已过期' in response.data['error']
+    #             assert '审核缓存缺失' in response.data['error']
     
     
     @patch('project.apps.translate.views.views.resolve_refund_peer_for_row', return_value=None)
@@ -496,7 +496,7 @@ class TestParseReviewConfirmView:
         response = self.client.post(f'/api/translate/parse-review/{parse_review_task.id}/confirm')
         
         assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert '解析结果不存在或已过期' in response.data['error']
+        assert '审核缓存缺失' in response.data['error']
     
     def test_confirm_write_task_completed(self, user, parse_review_task_completed, parse_file, mock_parse_result_data):
         """测试处理任务已完成的情况"""

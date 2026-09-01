@@ -203,7 +203,13 @@ class AssistantService:
         self.max_tool_rounds = get_max_tool_rounds()
 
     def _build_client(self, provider: LlmProvider) -> OpenAI:
-        return OpenAI(api_key=provider.api_key, base_url=provider.base_url)
+        import httpx
+
+        return OpenAI(
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            timeout=httpx.Timeout(10.0, read=120.0),
+        )
 
     def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
         if name == 'get_ledger_context':

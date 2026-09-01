@@ -282,11 +282,15 @@ class AssistantChatStreamView(APIView):
                 logger.exception('AI 助手流式调用失败')
                 yield format_sse('error', {'detail': f'AI 助手暂时不可用: {exc}'})
 
-            if done_payload is None and persist_session is not None:
-                logger.warning(
-                    'Assistant stream ended without done event for session %s',
-                    persist_session.id,
-                )
+            if done_payload is None:
+                if persist_session is not None:
+                    logger.warning(
+                        'Assistant stream ended without done event for session %s',
+                        persist_session.id,
+                    )
+                else:
+                    logger.warning('Assistant stream ended without done event')
+                yield format_sse('error', {'detail': '助手响应未完成，请重试'})
 
         response = StreamingHttpResponse(
             event_stream(),

@@ -138,3 +138,28 @@ class TestAssistantAPI:
         assert response.status_code == 200
         assert response.data['ok'] is True
         assert response.data['parse_available'] is True
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.views.AssistantService')
+    def test_chat_stream_without_done_emits_error(self, mock_service_cls, api_client, user, bean_file):
+        from project.apps.assistant.services.assistant_service import StreamEvent
+
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+
+        mock_service = mock_service_cls.return_value
+        mock_service._iter_chat_events.return_value = iter([
+            StreamEvent('delta', {'content': '部分回复'}),
+        ])
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {'messages': [{'role': 'user', 'content': '你好'}]},
+            format='json',
+            HTTP_ACCEPT='text/event-stream',
+        )
+
+        assert response.status_code == 200
+        body = b''.join(response.streaming_content).decode('utf-8')
+        assert 'event: error' in body
+        assert '助手响应未完成' in body

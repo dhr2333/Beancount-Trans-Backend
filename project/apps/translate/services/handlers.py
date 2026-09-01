@@ -649,6 +649,8 @@ def get_shouzhi(data): #TODO
                     return high, loss
             elif data['commodity'] == "余额宝-自动转入" or data['commodity'] == "余额宝-单次转入" or data['commodity'] == "转账收款到余额宝":
                 return high, loss
+            elif data['commodity'] == "充值-普通充值":
+                return high, loss
             elif "放款成功" in  data['transaction_status']:
                 return loss, high
             elif "还款成功" in  data['transaction_status']:

@@ -915,7 +915,7 @@ class ParseReviewConfirmView(ParseReviewViewSet):
         
         if not final_entries:
             return Response(
-                {'error': '解析结果不存在或已过期，请重新解析'},
+                {'error': '审核缓存缺失，请勿重新解析，请先检查网络后重试写入'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
