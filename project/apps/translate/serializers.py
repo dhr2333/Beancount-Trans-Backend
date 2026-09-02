@@ -81,3 +81,8 @@ class ReparseSerializer(serializers.Serializer):
     """解析器配置序列化器"""
     entry_id = serializers.CharField(required=True)
     selected_key = serializers.CharField(required=True)
+    mapping_type = serializers.ChoiceField(
+        choices=['expense', 'income', 'asset'],
+        required=False,
+        default='expense',
+    )

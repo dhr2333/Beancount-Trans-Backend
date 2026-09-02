@@ -395,3 +395,19 @@ class TestParseReviewService:
         }
         assert ParseReviewService.entry_postings_manually_edited(entry) is False
 
+    def test_row_matches_mapping_key_expense_counterparty(self):
+        row = {'counterparty': '星巴克', 'commodity': '咖啡'}
+        assert ParseReviewService.row_matches_mapping_key(row, '星巴克') is True
+        assert ParseReviewService.row_matches_mapping_key(row, '咖啡') is True
+        assert ParseReviewService.row_matches_mapping_key(row, '麦当劳') is False
+
+    def test_row_matches_mapping_key_asset_payment_method(self):
+        row = {
+            'counterparty': '转账',
+            'commodity': '余额宝',
+            'payment_method': '中国银行储蓄卡(0814)',
+        }
+        assert ParseReviewService.row_matches_mapping_key(row, '0814', mapping_type='asset') is True
+        assert ParseReviewService.row_matches_mapping_key(row, '0814') is False
+        assert ParseReviewService.row_matches_mapping_key(row, '储蓄卡', mapping_type='asset') is True
+

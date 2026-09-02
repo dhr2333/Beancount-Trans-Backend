@@ -156,6 +156,8 @@ class SingleBillAnalyzeView(APIView):
                         "ai_candidates": formatted_data.get("expense_candidates_with_score", []),
                         "counterparty": formatted_data.get("counterparty", ""),
                         "commodity": formatted_data.get("commodity", ""),
+                        "payment_method": formatted_data.get("payment_method", ""),
+                        "transaction_type": formatted_data.get("transaction_type", ""),
                     })
                 else:
                     results.append({
@@ -204,6 +206,7 @@ class ReparseEntryView(APIView):
 
         entry_id = serializer.validated_data['entry_id']
         selected_key = serializer.validated_data['selected_key']
+        mapping_type = serializer.validated_data.get('mapping_type') or 'expense'
         cache_key = entry_id
         cache_data = cache.get(cache_key)
 
@@ -215,13 +218,18 @@ class ReparseEntryView(APIView):
         owner_id = get_token_user_id(request)
         user = User.objects.get(id=owner_id)
         config = get_user_config(user)
+        expense_selected_key = selected_key
+        if mapping_type == 'asset':
+            expense_selected_key = cached_parsed.get('selected_expense_key') or None
+            if expense_selected_key == '':
+                expense_selected_key = None
         # 重新解析交易记录
         try:
             refund_peer = resolve_refund_peer_for_row(
-                original_row, user, owner_id, config, selected_key
+                original_row, user, owner_id, config, expense_selected_key
             )
             base_parsed = single_parse_transaction(
-                original_row, owner_id, config, selected_key, refund_peer=refund_peer
+                original_row, owner_id, config, expense_selected_key, refund_peer=refund_peer
             )
             parsed_entry = resolve_reparse_entry(
                 base_parsed,
@@ -237,10 +245,17 @@ class ReparseEntryView(APIView):
                 "parsed_entry": parsed_entry,
                 "original_row": original_row,
             }, timeout=3600)
+            response_ai_choose = (
+                parsed_entry.get('selected_expense_key')
+                if mapping_type != 'asset'
+                else cached_parsed.get('selected_expense_key')
+            )
+            if parsed_entry.get('installment_role') == 'installment':
+                response_ai_choose = None
             return Response({
                 "id": entry_id,
                 "formatted": formatted,
-                "ai_choose": selected_key if parsed_entry.get('installment_role') != 'installment' else None,
+                "ai_choose": response_ai_choose,
                 "ai_candidates": parsed_entry.get('expense_candidates_with_score') or [],
                 "counterparty": original_row.get("counterparty", ""),
                 "commodity": original_row.get("commodity", ""),
@@ -600,6 +615,7 @@ def _reparse_review_entry(
     config,
     user,
     selected_key: Optional[str] = None,
+    mapping_type: str = 'expense',
 ) -> Optional[dict]:
     """重解析单条审核条目并写回 Redis，返回 API 响应字段。"""
     from project.apps.translate.services.parse_review_service import ParseReviewService
@@ -609,11 +625,17 @@ def _reparse_review_entry(
     if not entry_uuid or not original_row:
         return None
 
+    expense_selected_key = selected_key
+    if mapping_type == 'asset':
+        expense_selected_key = entry.get('selected_expense_key') or None
+        if expense_selected_key == '':
+            expense_selected_key = None
+
     refund_peer = resolve_refund_peer_for_row(
-        original_row, user, owner_id, config, selected_key
+        original_row, user, owner_id, config, expense_selected_key
     )
     base_parsed = single_parse_transaction(
-        original_row, owner_id, config, selected_key, refund_peer=refund_peer
+        original_row, owner_id, config, expense_selected_key, refund_peer=refund_peer
     )
     base_parsed['_original_row'] = original_row
     expanded = expand_parsed_entry(base_parsed, set())
@@ -624,12 +646,16 @@ def _reparse_review_entry(
     )
     formatted = FormatData.format_instance(parsed_entry, config=config)
     is_installment = parsed_entry.get('installment_role') == 'installment'
+    if mapping_type == 'asset':
+        stored_expense_key = parsed_entry.get('selected_expense_key')
+    else:
+        stored_expense_key = expense_selected_key
     ParseReviewService.update_entry_formatted(
         file_id,
         entry_uuid,
         formatted,
         tag_details=parsed_entry.get('tag_details', []),
-        selected_expense_key=None if is_installment else selected_key,
+        selected_expense_key=None if is_installment else stored_expense_key,
         expense_candidates_with_score=parsed_entry.get(
             'expense_candidates_with_score', []
         ),
@@ -665,11 +691,16 @@ def _reparse_review_entry(
                 updated_entry = cached_entry
                 break
 
+    response_selected_key = (
+        parsed_entry.get('selected_expense_key')
+        if mapping_type == 'asset'
+        else expense_selected_key
+    )
     return _serialize_parse_review_entry(
         entry_uuid,
         updated_entry,
         formatted,
-        selected_key,
+        response_selected_key,
         parsed_entry,
     )
 
@@ -682,6 +713,7 @@ def _propagate_mapping_to_batch(
     user,
     mapping_key: str,
     exclude_uuid: str,
+    mapping_type: str = 'expense',
 ) -> list:
     """将新建/更新的映射套用到同批匹配条目（不强制 selected_key）。"""
     from project.apps.translate.services.parse_review_service import ParseReviewService
@@ -697,7 +729,7 @@ def _propagate_mapping_to_batch(
         if ParseReviewService.entry_postings_manually_edited(entry):
             continue
         if not ParseReviewService.row_matches_mapping_key(
-            entry.get('original_row'), mapping_key
+            entry.get('original_row'), mapping_key, mapping_type=mapping_type
         ):
             continue
         payload = _reparse_review_entry(
@@ -707,6 +739,7 @@ def _propagate_mapping_to_batch(
             config=config,
             user=user,
             selected_key=None,
+            mapping_type=mapping_type,
         )
         if payload:
             propagated.append(payload)
@@ -786,6 +819,9 @@ class ParseReviewReparseView(ParseReviewViewSet):
         
         entry_uuid = request.data.get('entry_uuid')
         selected_key = request.data.get('selected_key')
+        mapping_type = request.data.get('mapping_type') or 'expense'
+        if mapping_type not in ('expense', 'income', 'asset'):
+            mapping_type = 'expense'
         
         if not entry_uuid or not selected_key:
             return Response(
@@ -836,6 +872,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 config=config,
                 user=request.user,
                 selected_key=selected_key,
+                mapping_type=mapping_type,
             )
             if payload is None:
                 return Response(
@@ -850,6 +887,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 user=request.user,
                 mapping_key=selected_key,
                 exclude_uuid=entry_uuid,
+                mapping_type=mapping_type,
             )
 
             return Response({

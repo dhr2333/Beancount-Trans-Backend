@@ -261,6 +261,8 @@ class FormatStep(Step):
                 "expense_candidates_with_score": entry.get("expense_candidates_with_score", []),
                 "counterparty": entry.get("counterparty", ""),
                 "commodity": entry.get("commodity", ""),
+                "payment_method": (entry.get("_original_row") or {}).get("payment_method", ""),
+                "transaction_type": (entry.get("_original_row") or {}).get("transaction_type", ""),
                 # "uuid": entry.get("uuid"),
                 "id": entry.get("cache_key"),
                 "installment_role": entry.get("installment_role"),

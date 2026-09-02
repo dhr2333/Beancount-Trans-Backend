@@ -120,9 +120,17 @@ class ParseReviewService:
         return cls._posting_lines(formatted) != cls._posting_lines(edited)
 
     @classmethod
-    def row_matches_mapping_key(cls, original_row: Optional[Dict[str, Any]], key: str) -> bool:
+    def row_matches_mapping_key(
+        cls,
+        original_row: Optional[Dict[str, Any]],
+        key: str,
+        mapping_type: str = 'expense',
+    ) -> bool:
         if not key or not original_row:
             return False
+        if mapping_type == 'asset':
+            payment_method = str(original_row.get('payment_method') or '')
+            return key in payment_method
         counterparty = str(original_row.get('counterparty') or '')
         commodity = str(original_row.get('commodity') or '')
         return key in counterparty or key in commodity

@@ -356,6 +356,63 @@ class TestParseReviewReparseView:
         assert len(response.data['propagated_entries']) == 1
         assert response.data['propagated_entries'][0]['uuid'] == 'entry-2'
 
+    @patch('project.apps.translate.views.views._propagate_mapping_to_batch')
+    @patch('project.apps.translate.views.views._reparse_review_entry')
+    def test_reparse_asset_mapping_type(
+        self,
+        mock_reparse,
+        mock_propagate,
+        user,
+        parse_review_task,
+        parse_file,
+    ):
+        self.client.force_authenticate(user=user)
+        mock_reparse.return_value = {
+            'uuid': 'neutral-1',
+            'formatted': 'formatted-neutral',
+            'edited_formatted': 'formatted-neutral',
+            'selected_expense_key': None,
+            'expense_candidates_with_score': [],
+            'tag_details': [],
+            'tag_overrides': {'removed_paths': [], 'added_paths': []},
+        }
+        mock_propagate.return_value = []
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [{
+                'uuid': 'neutral-1',
+                'formatted': 'old',
+                'edited_formatted': 'old',
+                'selected_expense_key': '',
+                'original_row': {
+                    'transaction_type': '/',
+                    'payment_method': '中国银行储蓄卡(0814)',
+                    'counterparty': '/',
+                    'commodity': '转账',
+                },
+            }],
+            'created_at': time.time(),
+            'review_expires_at': time.time() + 86400,
+        })
+
+        response = self.client.post(
+            f'/api/translate/parse-review/{parse_review_task.id}/reparse',
+            {
+                'entry_uuid': 'neutral-1',
+                'selected_key': '0814',
+                'mapping_type': 'asset',
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_reparse.assert_called_once()
+        assert mock_reparse.call_args.kwargs['mapping_type'] == 'asset'
+        assert mock_reparse.call_args.kwargs['selected_key'] == '0814'
+        mock_propagate.assert_called_once()
+        assert mock_propagate.call_args.kwargs['mapping_type'] == 'asset'
+        assert mock_propagate.call_args.kwargs['mapping_key'] == '0814'
+
 
 @pytest.mark.django_db
 class TestParseReviewEditView:
