@@ -16,6 +16,8 @@ from project.apps.assistant.services.assistant_service import AssistantService, 
 
 TITLE_MAX_LEN = 40
 INTERRUPTED_REPLY = '生成已中断，请重试'
+QUERY_HISTORY_HEADER = '【本轮已执行的账本查询，后续可直接引用，勿重复执行同一条 BQL】'
+QUERY_PREVIEW_MAX_LEN = 1500
 
 
 class SessionGeneratingError(Exception):
@@ -72,13 +74,66 @@ def is_incomplete_assistant_content(role: str, content: str) -> bool:
     return not text or text == INTERRUPTED_REPLY
 
 
+def _truncate_preview(text: str, max_len: int = QUERY_PREVIEW_MAX_LEN) -> str:
+    normalized = (text or '').strip()
+    if len(normalized) <= max_len:
+        return normalized
+    return f'{normalized[:max_len]}…'
+
+
+def format_query_history(queries: list[dict[str, Any]]) -> str:
+    """将已执行 BQL 格式化为可注入 LLM 上下文的摘要块。"""
+    records = [
+        q for q in queries
+        if q.get('bql') and q.get('result_preview')
+    ]
+    if not records:
+        return ''
+    lines = [QUERY_HISTORY_HEADER]
+    for index, query in enumerate(records, start=1):
+        lines.append(f'{index}. BQL: {query["bql"]}')
+        lines.append(f'结果: {_truncate_preview(query["result_preview"])}')
+    return '\n'.join(lines)
+
+
+def _assistant_content_for_llm(message: ChatMessage) -> str:
+    content = message.content or ''
+    if message.role != ChatMessage.ROLE_ASSISTANT:
+        return content
+    history = format_query_history(message.queries or [])
+    if not history:
+        return content
+    if content.strip():
+        return f'{content}\n\n{history}'
+    return history
+
+
+def collect_prior_query_records(session: ChatSession) -> list[dict[str, Any]]:
+    """收集会话中已完成助手回复的 BQL 记录，供数字校验与上下文引用。"""
+    records: list[dict[str, Any]] = []
+    for row in session.messages.order_by('position'):
+        if is_incomplete_assistant_message(row):
+            continue
+        if row.role != ChatMessage.ROLE_ASSISTANT:
+            continue
+        for query in row.queries or []:
+            bql = query.get('bql')
+            preview = query.get('result_preview')
+            if bql and preview:
+                records.append({'bql': bql, 'result_preview': preview})
+    return records
+
+
 def build_llm_messages(session: ChatSession) -> list[dict[str, str]]:
     rows = session.messages.order_by('position')
     messages = []
     for row in rows:
         if is_incomplete_assistant_message(row):
             continue
-        messages.append({'role': row.role, 'content': row.content})
+        messages.append({
+            'role': row.role,
+            'content': _assistant_content_for_llm(row),
+        })
     if len(messages) > AssistantService.MAX_MESSAGES:
         messages = messages[-AssistantService.MAX_MESSAGES:]
     return messages

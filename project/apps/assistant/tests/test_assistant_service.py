@@ -7,6 +7,7 @@ from django.test import override_settings
 from project.apps.assistant.services.api_key_resolver import DEFAULT_ASSISTANT_MODEL
 from project.apps.assistant.services.assistant_service import (
     AssistantService,
+    QueryRecord,
     StreamEvent,
     build_system_prompt,
     build_tools,
@@ -121,6 +122,8 @@ class TestAssistantService:
         assert 'year = 2026 AND month = 6' in prompt
         assert 'BQL 能力说明' in prompt
         assert '禁止心算' in prompt
+        assert '新的' in prompt
+        assert '勿原样重跑' in prompt
         assert 'Markdown' in prompt
         assert '完整标签路径' in prompt
         assert 'IN tags' in prompt
@@ -137,6 +140,8 @@ class TestAssistantService:
         prompt = build_system_prompt(date(2026, 6, 16), insight_mode=True)
         assert '【洞察模式】' in prompt
         assert '主动追溯' in prompt
+        assert '勿重复执行同一条 BQL' in prompt
+        assert '（必做）' not in prompt
         assert 'tags' in prompt
         assert 'links' in prompt
         assert 'FROM entries' in prompt
@@ -150,6 +155,15 @@ class TestAssistantService:
         assert '洞察模式' in desc
         assert 'FROM entries' in desc
         assert '追溯历史' in desc
+
+    def test_validation_queries_merges_prior_and_current(self):
+        service = AssistantService.__new__(AssistantService)
+        prior = [{'bql': 'SELECT 1', 'result_preview': 'a'}]
+        current = [QueryRecord(bql='SELECT 2', result_preview='b')]
+        merged = service._validation_queries(current, prior)
+        assert len(merged) == 2
+        assert merged[0].bql == 'SELECT 1'
+        assert merged[1].bql == 'SELECT 2'
 
     @pytest.mark.django_db
     def test_dispatch_tool_blocks_over_bql_limit(self, user, bean_file):

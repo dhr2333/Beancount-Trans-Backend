@@ -52,16 +52,16 @@ INSIGHT_MODE_BLOCK = """
 【洞察模式】
 用户提出了开放性分析类问题。你的目标是发现**令人兴奋、可分享**的数据规律，而非罗列全科目清单。
 
-查询策略（在 max_bql_runs 限制内，按优先级执行）：
-1. **跨期对比（必做）**：至少 1 条近 3–6 月趋势（GROUP BY year, month）或类目/标签跨月对比。
+查询策略（在 max_bql_runs 限制内，按优先级执行；若对话历史中已附带对应查询结果，直接引用，勿重复执行同一条 BQL）：
+1. **跨期对比**：当前问题需要趋势分析、且历史中没有近 3–6 月结果时，至少 1 条 GROUP BY year, month 或类目/标签跨月对比。
 2. **多维线索**（按场景组合，不只盯 account）：
    - payee / narration：TOP 商家、备注关键词（物业费、机票、退款等）
    - tags：对照「平台标签目录」，跨月标签支出、某月首次出现某标签
    - links：对大额/异常交易用 'link-id' IN links，追同一 link 下关联 posting（退款、拆分、转账）
    - meta + 日期：FROM entries 拉含 time/uuid/status 的明细，分析消费时段或重复 uuid
    - Balance / Pad：FROM entries 查 type='balance' / type='pad'，解释对账偏差、补账是否导致某月突增
-3. **主动追溯（必做）**：从当期发现 1–2 个「有故事」的线索（突变金额、新 payee、罕见 tag、link 关联退款等），
-   即使用户未要求「意外发现」，也必须再查 1 条历史/关联查询（同 payee 跨月、同 link 全量、同 tag 跨月等）。
+3. **主动追溯**：从当期发现 1–2 个「有故事」的线索（突变金额、新 payee、罕见 tag、link 关联退款等），
+   且历史中没有对应追溯结果时，再查 1 条历史/关联查询（同 payee 跨月、同 link 全量、同 tag 跨月等）。
 
 BQL 预算优先级：跨期趋势 → 环比/类目对比 → 线索追溯（payee/link/tag）→ entries 明细（meta/Balance/Pad）。
 

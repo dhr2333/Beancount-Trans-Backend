@@ -16,6 +16,7 @@ from project.apps.assistant.services.ledger_query import LedgerNotFoundError
 from project.apps.assistant.services.session_service import (
     StreamAccumulator,
     build_llm_messages,
+    collect_prior_query_records,
     update_assistant_message,
 )
 
@@ -133,6 +134,7 @@ def run_assistant_chat(
         return
 
     llm_messages = build_llm_messages(session)
+    prior_queries = collect_prior_query_records(session)
     service = AssistantService(user, deep_think=deep_think)
     accumulator = StreamAccumulator()
     last_persist = 0.0
@@ -150,7 +152,11 @@ def run_assistant_chat(
             last_persist = now
 
     try:
-        for event in service._iter_chat_events(llm_messages, show_bql=show_bql):
+        for event in service._iter_chat_events(
+            llm_messages,
+            show_bql=show_bql,
+            prior_queries=prior_queries,
+        ):
             if is_cancelled(message_uuid):
                 _finalize_cancelled(message, accumulator)
                 return

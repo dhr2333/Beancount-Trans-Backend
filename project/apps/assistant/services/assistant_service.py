@@ -38,7 +38,7 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 {reference_date_context}
 
 规则：
-1. 凡涉及金额、余额、占比、合计、排名、对比的回答（含「分析 / 详细 / 结构 / 明细」），必须先调用 run_bql；不得仅凭 get_ledger_context 中的账户名作答，不要编造数字。
+1. 涉及**新的**金额、余额、占比、合计、排名、对比时（含「分析 / 详细 / 结构 / 明细」），应调用 run_bql 获取数据；若对话历史中已附带查询结果，可直接引用，禁止编造，禁止对历史表格心算合计；不得仅凭 get_ledger_context 中的账户名作答。
 2. 禁止心算：不得对 BQL 返回的多行明细或账户列表手动加减乘除；多账户合计、余额、总额必须用 sum(units(position)) 与 GROUP BY（或单次 sum）由查询引擎计算。
 3. 应收款、资产、负债、收入等：先对照平台账户目录映射 account ~ 正则，再用 GROUP BY account 查各户余额；需要总额时用 sum(units(position))。
 4. 账户层级：GROUP BY 的父账户行仅含直接 posting；类目总额用 sum + account ~ '^前缀'（含子孙），勿把父账户行当总额；无 posting 的账户不会出现在结果中。
@@ -52,7 +52,7 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 12. 用中文简洁回答，优先使用 Markdown 结构化展示，标明货币单位；若查无数据，明确说明。
 13. 余额查询若返回账户名但 sum 列为空白或 0.00，表示余额为 0，应直接告知用户，不要因「看不到数字」而反复换语法重查。
 14. 同一问题最多调用 run_bql {max_bql_runs} 次（系统硬限制）；若仍无满意结果，请根据已有查询结果作答，不要无限重试。
-15. 不要执行写操作，不要讨论与账本无关的话题。
+15. 不要执行写操作。用户追问、解释上一轮结论、澄清问法或说明能力边界时，可直接回答，不必调用工具；与账本无关的闲聊不要展开。历史中已出现过的 BQL 勿原样重跑，除非用户要求刷新或时间范围变化。
 16. 使用 Markdown 格式化回答：金额与关键数字用 **粗体**；多项对比用 Markdown 表格；列举用有序/无序列表；不要输出原始 HTML。
 17. 调用工具前，用一两句话简要说明你的分析思路（会展示在「思考过程」中）；最终回答中不要重复这段思路。
 18. 复式记账符号：Income 累计为负表示收入，向用户展示时用绝对值并标明为收入，勿将负号误解为亏损；Income 为正表示冲销。Expenses 为正表示支出。Liabilities 累计为负表示欠款，展示时可取绝对值。展示时数字须来自 BQL 结果（可取绝对值），禁止心算。
@@ -152,6 +152,14 @@ def format_sse(event: str, data: dict[str, Any]) -> str:
 class QueryRecord:
     bql: str
     result_preview: str
+
+
+def query_records_from_dicts(records: list[dict[str, Any]]) -> list[QueryRecord]:
+    return [
+        QueryRecord(bql=record['bql'], result_preview=record['result_preview'])
+        for record in records
+        if record.get('bql') and record.get('result_preview')
+    ]
 
 
 @dataclass
@@ -391,6 +399,13 @@ class AssistantService:
             message['reasoning_content'] = reasoning_content
         return message
 
+    def _validation_queries(
+        self,
+        current_queries: list[QueryRecord],
+        prior_queries: list[dict[str, Any]] | None = None,
+    ) -> list[QueryRecord]:
+        return query_records_from_dicts(prior_queries or []) + list(current_queries)
+
     def _iter_force_final_reply(
         self,
         client: OpenAI,
@@ -399,6 +414,7 @@ class AssistantService:
         show_bql: bool,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
+        prior_queries: list[dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
         synthesis_messages = [
             *llm_messages,
@@ -439,6 +455,7 @@ class AssistantService:
             show_bql,
             api_reasoning_parts,
             planning_parts,
+            prior_queries=prior_queries,
         )
 
     def _merged_reasoning_text(
@@ -460,8 +477,10 @@ class AssistantService:
         show_bql: bool,
         api_reasoning_parts: list[str],
         planning_parts: list[str],
+        prior_queries: list[dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
-        validation = validate_reply_numbers(final.reply, final.queries)
+        validation_queries = self._validation_queries(final.queries, prior_queries)
+        validation = validate_reply_numbers(final.reply, validation_queries)
         if validation.ok:
             yield StreamEvent('done', self._done_event_data(final))
             return
@@ -487,7 +506,7 @@ class AssistantService:
             api_reasoning_parts,
             planning_parts,
         )
-        validation = validate_reply_numbers(final.reply, final.queries)
+        validation = validate_reply_numbers(final.reply, validation_queries)
 
         if not validation.ok:
             base_reply = final.reply.split(GUARD_DISCLAIMER.strip())[0].rstrip()
@@ -505,6 +524,7 @@ class AssistantService:
         self,
         messages: list[dict[str, str]],
         show_bql: bool = False,
+        prior_queries: list[dict[str, Any]] | None = None,
     ) -> Iterator[StreamEvent]:
         provider = self.provider
         if not provider.configured:
@@ -576,6 +596,7 @@ class AssistantService:
                         show_bql,
                         api_reasoning_parts,
                         planning_parts,
+                        prior_queries=prior_queries,
                     )
                     return
 
@@ -642,6 +663,7 @@ class AssistantService:
                 show_bql,
                 api_reasoning_parts,
                 planning_parts,
+                prior_queries=prior_queries,
             )
             return
 
