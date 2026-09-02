@@ -15,7 +15,9 @@ from project.apps.translate.services.ledger_uuid_index import (
     RefundPeerSnapshot,
     extract_expense_account_from_postings,
 )
+from project.apps.translate.services.parse.filters import TransactionFilter
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
+from project.apps.translate.services.steps import ParseStep
 from project.apps.translate.utils import BILL_ALI, EXPENSES_OTHER
 from project.apps.translate.views.AliPay import (
     alipay_is_payment_row,
@@ -197,3 +199,61 @@ class TestSingleParseWithRefundPeer:
         parsed = single_parse_transaction(_refund_row(), user.id, _parse_config(), None)
         assert parsed["expense"] == EXPENSES_OTHER
         assert parsed["expense"] != "Assets:Other"
+
+
+def _parsed_from_row(row, *_args, **_kwargs):
+    return {
+        "uuid": row["uuid"],
+        "amount": f"{float(row['amount']):.2f}",
+        "expense": "Expenses:Transport:EV",
+        "account": "Assets:Digital:Alipay",
+        "note": row["commodity"],
+        "selected_expense_key": "充电",
+        "links": [],
+    }
+
+
+class TestParseStepSkipUnlinkedAlipayRefund:
+    def _execute(self, rows, ledger=None):
+        context = {
+            "owner_id": 1,
+            "user": MagicMock(),
+            "config": MagicMock(),
+            "prefilter_bill": rows,
+        }
+        with patch(
+            "project.apps.translate.services.steps.build_ledger_index_for_user",
+            return_value=ledger or {},
+        ), patch(
+            "project.apps.translate.services.steps.single_parse_transaction",
+            side_effect=_parsed_from_row,
+        ):
+            return ParseStep().execute(context)
+
+    def test_refund_without_peer_is_skipped(self):
+        result = self._execute([_refund_row()])
+        assert result["parsed_data"] == []
+
+    def test_refund_before_payment_in_batch_is_kept(self):
+        result = self._execute([_refund_row(), _payment_row()])
+        uuids = [entry["uuid"] for entry in result["parsed_data"]]
+        assert uuids == [REFUND_UUID, PARENT_UUID]
+        refund_entry = result["parsed_data"][0]
+        payment_entry = result["parsed_data"][1]
+        assert refund_entry["links"] == [PARENT_UUID]
+        assert payment_entry["links"] == [PARENT_UUID]
+
+    def test_refund_with_ledger_peer_is_kept(self):
+        ledger = {PARENT_UUID: RefundPeerSnapshot("Expenses:Transport:EV", "充电")}
+        result = self._execute([_refund_row()], ledger=ledger)
+        assert len(result["parsed_data"]) == 1
+        assert result["parsed_data"][0]["uuid"] == REFUND_UUID
+        assert result["parsed_data"][0]["links"] == [PARENT_UUID]
+
+    def test_closed_original_prefiltered_then_refund_skipped(self):
+        closed = _payment_row(transaction_status="交易关闭")
+        refund = _refund_row()
+        remaining = TransactionFilter({}, BILL_ALI).apply_pre_filters([closed, refund])
+        assert remaining == [refund]
+        result = self._execute(remaining)
+        assert result["parsed_data"] == []

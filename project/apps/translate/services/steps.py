@@ -156,6 +156,8 @@ class ParseStep(Step):
                         return item
                 return expanded[0]
 
+            context.setdefault('parsed_data', [])
+
             for row in bill_data:
                 refund_peer = None
                 if alipay_is_refund_row(row):
@@ -166,6 +168,14 @@ class ParseStep(Step):
                         ledger_index,
                         _lazy_parse_payment,
                     )
+                    # 原单已关闭被预过滤、或不在本批/账本：退款入账会凭空增加资产
+                    if refund_peer is None:
+                        logger.info(
+                            "忽略无原单关联的支付宝退款 uuid=%s parent=%s",
+                            row.get("uuid"),
+                            alipay_parent_uuid(row),
+                        )
+                        continue
 
                 # 每条账单行独立解析。parse_cache 仅供退款关联原单，不可复用为当前行结果
                 # （组合支付会共享交易订单号，复用会导致金额/账户被覆盖并在审核页撞 uuid）。
@@ -174,9 +184,6 @@ class ParseStep(Step):
                 )
                 parsed_entry['_original_row'] = row
                 expanded_entries = expand_parsed_entry(parsed_entry, refund_parent_uuids)
-
-                if 'parsed_data' not in context:
-                    context['parsed_data'] = []
 
                 payment_uuid = (row.get('uuid') or '').strip()
                 for entry in expanded_entries:

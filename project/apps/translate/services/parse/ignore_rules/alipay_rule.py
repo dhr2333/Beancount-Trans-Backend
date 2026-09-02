@@ -11,7 +11,7 @@ def alipay_pre_filter(row: Dict, args: Dict) -> bool:
 
     只有返回为True时，才会忽略该行数据
     """
-    # 移除"退款成功"，因为支付宝中的退款往往是单独一行，且对应支出也是单独一行会被记录，所以需要退款记录进行冲抵
+    # "退款成功"不在此忽略：有原单时需冲抵支出。无原单（原单已关闭或不在本批/账本）由 ParseStep 跳过。
     if row['transaction_status'] in ["交易关闭", "解冻成功", "信用服务使用成功", "已关闭", "还款失败", "等待付款", "芝麻免押下单成功"]:
         return True
     elif re.match(pattern["余额宝"], row['commodity']):
