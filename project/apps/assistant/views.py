@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import ChatSession
+from .models import AssistantFeedback, ChatMessage, ChatSession
 from .serializers import (
     AssistantChatRequestSerializer,
     AssistantChatResponseSerializer,
@@ -23,20 +23,23 @@ from .serializers import (
     ChatSessionListSerializer,
     ChatSessionUpdateSerializer,
 )
-from .models import AssistantFeedback
 from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService, format_sse
 from .services.key_tester import evaluate_assistant_key
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from .services.reference_date import get_reference_date
 from .services.session_service import (
+    StreamAccumulator,
     append_user_message,
     build_llm_messages,
+    create_placeholder_assistant_message,
     create_session_with_user_message,
+    edit_user_message,
     feedback_map_for_messages,
     get_user_session,
     list_user_sessions,
     save_assistant_message,
+    update_assistant_message,
     update_session_title,
 )
 from .throttles import AssistantChatThrottle
@@ -226,7 +229,9 @@ class AssistantChatStreamView(APIView):
 
         persist_session = None
         user_message = None
+        assistant_message = None
         llm_messages = None
+        edit_message_id = validated.get('edit_message_id')
 
         if session_id is not None or content:
             text = (content or '').strip()
@@ -238,10 +243,20 @@ class AssistantChatStreamView(APIView):
                     )
                 else:
                     persist_session = get_user_session(request.user, session_id)
-                    user_message = append_user_message(persist_session, text)
+                    if edit_message_id is not None:
+                        user_message = edit_user_message(
+                            persist_session,
+                            edit_message_id,
+                            text,
+                        )
+                    else:
+                        user_message = append_user_message(persist_session, text)
+                assistant_message = create_placeholder_assistant_message(persist_session)
                 llm_messages = build_llm_messages(persist_session)
             except ChatSession.DoesNotExist:
                 return Response({'detail': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
+            except ChatMessage.DoesNotExist:
+                return Response({'detail': '要编辑的消息不存在'}, status=status.HTTP_404_NOT_FOUND)
         else:
             llm_messages = [
                 {'role': msg['role'], 'content': msg['content']}
@@ -250,39 +265,70 @@ class AssistantChatStreamView(APIView):
 
         def event_stream() -> Iterator[str]:
             stream_service = AssistantService(request.user, deep_think=deep_think)
-            if persist_session is not None and user_message is not None:
+            accumulator = StreamAccumulator()
+            done_payload = None
+            flushed_incomplete = False
+            emitted_error = False
+
+            if persist_session is not None and user_message is not None and assistant_message is not None:
                 yield format_sse('session', {
                     'id': str(persist_session.id),
                     'title': persist_session.title,
                     'user_message_id': str(user_message.id),
+                    'assistant_message_id': str(assistant_message.id),
                 })
 
-            done_payload = None
+            def flush_incomplete() -> None:
+                nonlocal flushed_incomplete
+                if flushed_incomplete or done_payload is not None or assistant_message is None:
+                    return
+                flushed_incomplete = True
+                update_assistant_message(assistant_message, **accumulator.persist_kwargs())
+
             try:
                 for event in stream_service._iter_chat_events(llm_messages, show_bql=show_bql):
+                    accumulator.apply(event)
                     if event.event == 'done' and persist_session is not None and user_message is not None:
-                        assistant_message = save_assistant_message(
-                            persist_session,
-                            content=event.data['reply'],
-                            thinking=event.data.get('thinking', ''),
-                            reasoning=event.data.get('reasoning', ''),
-                            queries=event.data.get('queries', []),
-                        )
+                        if assistant_message is None:
+                            saved = save_assistant_message(
+                                persist_session,
+                                content=event.data['reply'],
+                                thinking=event.data.get('thinking', ''),
+                                reasoning=event.data.get('reasoning', ''),
+                                queries=event.data.get('queries', []),
+                            )
+                        else:
+                            saved = update_assistant_message(
+                                assistant_message,
+                                content=event.data['reply'],
+                                thinking=event.data.get('thinking', ''),
+                                reasoning=event.data.get('reasoning', ''),
+                                queries=event.data.get('queries', []),
+                            )
                         event.data = {
                             **event.data,
                             'session_id': str(persist_session.id),
                             'user_message_id': str(user_message.id),
-                            'assistant_message_id': str(assistant_message.id),
+                            'assistant_message_id': str(saved.id),
                         }
                         done_payload = event.data
                     yield format_sse(event.event, event.data)
+            except GeneratorExit:
+                flush_incomplete()
+                raise
             except (ValueError, LedgerNotFoundError) as exc:
+                emitted_error = True
+                flush_incomplete()
                 yield format_sse('error', {'detail': str(exc)})
             except Exception as exc:
+                emitted_error = True
                 logger.exception('AI 助手流式调用失败')
+                flush_incomplete()
                 yield format_sse('error', {'detail': f'AI 助手暂时不可用: {exc}'})
+            finally:
+                flush_incomplete()
 
-            if done_payload is None:
+            if done_payload is None and not emitted_error:
                 if persist_session is not None:
                     logger.warning(
                         'Assistant stream ended without done event for session %s',

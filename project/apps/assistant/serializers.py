@@ -12,6 +12,7 @@ class AssistantChatRequestSerializer(serializers.Serializer):
     messages = ChatMessageSerializer(many=True, required=False)
     session_id = serializers.UUIDField(required=False, allow_null=True)
     content = serializers.CharField(max_length=4000, required=False, allow_blank=False)
+    edit_message_id = serializers.UUIDField(required=False, allow_null=True)
     show_bql = serializers.BooleanField(default=False, required=False)
     deep_think = serializers.BooleanField(default=False, required=False)
 
@@ -19,6 +20,10 @@ class AssistantChatRequestSerializer(serializers.Serializer):
         messages = attrs.get('messages')
         session_id = attrs.get('session_id')
         content = attrs.get('content')
+        edit_message_id = attrs.get('edit_message_id')
+
+        if edit_message_id is not None and session_id is None:
+            raise serializers.ValidationError({'edit_message_id': '编辑消息需要提供 session_id'})
 
         if session_id is not None or content:
             if not content or not str(content).strip():
