@@ -356,6 +356,12 @@ class ExpenseHandler:
                 self.selected_expense_instance = next((m for m in self._expense_mappings if m.key == self.selected_key), None)
                 if self.selected_expense_instance:
                     self._load_mapping_tags(self.selected_expense_instance)
+                    existing_keys = {item['key'] for item in self.expense_candidates_with_score}
+                    if self.selected_key not in existing_keys:
+                        score = 1.0 if self._mapping_has_account(self.selected_expense_instance) else 0.0
+                        self.expense_candidates_with_score.append(
+                            {'key': self.selected_key, 'score': score}
+                        )
                     expend = self._resolve_expense_account(self.selected_expense_instance)
                     if expend:
                         self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
@@ -367,6 +373,26 @@ class ExpenseHandler:
                     if expend:
                         self.currency = self.selected_expense_instance.currency if self.selected_expense_instance.currency else "CNY"
                         return expend, self.selected_expense_key, self.expense_candidates_with_score
+
+        if self.selected_key:
+            manual_instance = next(
+                (m for m in self._expense_mappings if m.key == self.selected_key),
+                None,
+            )
+            if manual_instance:
+                self.selected_expense_instance = manual_instance
+                self._load_mapping_tags(manual_instance)
+                existing_keys = {item['key'] for item in self.expense_candidates_with_score}
+                if self.selected_key not in existing_keys:
+                    score = 1.0 if self._mapping_has_account(manual_instance) else 0.0
+                    self.expense_candidates_with_score.append(
+                        {'key': self.selected_key, 'score': score}
+                    )
+                expend = self._resolve_expense_account(manual_instance)
+                if expend:
+                    self.currency = manual_instance.currency if manual_instance.currency else "CNY"
+                    return expend, self.selected_key, self.expense_candidates_with_score
+                return self.expend, self.selected_key, self.expense_candidates_with_score
 
         return self.expend, self.selected_expense_key, self.expense_candidates_with_score
 
@@ -481,9 +507,17 @@ class ExpenseHandler:
                 self.selected_income_instance = selected_income_instance
                 selected_key = self.selected_key
                 self._load_mapping_tags(selected_income_instance)
+                existing_keys = {item['key'] for item in candidates_with_score}
+                if self.selected_key not in existing_keys:
+                    score = 1.0 if self._mapping_has_account(selected_income_instance, 'income') else 0.0
+                    candidates_with_score.append({'key': self.selected_key, 'score': score})
 
         if self.selected_income_instance and self.selected_income_instance.income:
             return self.selected_income_instance.income.account, selected_key, candidates_with_score
+
+        if self.selected_key and self.selected_income_instance:
+            return self.income, selected_key, candidates_with_score
+
         return self.income, selected_key, candidates_with_score
 
     def get_expense(self, data: Dict, ownerid: int) -> str:

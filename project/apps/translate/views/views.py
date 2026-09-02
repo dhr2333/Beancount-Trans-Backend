@@ -4,6 +4,7 @@ import uuid
 import json
 import time
 import os
+from typing import Optional
 from celery.result import GroupResult
 from celery import group
 from django.core.cache import cache
@@ -553,6 +554,165 @@ class ParseReviewViewSet(APIView):
         return None
 
 
+def _serialize_parse_review_entry(
+    entry_uuid: str,
+    updated_entry: Optional[dict],
+    formatted: str,
+    selected_key: Optional[str],
+    parsed_entry: dict,
+) -> dict:
+    """构造单条解析审核重解析 API 响应字段。"""
+    from project.apps.translate.services.parse_review_service import ParseReviewService
+
+    formatted_result = updated_entry.get('formatted') if updated_entry else formatted
+    edited_formatted_result = (
+        updated_entry.get('edited_formatted') if updated_entry else formatted
+    )
+    formatted_result = formatted_result.rstrip() if formatted_result else ''
+    edited_formatted_result = edited_formatted_result.rstrip() if edited_formatted_result else ''
+    is_installment = parsed_entry.get('installment_role') == 'installment'
+    tag_payload = (
+        ParseReviewService.entry_response_payload(updated_entry)
+        if updated_entry
+        else {
+            'tag_details': ParseReviewService.apply_tag_overrides(
+                parsed_entry.get('tag_details', []),
+                ParseReviewService.default_tag_overrides(),
+            ),
+            'tag_overrides': ParseReviewService.default_tag_overrides(),
+        }
+    )
+    return {
+        'uuid': entry_uuid,
+        'formatted': formatted_result,
+        'edited_formatted': edited_formatted_result,
+        'selected_expense_key': None if is_installment else selected_key,
+        'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', []),
+        **tag_payload,
+    }
+
+
+def _reparse_review_entry(
+    *,
+    file_id: int,
+    entry: dict,
+    owner_id: int,
+    config,
+    user,
+    selected_key: Optional[str] = None,
+) -> Optional[dict]:
+    """重解析单条审核条目并写回 Redis，返回 API 响应字段。"""
+    from project.apps.translate.services.parse_review_service import ParseReviewService
+
+    entry_uuid = entry.get('uuid')
+    original_row = entry.get('original_row')
+    if not entry_uuid or not original_row:
+        return None
+
+    refund_peer = resolve_refund_peer_for_row(
+        original_row, user, owner_id, config, selected_key
+    )
+    base_parsed = single_parse_transaction(
+        original_row, owner_id, config, selected_key, refund_peer=refund_peer
+    )
+    base_parsed['_original_row'] = original_row
+    expanded = expand_parsed_entry(base_parsed, set())
+    parsed_entry = pick_reparse_slice(
+        expanded,
+        entry.get('installment_role'),
+        entry.get('installment_period'),
+    )
+    formatted = FormatData.format_instance(parsed_entry, config=config)
+    is_installment = parsed_entry.get('installment_role') == 'installment'
+    ParseReviewService.update_entry_formatted(
+        file_id,
+        entry_uuid,
+        formatted,
+        tag_details=parsed_entry.get('tag_details', []),
+        selected_expense_key=None if is_installment else selected_key,
+        expense_candidates_with_score=parsed_entry.get(
+            'expense_candidates_with_score', []
+        ),
+    )
+
+    if parsed_entry.get('installment_role') == 'purchase' and len(expanded) > 1:
+        cached_after = ParseReviewService.get_parse_result_migrated(file_id) or {}
+        for sibling in ParseReviewService.iter_same_order_installment_entries(
+            cached_after.get('formatted_data') or [],
+            original_row,
+            entry_uuid,
+        ):
+            sib_entry = pick_reparse_slice(
+                expanded,
+                'installment',
+                sibling.get('installment_period'),
+            )
+            sib_formatted = FormatData.format_instance(sib_entry, config=config)
+            ParseReviewService.update_entry_formatted(
+                file_id,
+                sibling.get('uuid'),
+                sib_formatted,
+                tag_details=sib_entry.get('tag_details', []),
+                selected_expense_key=None,
+                expense_candidates_with_score=[],
+            )
+
+    updated_result = ParseReviewService.get_parse_result(file_id)
+    updated_entry = None
+    if updated_result:
+        for cached_entry in updated_result.get('formatted_data', []):
+            if cached_entry.get('uuid') == entry_uuid:
+                updated_entry = cached_entry
+                break
+
+    return _serialize_parse_review_entry(
+        entry_uuid,
+        updated_entry,
+        formatted,
+        selected_key,
+        parsed_entry,
+    )
+
+
+def _propagate_mapping_to_batch(
+    *,
+    file_id: int,
+    owner_id: int,
+    config,
+    user,
+    mapping_key: str,
+    exclude_uuid: str,
+) -> list:
+    """将新建/更新的映射套用到同批匹配条目（不强制 selected_key）。"""
+    from project.apps.translate.services.parse_review_service import ParseReviewService
+
+    cached = ParseReviewService.get_parse_result_migrated(file_id) or {}
+    propagated = []
+    for entry in cached.get('formatted_data') or []:
+        entry_uuid = entry.get('uuid')
+        if not entry_uuid or entry_uuid == exclude_uuid:
+            continue
+        if entry.get('installment_role') == 'installment':
+            continue
+        if ParseReviewService.entry_postings_manually_edited(entry):
+            continue
+        if not ParseReviewService.row_matches_mapping_key(
+            entry.get('original_row'), mapping_key
+        ):
+            continue
+        payload = _reparse_review_entry(
+            file_id=file_id,
+            entry=entry,
+            owner_id=owner_id,
+            config=config,
+            user=user,
+            selected_key=None,
+        )
+        if payload:
+            propagated.append(payload)
+    return propagated
+
+
 class ParseReviewResultsView(ParseReviewViewSet):
     """获取解析结果"""
     
@@ -669,91 +829,32 @@ class ParseReviewReparseView(ParseReviewViewSet):
         try:
             owner_id = request.user.id
             config = get_user_config(request.user)
-            refund_peer = resolve_refund_peer_for_row(
-                original_row, request.user, owner_id, config, selected_key
+            payload = _reparse_review_entry(
+                file_id=parse_file.file_id,
+                entry=target_entry,
+                owner_id=owner_id,
+                config=config,
+                user=request.user,
+                selected_key=selected_key,
             )
-            base_parsed = single_parse_transaction(
-                original_row, owner_id, config, selected_key, refund_peer=refund_peer
-            )
-            base_parsed['_original_row'] = original_row
-            expanded = expand_parsed_entry(base_parsed, set())
-            parsed_entry = pick_reparse_slice(
-                expanded,
-                target_entry.get('installment_role'),
-                target_entry.get('installment_period'),
-            )
-            formatted = FormatData.format_instance(parsed_entry, config=config)
-            
-            # 更新缓存（保留 tag_overrides）；分期还款行不写入分类关键字
-            is_installment = parsed_entry.get('installment_role') == 'installment'
-            ParseReviewService.update_entry_formatted(
-                parse_file.file_id,
-                entry_uuid,
-                formatted,
-                tag_details=parsed_entry.get('tag_details', []),
-                selected_expense_key=(
-                    None if is_installment else selected_key
-                ),
-                expense_candidates_with_score=parsed_entry.get(
-                    'expense_candidates_with_score', []
-                ),
+            if payload is None:
+                return Response(
+                    {'error': '重解析失败'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            propagated_entries = _propagate_mapping_to_batch(
+                file_id=parse_file.file_id,
+                owner_id=owner_id,
+                config=config,
+                user=request.user,
+                mapping_key=selected_key,
+                exclude_uuid=entry_uuid,
             )
 
-            # 改支出分类时，同步同单分期还款行的标签/商家，保持 Payables 结构
-            if parsed_entry.get('installment_role') == 'purchase' and len(expanded) > 1:
-                cached_after = ParseReviewService.get_parse_result_migrated(parse_file.file_id) or {}
-                for sibling in ParseReviewService.iter_same_order_installment_entries(
-                    cached_after.get('formatted_data') or [],
-                    original_row,
-                    entry_uuid,
-                ):
-                    sib_entry = pick_reparse_slice(
-                        expanded,
-                        'installment',
-                        sibling.get('installment_period'),
-                    )
-                    sib_formatted = FormatData.format_instance(sib_entry, config=config)
-                    ParseReviewService.update_entry_formatted(
-                        parse_file.file_id,
-                        sibling.get('uuid'),
-                        sib_formatted,
-                        tag_details=sib_entry.get('tag_details', []),
-                        selected_expense_key=None,
-                        expense_candidates_with_score=[],
-                    )
-            
-            # 返回更新后的结果
-            updated_result = ParseReviewService.get_parse_result(parse_file.file_id)
-            updated_entry = None
-            for entry in updated_result.get('formatted_data', []):
-                if entry.get('uuid') == entry_uuid:
-                    updated_entry = entry
-                    break
-            
-            formatted_result = updated_entry.get('formatted') if updated_entry else formatted
-            edited_formatted_result = updated_entry.get('edited_formatted') if updated_entry else formatted
-            # 去除末尾的换行符
-            formatted_result = formatted_result.rstrip() if formatted_result else ''
-            edited_formatted_result = edited_formatted_result.rstrip() if edited_formatted_result else ''
-            tag_payload = (
-                ParseReviewService.entry_response_payload(updated_entry)
-                if updated_entry
-                else {
-                    'tag_details': ParseReviewService.apply_tag_overrides(
-                        parsed_entry.get('tag_details', []),
-                        ParseReviewService.default_tag_overrides(),
-                    ),
-                    'tag_overrides': ParseReviewService.default_tag_overrides(),
-                }
-            )
-            
             return Response({
-                'uuid': entry_uuid,
-                'formatted': formatted_result,
-                'edited_formatted': edited_formatted_result,
-                'selected_expense_key': selected_key if parsed_entry.get('installment_role') != 'installment' else None,
-                'expense_candidates_with_score': parsed_entry.get('expense_candidates_with_score', []),
-                **tag_payload,
+                **payload,
+                'propagated_entries': propagated_entries,
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -1044,11 +1145,14 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
             
             # 创建解析任务（审核模式）
             config = get_user_config(request.user)
+            password = request.data.get('password') or None
+            if password == '':
+                password = None
             args = {
                 'write': False,  # 审核模式
                 'cmb_credit_ignore': True,
                 'boc_debit_ignore': True,
-                'password': None,
+                'password': password,
             }
             
             # 异步执行解析任务

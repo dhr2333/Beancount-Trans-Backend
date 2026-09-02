@@ -305,6 +305,57 @@ class TestParseReviewReparseView:
         assert 'Liabilities:CreditCard:Bank:CITIC:C6428' in installment['formatted']
         assert 'Expenses:Shopping:Digital' not in installment['formatted']
 
+    @patch('project.apps.translate.views.views._propagate_mapping_to_batch')
+    @patch('project.apps.translate.views.views._reparse_review_entry')
+    def test_reparse_includes_propagated_entries(
+        self,
+        mock_reparse,
+        mock_propagate,
+        user,
+        parse_review_task,
+        parse_file,
+    ):
+        self.client.force_authenticate(user=user)
+        mock_reparse.return_value = {
+            'uuid': 'entry-1',
+            'formatted': 'formatted-1',
+            'edited_formatted': 'formatted-1',
+            'selected_expense_key': '商店',
+            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
+            'tag_details': [],
+            'tag_overrides': {'removed_paths': [], 'added_paths': []},
+        }
+        mock_propagate.return_value = [{
+            'uuid': 'entry-2',
+            'formatted': 'formatted-2',
+            'edited_formatted': 'formatted-2',
+            'selected_expense_key': '商店',
+            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
+            'tag_details': [],
+            'tag_overrides': {'removed_paths': [], 'added_paths': []},
+        }]
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [{
+                'uuid': 'entry-1',
+                'formatted': 'old',
+                'edited_formatted': 'old',
+                'original_row': {'counterparty': '商店', 'commodity': '商品A'},
+            }],
+            'created_at': time.time(),
+            'review_expires_at': time.time() + 86400,
+        })
+
+        response = self.client.post(
+            f'/api/translate/parse-review/{parse_review_task.id}/reparse',
+            {'entry_uuid': 'entry-1', 'selected_key': '商店'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data['propagated_entries']) == 1
+        assert response.data['propagated_entries'][0]['uuid'] == 'entry-2'
+
 
 @pytest.mark.django_db
 class TestParseReviewEditView:
@@ -626,6 +677,41 @@ class TestParseReviewReparseAllView:
 
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert response.data['celery_task_id'] == 'test-celery-task-id'
+
+    @patch('project.apps.translate.tasks.parse_single_file_task')
+    @patch('project.apps.translate.views.views.get_user_config')
+    def test_reparse_all_passes_password_to_task(
+        self, mock_get_config, mock_parse_task, user, parse_review_task, parse_file,
+    ):
+        """reparse-all 可将解密密码传入 Celery 任务参数。"""
+        self.client.force_authenticate(user=user)
+
+        from project.apps.translate.models import FormatConfig
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        config, _ = FormatConfig.objects.get_or_create(
+            owner=user,
+            defaults={'parsing_mode_preference': 'review'},
+        )
+        mock_get_config.return_value = config
+
+        mock_async_result = MagicMock()
+        mock_async_result.id = 'test-celery-task-id'
+        mock_delay = MagicMock(return_value=mock_async_result)
+        mock_parse_task.delay = mock_delay
+
+        ParseReviewService.delete_parse_result(parse_file.file_id)
+
+        response = self.client.post(
+            f'/api/translate/parse-review/{parse_review_task.id}/reparse-all',
+            {'password': 'secret123'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_202_ACCEPTED
+        mock_delay.assert_called_once()
+        args = mock_delay.call_args[0][2]
+        assert args['password'] == 'secret123'
 
 
 @pytest.mark.django_db

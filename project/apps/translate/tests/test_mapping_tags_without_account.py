@@ -92,6 +92,32 @@ class TestExpenseMappingTagsWithoutAccount:
         assert parsed["expense_candidates_with_score"] == [{"key": "十月结晶", "score": 0.0}]
 
     @patch("project.apps.translate.services.handlers.get_default_assets")
+    def test_manual_selected_key_outside_row_text_still_returns_candidates(
+        self, mock_assets, user
+    ):
+        mock_assets.return_value = _default_assets()
+        account = Account.objects.create(account="Expenses:Shopping", owner=user)
+        Expense.objects.create(
+            key="二维码支付",
+            expend=account,
+            owner=user,
+            enable=True,
+        )
+
+        parsed = single_parse_transaction(
+            _expense_row(counterparty="个人", commodity="收钱码收款"),
+            user.id,
+            _parse_config(),
+            "二维码支付",
+        )
+
+        assert parsed["selected_expense_key"] == "二维码支付"
+        assert any(
+            item["key"] == "二维码支付"
+            for item in parsed["expense_candidates_with_score"]
+        )
+
+    @patch("project.apps.translate.services.handlers.get_default_assets")
     def test_mixed_candidates_no_account_mapping_has_zero_similarity(self, mock_assets, user):
         mock_assets.return_value = _default_assets()
         tag_only = Tag.objects.create(name="TagOnly", owner=user)

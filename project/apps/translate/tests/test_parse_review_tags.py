@@ -232,3 +232,25 @@ class TestParseReviewTagsView:
         assert response.status_code == 200
         assert '#Manual/Added' in response.data['edited_formatted']
         assert 'Manual/Added' in response.data['tag_overrides']['added_paths']
+
+    def test_patch_add_tag_preserves_manual_account_edit(self, user, parse_review_task, parse_file):
+        self.client.force_authenticate(user=user)
+        ParseReviewService.save_parse_result(parse_file.file_id, {
+            'file_id': parse_file.file_id,
+            'formatted_data': [{
+                'uuid': 'entry-1',
+                'formatted': '2025-01-20 * "Payee" "Note"\n    Expenses:Food  1 CNY\n',
+                'edited_formatted': '2025-01-20 * "Payee" "Note"\n    Expenses:Transport  1 CNY\n',
+                'tag_details': [],
+                'tag_overrides': ParseReviewService.default_tag_overrides(),
+            }],
+        })
+
+        response = self.client.patch(
+            f'/api/translate/parse-review/{parse_review_task.id}/entries/entry-1/tags',
+            {'action': 'add', 'tag_path': 'Manual/Added'},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert 'Expenses:Transport' in response.data['edited_formatted']
+        assert '#Manual/Added' in response.data['edited_formatted']

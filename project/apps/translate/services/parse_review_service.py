@@ -81,18 +81,51 @@ class ParseReviewService:
         return '\n'.join(lines)
 
     @classmethod
-    def rebuild_entry_edited_formatted(cls, entry: Dict[str, Any]) -> str:
-        """根据 formatted 与 tag 覆盖重建 edited_formatted。"""
+    def rebuild_entry_edited_formatted(
+        cls,
+        entry: Dict[str, Any],
+        *,
+        base: Optional[str] = None,
+    ) -> str:
+        """根据 formatted 与 tag 覆盖重建 edited_formatted。
+
+        base 未指定时沿用 formatted；改标签时应传入 edited_formatted 优先的基线。
+        """
         cls.normalize_entry_tag_fields(entry)
         effective_details = cls.apply_tag_overrides(
             entry.get('tag_details', []),
             entry.get('tag_overrides'),
         )
         tag_paths = [detail['path'] for detail in effective_details if detail.get('path')]
-        base_formatted = entry.get('formatted') or entry.get('edited_formatted') or ''
+        if base is None:
+            base_formatted = entry.get('formatted') or entry.get('edited_formatted') or ''
+        else:
+            base_formatted = base
         edited = cls.set_header_tags(base_formatted, tag_paths)
         entry['edited_formatted'] = edited
         return edited
+
+    @classmethod
+    def _posting_lines(cls, formatted_text: str) -> List[str]:
+        lines = (formatted_text or '').split('\n')
+        return [line.strip() for line in lines[1:] if line.strip()]
+
+    @classmethod
+    def entry_postings_manually_edited(cls, entry: Dict[str, Any]) -> bool:
+        """比较 posting 行（不含首行标签），判断用户是否手改过账户。"""
+        formatted = (entry.get('formatted') or '').strip()
+        edited = (entry.get('edited_formatted') or '').strip()
+        if not edited or edited == formatted:
+            return False
+        return cls._posting_lines(formatted) != cls._posting_lines(edited)
+
+    @classmethod
+    def row_matches_mapping_key(cls, original_row: Optional[Dict[str, Any]], key: str) -> bool:
+        if not key or not original_row:
+            return False
+        counterparty = str(original_row.get('counterparty') or '')
+        commodity = str(original_row.get('commodity') or '')
+        return key in counterparty or key in commodity
 
     @classmethod
     def get_effective_tag_details(cls, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -351,7 +384,7 @@ class ParseReviewService:
                     if expense_candidates_with_score is not _UNSET:
                         entry['expense_candidates_with_score'] = expense_candidates_with_score
                     cls.normalize_entry_tag_fields(entry)
-                    cls.rebuild_entry_edited_formatted(entry)
+                    cls.rebuild_entry_edited_formatted(entry, base=formatted)
                     break
             else:
                 logger.warning(f"未找到UUID为 {uuid} 的条目")
@@ -455,7 +488,12 @@ class ParseReviewService:
             if not any(p.lower() == path_lower for p in added_paths):
                 added_paths.append(tag_path)
 
-        edited = cls.rebuild_entry_edited_formatted(target_entry)
+        tag_base = (
+            target_entry.get('edited_formatted')
+            or target_entry.get('formatted')
+            or ''
+        )
+        edited = cls.rebuild_entry_edited_formatted(target_entry, base=tag_base)
         timeout = cls._ttl_for_resave(file_id)
         if not cls.save_parse_result(file_id, cached_data, timeout=timeout):
             return None
@@ -489,6 +527,8 @@ class ParseReviewService:
             formatted_content = entry.get('edited_formatted', entry.get('formatted', ''))
             # 去除末尾的换行符（用于写入文件时连接）
             formatted_content = formatted_content.rstrip() if formatted_content else ''
+            if not formatted_content.strip():
+                continue
             result.append({
                 'uuid': entry.get('uuid'),
                 'formatted': formatted_content,

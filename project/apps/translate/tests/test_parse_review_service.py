@@ -359,3 +359,39 @@ class TestParseReviewService:
         assert ParseReviewService.is_review_expired(cached_data, now=1000.0) is True
         assert ParseReviewService.is_review_expired(cached_data, now=999.0) is False
 
+    def test_get_final_result_skips_empty_entries(self):
+        file_id = 99
+        ParseReviewService.save_parse_result(file_id, {
+            'file_id': file_id,
+            'formatted_data': [
+                {
+                    'uuid': 'entry-1',
+                    'formatted': '2025-01-20 * "A" "B"\n    Expenses:Test  1 CNY\n',
+                    'edited_formatted': '2025-01-20 * "A" "B"\n    Expenses:Test  1 CNY\n',
+                },
+                {
+                    'uuid': 'entry-2',
+                    'formatted': '2025-01-21 * "C" "D"\n    Expenses:Test  2 CNY\n',
+                    'edited_formatted': '   ',
+                },
+            ],
+        })
+        result = ParseReviewService.get_final_result(file_id)
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]['uuid'] == 'entry-1'
+
+    def test_entry_postings_manually_edited(self):
+        entry = {
+            'formatted': '2025-01-20 * "A" "B"\n    Expenses:Food  1 CNY\n',
+            'edited_formatted': '2025-01-20 * "A" "B"\n    Expenses:Transport  1 CNY\n',
+        }
+        assert ParseReviewService.entry_postings_manually_edited(entry) is True
+
+    def test_entry_postings_not_edited_when_only_tags_changed(self):
+        entry = {
+            'formatted': '2025-01-20 * "A" "B"\n    Expenses:Food  1 CNY\n',
+            'edited_formatted': '2025-01-20 * "A" "B" #Tag\n    Expenses:Food  1 CNY\n',
+        }
+        assert ParseReviewService.entry_postings_manually_edited(entry) is False
+
