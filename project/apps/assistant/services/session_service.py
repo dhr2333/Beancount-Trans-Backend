@@ -18,6 +18,10 @@ TITLE_MAX_LEN = 40
 INTERRUPTED_REPLY = '生成已中断，请重试'
 
 
+class SessionGeneratingError(Exception):
+    """会话仍有进行中的助手生成。"""
+
+
 def truncate_session_title(text: str, max_len: int = TITLE_MAX_LEN) -> str:
     normalized = re.sub(r'\s+', ' ', (text or '').strip())
     if not normalized:
@@ -38,6 +42,29 @@ def list_user_sessions(user: User, *, search: str = '', limit: int = 50) -> list
     return list(qs[:limit])
 
 
+def session_has_generating_message(session: ChatSession) -> bool:
+    return session.messages.filter(
+        role=ChatMessage.ROLE_ASSISTANT,
+        generation_status=ChatMessage.STATUS_GENERATING,
+    ).exists()
+
+
+def ensure_session_not_generating(session: ChatSession) -> None:
+    if session_has_generating_message(session):
+        raise SessionGeneratingError('上一轮回复仍在生成中，请稍候或停止后再试')
+
+
+def is_incomplete_assistant_message(message: ChatMessage) -> bool:
+    if message.role != ChatMessage.ROLE_ASSISTANT:
+        return False
+    if message.generation_status == ChatMessage.STATUS_GENERATING:
+        return True
+    if message.generation_status in (ChatMessage.STATUS_CANCELLED, ChatMessage.STATUS_FAILED):
+        return not (message.content or '').strip()
+    text = (message.content or '').strip()
+    return not text or text == INTERRUPTED_REPLY
+
+
 def is_incomplete_assistant_content(role: str, content: str) -> bool:
     if role != ChatMessage.ROLE_ASSISTANT:
         return False
@@ -46,12 +73,12 @@ def is_incomplete_assistant_content(role: str, content: str) -> bool:
 
 
 def build_llm_messages(session: ChatSession) -> list[dict[str, str]]:
-    rows = session.messages.order_by('position').values('role', 'content')
-    messages = [
-        {'role': row['role'], 'content': row['content']}
-        for row in rows
-        if not is_incomplete_assistant_content(row['role'], row['content'])
-    ]
+    rows = session.messages.order_by('position')
+    messages = []
+    for row in rows:
+        if is_incomplete_assistant_message(row):
+            continue
+        messages.append({'role': row.role, 'content': row.content})
     if len(messages) > AssistantService.MAX_MESSAGES:
         messages = messages[-AssistantService.MAX_MESSAGES:]
     return messages
@@ -84,12 +111,13 @@ def discard_trailing_incomplete_assistants(session: ChatSession) -> None:
     last = session.messages.order_by('-position').first()
     if last is None:
         return
-    if is_incomplete_assistant_content(last.role, last.content):
+    if is_incomplete_assistant_message(last):
         last.delete()
 
 
 @transaction.atomic
 def append_user_message(session: ChatSession, content: str) -> ChatMessage:
+    ensure_session_not_generating(session)
     discard_trailing_incomplete_assistants(session)
     next_position = (
         session.messages.aggregate(max_pos=Max('position'))['max_pos']
@@ -105,6 +133,7 @@ def append_user_message(session: ChatSession, content: str) -> ChatMessage:
 
 @transaction.atomic
 def edit_user_message(session: ChatSession, message_id: UUID, content: str) -> ChatMessage:
+    ensure_session_not_generating(session)
     message = session.messages.get(id=message_id, role=ChatMessage.ROLE_USER)
     session.messages.filter(position__gt=message.position).delete()
     message.content = content
@@ -127,6 +156,7 @@ def create_placeholder_assistant_message(session: ChatSession) -> ChatMessage:
         session=session,
         role=ChatMessage.ROLE_ASSISTANT,
         content='',
+        generation_status=ChatMessage.STATUS_GENERATING,
         position=position,
     )
 
@@ -139,13 +169,25 @@ def update_assistant_message(
     thinking: str = '',
     reasoning: str = '',
     queries: list[dict[str, Any]] | None = None,
+    generation_status: str | None = None,
 ) -> ChatMessage:
     message.content = content
     message.thinking = thinking or ''
     message.reasoning = reasoning or ''
     message.queries = queries or []
-    message.save(update_fields=['content', 'thinking', 'reasoning', 'queries', 'modified'])
+    update_fields = ['content', 'thinking', 'reasoning', 'queries', 'modified']
+    if generation_status is not None:
+        message.generation_status = generation_status
+        update_fields.append('generation_status')
+    message.save(update_fields=update_fields)
     ChatSession.objects.filter(pk=message.session_id).update(modified=timezone.now())
+    return message
+
+
+@transaction.atomic
+def set_message_celery_task_id(message: ChatMessage, task_id: str) -> ChatMessage:
+    message.celery_task_id = task_id
+    message.save(update_fields=['celery_task_id', 'modified'])
     return message
 
 
@@ -213,6 +255,7 @@ def save_assistant_message(
         reasoning=reasoning or '',
         queries=queries or [],
         position=position,
+        generation_status=ChatMessage.STATUS_COMPLETE,
     )
     ChatSession.objects.filter(pk=session.pk).update(modified=timezone.now())
     return message
@@ -224,3 +267,11 @@ def update_session_title(session: ChatSession, title: str) -> ChatSession:
     session.title_locked = True
     session.save(update_fields=['title', 'title_locked', 'modified'])
     return session
+
+
+def get_user_assistant_message(user: User, message_id: UUID) -> ChatMessage:
+    return ChatMessage.objects.select_related('session').get(
+        id=message_id,
+        session__user=user,
+        role=ChatMessage.ROLE_ASSISTANT,
+    )

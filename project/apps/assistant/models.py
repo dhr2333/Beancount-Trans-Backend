@@ -36,6 +36,17 @@ class ChatMessage(BaseModel):
         (ROLE_ASSISTANT, '助手'),
     ]
 
+    STATUS_GENERATING = 'generating'
+    STATUS_COMPLETE = 'complete'
+    STATUS_CANCELLED = 'cancelled'
+    STATUS_FAILED = 'failed'
+    GENERATION_STATUS_CHOICES = [
+        (STATUS_GENERATING, '生成中'),
+        (STATUS_COMPLETE, '已完成'),
+        (STATUS_CANCELLED, '已取消'),
+        (STATUS_FAILED, '失败'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         ChatSession,
@@ -48,6 +59,12 @@ class ChatMessage(BaseModel):
     reasoning = models.TextField(blank=True, default='')
     queries = models.JSONField(default=list, blank=True)
     position = models.PositiveIntegerField()
+    generation_status = models.CharField(
+        max_length=16,
+        choices=GENERATION_STATUS_CHOICES,
+        default=STATUS_COMPLETE,
+    )
+    celery_task_id = models.CharField(max_length=255, blank=True, default='')
 
     class Meta:
         verbose_name = '助手消息'

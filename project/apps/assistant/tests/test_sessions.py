@@ -54,6 +54,12 @@ def _parse_sse_events(body: str) -> list[tuple[str, dict]]:
     return events
 
 
+@pytest.fixture(autouse=True)
+def celery_eager_settings(settings):
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = True
+
+
 @pytest.mark.django_db
 class TestAssistantSessions:
     def test_list_sessions_empty(self, api_client, user, bean_file):
@@ -163,6 +169,8 @@ class TestAssistantSessions:
         assert session_event['assistant_message_id']
         assert done_event['assistant_message_id'] == session_event['assistant_message_id']
         assert done_event['user_message_id'] == session_event['user_message_id']
+        assistant = session.messages.get(id=session_event['assistant_message_id'])
+        assert assistant.generation_status == ChatMessage.STATUS_COMPLETE
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
@@ -323,8 +331,8 @@ class TestAssistantSessions:
         assert response.status_code == 400
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
-    @patch('project.apps.assistant.views.AssistantService._iter_chat_events')
-    def test_stream_without_done_persists_partial_reply(
+    @patch('project.apps.assistant.tasks.AssistantService._iter_chat_events')
+    def test_stream_without_done_marks_generation_failed(
         self,
         mock_iter,
         api_client,
@@ -332,7 +340,6 @@ class TestAssistantSessions:
         bean_file,
     ):
         from project.apps.assistant.services.assistant_service import StreamEvent
-        from project.apps.assistant.services.session_service import INTERRUPTED_REPLY
 
         config = FormatConfig.get_user_config(user)
         _clear_assistant_provider(config)
@@ -354,24 +361,19 @@ class TestAssistantSessions:
         session_event = next(data for name, data in events if name == 'session')
 
         session = ChatSession.objects.get(id=session_event['id'])
-        rows = list(session.messages.order_by('position'))
-        assert len(rows) == 2
-        assert rows[0].content == '请分析本月支出'
-        assert rows[1].role == ChatMessage.ROLE_ASSISTANT
-        assert rows[1].content == '半句话'
-        assert rows[1].content != INTERRUPTED_REPLY
+        assistant = session.messages.get(role=ChatMessage.ROLE_ASSISTANT)
+        assert assistant.content == '助手响应未完成，请重试'
+        assert assistant.generation_status == ChatMessage.STATUS_FAILED
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
-    @patch('project.apps.assistant.views.AssistantService._iter_chat_events')
-    def test_stream_without_output_persists_interrupted_placeholder(
+    @patch('project.apps.assistant.tasks.AssistantService._iter_chat_events')
+    def test_stream_without_output_marks_generation_failed(
         self,
         mock_iter,
         api_client,
         user,
         bean_file,
     ):
-        from project.apps.assistant.services.session_service import INTERRUPTED_REPLY
-
         config = FormatConfig.get_user_config(user)
         _clear_assistant_provider(config)
         mock_iter.return_value = iter([])
@@ -390,4 +392,89 @@ class TestAssistantSessions:
 
         session = ChatSession.objects.get(id=session_event['id'])
         assistant = session.messages.get(role=ChatMessage.ROLE_ASSISTANT)
-        assert assistant.content == INTERRUPTED_REPLY
+        assert assistant.content == '助手响应未完成，请重试'
+        assert assistant.generation_status == ChatMessage.STATUS_FAILED
+
+    def test_append_while_generating_returns_409(self, api_client, user, bean_file):
+        session = ChatSession.objects.create(user=user, title='生成中')
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_USER,
+            content='第一个问题',
+            position=0,
+        )
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content='',
+            position=1,
+            generation_status=ChatMessage.STATUS_GENERATING,
+        )
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {
+                'session_id': str(session.id),
+                'content': '第二个问题',
+            },
+            format='json',
+        )
+        assert response.status_code == 409
+
+    def test_reconnect_complete_message_returns_done(self, api_client, user, bean_file):
+        session = ChatSession.objects.create(user=user, title='已完成')
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_USER,
+            content='问题',
+            position=0,
+        )
+        assistant = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content='回答内容',
+            position=1,
+            generation_status=ChatMessage.STATUS_COMPLETE,
+        )
+
+        response = api_client.get(
+            reverse(
+                'assistant-chat-stream-reconnect',
+                kwargs={'assistant_message_id': assistant.id},
+            ),
+            HTTP_ACCEPT='text/event-stream',
+        )
+        assert response.status_code == 200
+        body = b''.join(response.streaming_content).decode('utf-8')
+        events = _parse_sse_events(body)
+        assert len(events) == 1
+        assert events[0][0] == 'done'
+        assert events[0][1]['reply'] == '回答内容'
+
+    @patch('project.apps.assistant.views.current_app.control.revoke')
+    def test_stop_generating_message(self, mock_revoke, api_client, user, bean_file):
+        session = ChatSession.objects.create(user=user, title='停止测试')
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_USER,
+            content='问题',
+            position=0,
+        )
+        assistant = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content='',
+            position=1,
+            generation_status=ChatMessage.STATUS_GENERATING,
+            celery_task_id='fake-task-id',
+        )
+
+        response = api_client.post(
+            reverse('assistant-message-stop', kwargs={'message_id': assistant.id}),
+        )
+        assert response.status_code == 200
+        mock_revoke.assert_called_once()
+
+        from project.apps.assistant.services.event_bus import is_cancelled
+
+        assert is_cancelled(assistant.id)

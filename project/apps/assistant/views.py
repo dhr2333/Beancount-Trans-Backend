@@ -1,6 +1,8 @@
 import logging
 from collections.abc import Iterator
+from uuid import UUID
 
+from celery import current_app
 from django.http import StreamingHttpResponse
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import mixins, status, viewsets
@@ -25,10 +27,12 @@ from .serializers import (
 )
 from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService, format_sse
+from .services.event_bus import iter_subscribe_events, request_cancel
 from .services.key_tester import evaluate_assistant_key
 from .services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from .services.reference_date import get_reference_date
 from .services.session_service import (
+    SessionGeneratingError,
     StreamAccumulator,
     append_user_message,
     build_llm_messages,
@@ -36,12 +40,13 @@ from .services.session_service import (
     create_session_with_user_message,
     edit_user_message,
     feedback_map_for_messages,
+    get_user_assistant_message,
     get_user_session,
     list_user_sessions,
-    save_assistant_message,
-    update_assistant_message,
+    set_message_celery_task_id,
     update_session_title,
 )
+from .tasks import run_assistant_chat
 from .throttles import AssistantChatThrottle
 
 logger = logging.getLogger(__name__)
@@ -54,6 +59,41 @@ class EventStreamRenderer(BaseRenderer):
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
         return data
+
+
+def _message_is_generating(message_id: UUID) -> bool:
+    return ChatMessage.objects.filter(
+        id=message_id,
+        generation_status=ChatMessage.STATUS_GENERATING,
+    ).exists()
+
+
+def _build_done_payload_from_message(message: ChatMessage) -> dict:
+    user_message = (
+        message.session.messages.filter(
+            role=ChatMessage.ROLE_USER,
+            position__lt=message.position,
+        )
+        .order_by('-position')
+        .first()
+    )
+    return {
+        'reply': message.content,
+        'thinking': message.thinking or '',
+        'reasoning': message.reasoning or '',
+        'queries': message.queries or [],
+        'session_id': str(message.session_id),
+        'user_message_id': str(user_message.id) if user_message else '',
+        'assistant_message_id': str(message.id),
+    }
+
+
+def _subscribe_message_stream(message_id: UUID) -> Iterator[str]:
+    for event_name, event_data in iter_subscribe_events(
+        message_id,
+        is_terminal=lambda: not _message_is_generating(message_id),
+    ):
+        yield format_sse(event_name, event_data)
 
 
 class AssistantStatusView(APIView):
@@ -253,6 +293,8 @@ class AssistantChatStreamView(APIView):
                         user_message = append_user_message(persist_session, text)
                 assistant_message = create_placeholder_assistant_message(persist_session)
                 llm_messages = build_llm_messages(persist_session)
+            except SessionGeneratingError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_409_CONFLICT)
             except ChatSession.DoesNotExist:
                 return Response({'detail': '会话不存在'}, status=status.HTTP_404_NOT_FOUND)
             except ChatMessage.DoesNotExist:
@@ -263,14 +305,8 @@ class AssistantChatStreamView(APIView):
                 for msg in legacy_messages or []
             ]
 
-        def event_stream() -> Iterator[str]:
-            stream_service = AssistantService(request.user, deep_think=deep_think)
-            accumulator = StreamAccumulator()
-            done_payload = None
-            flushed_incomplete = False
-            emitted_error = False
-
-            if persist_session is not None and user_message is not None and assistant_message is not None:
+        if persist_session is not None and user_message is not None and assistant_message is not None:
+            def persistent_event_stream() -> Iterator[str]:
                 yield format_sse('session', {
                     'id': str(persist_session.id),
                     'title': persist_session.title,
@@ -278,65 +314,93 @@ class AssistantChatStreamView(APIView):
                     'assistant_message_id': str(assistant_message.id),
                 })
 
-            def flush_incomplete() -> None:
-                nonlocal flushed_incomplete
-                if flushed_incomplete or done_payload is not None or assistant_message is None:
-                    return
-                flushed_incomplete = True
-                update_assistant_message(assistant_message, **accumulator.persist_kwargs())
+                task = run_assistant_chat.delay(
+                    request.user.id,
+                    str(persist_session.id),
+                    str(assistant_message.id),
+                    str(user_message.id),
+                    show_bql,
+                    deep_think,
+                )
+                set_message_celery_task_id(assistant_message, task.id)
+
+                yield from _subscribe_message_stream(assistant_message.id)
+
+            response = StreamingHttpResponse(
+                persistent_event_stream(),
+                content_type='text/event-stream',
+            )
+            response['Cache-Control'] = 'no-cache'
+            response['X-Accel-Buffering'] = 'no'
+            return response
+
+        def legacy_event_stream() -> Iterator[str]:
+            stream_service = AssistantService(request.user, deep_think=deep_think)
+            accumulator = StreamAccumulator()
+            done_payload = None
+            emitted_error = False
 
             try:
                 for event in stream_service._iter_chat_events(llm_messages, show_bql=show_bql):
                     accumulator.apply(event)
-                    if event.event == 'done' and persist_session is not None and user_message is not None:
-                        if assistant_message is None:
-                            saved = save_assistant_message(
-                                persist_session,
-                                content=event.data['reply'],
-                                thinking=event.data.get('thinking', ''),
-                                reasoning=event.data.get('reasoning', ''),
-                                queries=event.data.get('queries', []),
-                            )
-                        else:
-                            saved = update_assistant_message(
-                                assistant_message,
-                                content=event.data['reply'],
-                                thinking=event.data.get('thinking', ''),
-                                reasoning=event.data.get('reasoning', ''),
-                                queries=event.data.get('queries', []),
-                            )
-                        event.data = {
-                            **event.data,
-                            'session_id': str(persist_session.id),
-                            'user_message_id': str(user_message.id),
-                            'assistant_message_id': str(saved.id),
-                        }
+                    if event.event == 'done':
                         done_payload = event.data
                     yield format_sse(event.event, event.data)
-            except GeneratorExit:
-                flush_incomplete()
-                raise
             except (ValueError, LedgerNotFoundError) as exc:
                 emitted_error = True
-                flush_incomplete()
                 yield format_sse('error', {'detail': str(exc)})
             except Exception as exc:
                 emitted_error = True
                 logger.exception('AI 助手流式调用失败')
-                flush_incomplete()
                 yield format_sse('error', {'detail': f'AI 助手暂时不可用: {exc}'})
-            finally:
-                flush_incomplete()
 
             if done_payload is None and not emitted_error:
-                if persist_session is not None:
-                    logger.warning(
-                        'Assistant stream ended without done event for session %s',
-                        persist_session.id,
-                    )
-                else:
-                    logger.warning('Assistant stream ended without done event')
+                logger.warning('Assistant legacy stream ended without done event')
                 yield format_sse('error', {'detail': '助手响应未完成，请重试'})
+
+        response = StreamingHttpResponse(
+            legacy_event_stream(),
+            content_type='text/event-stream',
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+
+class AssistantChatStreamReconnectView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistantChatThrottle]
+    renderer_classes = [EventStreamRenderer]
+
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                description='SSE 重连订阅（text/event-stream）',
+            ),
+        },
+        summary='重连助手流式生成',
+    )
+    def get(self, request, assistant_message_id):
+        try:
+            message = get_user_assistant_message(request.user, assistant_message_id)
+        except ChatMessage.DoesNotExist:
+            return Response({'detail': '消息不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        def event_stream() -> Iterator[str]:
+            if message.generation_status == ChatMessage.STATUS_COMPLETE:
+                yield format_sse('done', _build_done_payload_from_message(message))
+                return
+
+            if message.generation_status in (
+                ChatMessage.STATUS_CANCELLED,
+                ChatMessage.STATUS_FAILED,
+            ):
+                detail = message.content or '生成已结束'
+                yield format_sse('error', {'detail': detail})
+                return
+
+            yield from _subscribe_message_stream(message.id)
 
         response = StreamingHttpResponse(
             event_stream(),
@@ -345,6 +409,41 @@ class AssistantChatStreamView(APIView):
         response['Cache-Control'] = 'no-cache'
         response['X-Accel-Buffering'] = 'no'
         return response
+
+
+class AssistantMessageStopView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: OpenApiResponse(description='已请求停止生成')},
+        summary='停止助手消息生成',
+    )
+    def post(self, request, message_id):
+        try:
+            message = get_user_assistant_message(request.user, message_id)
+        except ChatMessage.DoesNotExist:
+            return Response({'detail': '消息不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if message.generation_status != ChatMessage.STATUS_GENERATING:
+            return Response({'detail': '当前没有进行中的生成'}, status=status.HTTP_400_BAD_REQUEST)
+
+        request_cancel(message.id)
+        if message.celery_task_id:
+            current_app.control.revoke(message.celery_task_id, terminate=True, signal='SIGTERM')
+
+        message.refresh_from_db()
+        if message.generation_status == ChatMessage.STATUS_GENERATING:
+            from .services.session_service import update_assistant_message
+
+            content = (message.content or '').strip() or '已停止生成'
+            update_assistant_message(
+                message,
+                content=content,
+                generation_status=ChatMessage.STATUS_CANCELLED,
+            )
+
+        return Response({'detail': '已请求停止生成'})
 
 
 class AssistantFeedbackView(APIView):

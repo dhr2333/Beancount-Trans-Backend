@@ -114,6 +114,7 @@ class StoredChatMessageSerializer(serializers.ModelSerializer):
             'reasoning',
             'queries',
             'position',
+            'generation_status',
             'feedback',
             'created',
         )
