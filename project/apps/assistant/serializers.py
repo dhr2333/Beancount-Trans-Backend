@@ -38,9 +38,17 @@ class AssistantChatRequestSerializer(serializers.Serializer):
         return attrs
 
 
+class QueryReportLinkSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    label = serializers.CharField()
+    path = serializers.CharField()
+
+
 class QueryRecordSerializer(serializers.Serializer):
     bql = serializers.CharField()
     result_preview = serializers.CharField()
+    fava_path = serializers.CharField(required=False, allow_blank=True, default='')
+    report = QueryReportLinkSerializer(required=False, allow_null=True)
 
 
 class AssistantChatResponseSerializer(serializers.Serializer):

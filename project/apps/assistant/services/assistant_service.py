@@ -24,6 +24,7 @@ from .reply_number_guard import (
     validate_reply_numbers,
 )
 from .insight_mode import INSIGHT_MODE_BLOCK, detect_insight_mode, get_last_user_message
+from .fava_url import query_record_fava_fields
 from .schema_provider import build_bql_examples, build_insight_bql_examples, get_ledger_context
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,8 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 17. 调用工具前，用一两句话简要说明你的分析思路（会展示在「思考过程」中）；最终回答中不要重复这段思路。
 18. 复式记账符号：Income 累计为负表示收入，向用户展示时用绝对值并标明为收入，勿将负号误解为亏损；Income 为正表示冲销。Expenses 为正表示支出。Liabilities 累计为负表示欠款，展示时可取绝对值。展示时数字须来自 BQL 结果（可取绝对值），禁止心算。
 19. 禁止在回复正文中输出 DSML、XML 或任何工具调用原始标记；需要查询时必须通过工具接口调用；查无数据时直接说明，不要重复输出查询语法。
+20. 结论中引用具体账目时，须写清**日期**、**收款人/叙述**、**金额**（均来自 BQL 结果行，禁止心算或编造）。
+21. 不要在回复正文中输出 Fava 或平台 URL、uuid、查询链接；界面会在结论后自动附加「来源」链接。
 
 {bql_capability_reference}
 
@@ -152,14 +155,34 @@ def format_sse(event: str, data: dict[str, Any]) -> str:
 class QueryRecord:
     bql: str
     result_preview: str
+    fava_path: str = ''
+    report: dict[str, Any] | None = None
+
+
+def query_record_to_dict(record: QueryRecord) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        'bql': record.bql,
+        'result_preview': record.result_preview,
+    }
+    if record.fava_path:
+        payload['fava_path'] = record.fava_path
+    if record.report:
+        payload['report'] = record.report
+    return payload
 
 
 def query_records_from_dicts(records: list[dict[str, Any]]) -> list[QueryRecord]:
-    return [
-        QueryRecord(bql=record['bql'], result_preview=record['result_preview'])
-        for record in records
-        if record.get('bql') and record.get('result_preview')
-    ]
+    result: list[QueryRecord] = []
+    for record in records:
+        if not record.get('bql') or not record.get('result_preview'):
+            continue
+        result.append(QueryRecord(
+            bql=record['bql'],
+            result_preview=record['result_preview'],
+            fava_path=record.get('fava_path') or '',
+            report=record.get('report'),
+        ))
+    return result
 
 
 @dataclass
@@ -231,7 +254,13 @@ class AssistantService:
             query = arguments.get('query', '')
             try:
                 result = self.ledger_query.execute(query)
-                queries.append(QueryRecord(bql=result.bql, result_preview=result.result_text))
+                fava_fields = query_record_fava_fields(self.user, result.bql)
+                queries.append(QueryRecord(
+                    bql=result.bql,
+                    result_preview=result.result_text,
+                    fava_path=fava_fields.get('fava_path', ''),
+                    report=fava_fields.get('report'),
+                ))
                 return result.result_text
             except BQLValidationError as exc:
                 return str(exc)
@@ -286,10 +315,7 @@ class AssistantService:
     def _done_event_data(self, reply: AssistantReply) -> dict[str, Any]:
         return {
             'reply': reply.reply,
-            'queries': [
-                {'bql': q.bql, 'result_preview': q.result_preview}
-                for q in reply.queries
-            ],
+            'queries': [query_record_to_dict(q) for q in reply.queries],
             'thinking': reply.thinking,
             'reasoning': reply.reasoning,
             'model': self.model,
@@ -625,8 +651,7 @@ class AssistantService:
                     tool_end: dict[str, Any] = {'name': fn_name}
                     if fn_name == 'run_bql' and len(queries) > queries_before:
                         record = queries[-1]
-                        tool_end['bql'] = record.bql
-                        tool_end['result_preview'] = record.result_preview
+                        tool_end.update(query_record_to_dict(record))
                     yield StreamEvent('tool_end', tool_end)
 
                     llm_messages.append({
@@ -673,10 +698,7 @@ class AssistantService:
             if event.event == 'done':
                 result = AssistantReply(
                     reply=event.data['reply'],
-                    queries=[
-                        QueryRecord(bql=q['bql'], result_preview=q['result_preview'])
-                        for q in event.data['queries']
-                    ],
+                    queries=query_records_from_dicts(event.data['queries']),
                     thinking=event.data.get('thinking', ''),
                     reasoning=event.data.get('reasoning', ''),
                 )
