@@ -415,6 +415,56 @@ class TestParseReviewReparseView:
 
 
 @pytest.mark.django_db
+class TestParseReviewPreviewSyncView:
+    """ParseReviewPreviewSyncView API 测试"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_preview_sync_removes_deleted_entry(
+        self, user, parse_review_task, parse_file, mock_parse_result_data
+    ):
+        self.client.force_authenticate(user=user)
+        ParseReviewService.save_parse_result(parse_file.file_id, mock_parse_result_data)
+
+        updated = (
+            '2025-01-20 * "Updated" "Transaction 1"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test  -100.00 CNY'
+        )
+        response = self.client.put(
+            f'/api/translate/parse-review/{parse_review_task.id}/preview-sync',
+            {
+                'entries': [
+                    {'uuid': 'entry-1', 'edited_formatted': updated},
+                ],
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['removed_count'] == 1
+        assert len(response.data['formatted_data']) == 1
+        assert response.data['formatted_data'][0]['uuid'] == 'entry-1'
+        assert response.data['formatted_data'][0]['edited_formatted'] == updated
+
+        final = ParseReviewService.get_final_result(parse_file.file_id)
+        assert len(final) == 1
+
+    def test_preview_sync_unknown_uuid(self, user, parse_review_task, parse_file, mock_parse_result_data):
+        self.client.force_authenticate(user=user)
+        ParseReviewService.save_parse_result(parse_file.file_id, mock_parse_result_data)
+
+        response = self.client.put(
+            f'/api/translate/parse-review/{parse_review_task.id}/preview-sync',
+            {'entries': [{'uuid': 'missing', 'edited_formatted': 'test'}]},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
 class TestParseReviewEditView:
     """ParseReviewEditView API 测试"""
     

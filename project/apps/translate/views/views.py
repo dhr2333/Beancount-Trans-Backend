@@ -4,7 +4,7 @@ import uuid
 import json
 import time
 import os
-from typing import Optional
+from typing import Dict, Optional
 from celery.result import GroupResult
 from celery import group
 from django.core.cache import cache
@@ -1027,6 +1027,75 @@ class ParseReviewTagsView(ParseReviewViewSet):
             )
 
         return Response(result, status=status.HTTP_200_OK)
+
+
+class ParseReviewPreviewSyncView(ParseReviewViewSet):
+    """预览批量同步（以预览文本为真源，支持删条）"""
+
+    def put(self, request, task_id):
+        """PUT /api/translate/parse-review/{task_id}/preview-sync
+
+        Body: {"entries": [{"uuid": "...", "edited_formatted": "..."}]}
+        """
+        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        if error_response:
+            return error_response
+
+        editable_error = self.ensure_review_editable(task, parse_file)
+        if editable_error:
+            return editable_error
+
+        entries = request.data.get('entries')
+        if not isinstance(entries, list):
+            return Response(
+                {'error': '缺少必要参数：entries'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        from project.apps.translate.utils.beancount_validator import BeancountValidator
+
+        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        if migrated is None:
+            return Response(
+                {'error': '解析结果不存在或已过期，请重新解析'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        sync_result = ParseReviewService.sync_entries_from_preview(
+            parse_file.file_id,
+            entries,
+        )
+        if sync_result is None:
+            return Response(
+                {'error': '预览同步失败，请检查条目 uuid 是否有效'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        formatted_data = sync_result['formatted_data']
+        for entry in formatted_data:
+            if 'formatted' in entry and entry['formatted']:
+                entry['formatted'] = entry['formatted'].rstrip()
+            if 'edited_formatted' in entry and entry['edited_formatted']:
+                entry['edited_formatted'] = entry['edited_formatted'].rstrip()
+
+        validation_warnings: Dict[str, str] = {}
+        for entry in formatted_data:
+            content = entry.get('edited_formatted') or ''
+            is_valid, validation_error = BeancountValidator.validate_single_entry(content)
+            if not is_valid and validation_error:
+                entry_uuid = entry.get('uuid')
+                if entry_uuid:
+                    validation_warnings[entry_uuid] = validation_error
+
+        return Response(
+            {
+                'formatted_data': formatted_data,
+                'removed_count': sync_result['removed_count'],
+                'validation_warnings': validation_warnings,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ParseReviewConfirmView(ParseReviewViewSet):

@@ -455,6 +455,59 @@ class ParseReviewService:
         return cls.save_parse_result(file_id, cached_data, timeout=timeout)
 
     @classmethod
+    def sync_entries_from_preview(
+        cls,
+        file_id: int,
+        entries: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """按预览保存结果重建 formatted_data（支持删条与改内容）。
+
+        Args:
+            file_id: 文件 ID
+            entries: 保留条目的有序列表，每项含 uuid、edited_formatted
+
+        Returns:
+            成功时返回 {'formatted_data': [...], 'removed_count': int}，失败返回 None
+        """
+        cached_data = cls.get_parse_result_migrated(file_id)
+        if cached_data is None:
+            return None
+
+        formatted_data = cached_data.get('formatted_data') or []
+        by_uuid = {
+            entry.get('uuid'): entry
+            for entry in formatted_data
+            if entry.get('uuid')
+        }
+
+        new_formatted_data: List[Dict[str, Any]] = []
+        for item in entries:
+            entry_uuid = (item.get('uuid') or '').strip()
+            if not entry_uuid or entry_uuid not in by_uuid:
+                logger.warning('预览同步包含未知 uuid: %s', entry_uuid)
+                return None
+
+            source = by_uuid[entry_uuid]
+            edited = (item.get('edited_formatted') or '').rstrip()
+            source['edited_formatted'] = edited
+            cls.normalize_entry_tag_fields(source)
+            new_formatted_data.append(source)
+
+        removed_count = len(formatted_data) - len(new_formatted_data)
+        cached_data['formatted_data'] = new_formatted_data
+        timeout = cls._ttl_for_resave(file_id)
+        if not cls.save_parse_result(file_id, cached_data, timeout=timeout):
+            return None
+
+        for entry in new_formatted_data:
+            entry['tag_details'] = cls.get_effective_tag_details(entry)
+
+        return {
+            'formatted_data': new_formatted_data,
+            'removed_count': removed_count,
+        }
+
+    @classmethod
     def update_entry_tags(
         cls,
         file_id: int,

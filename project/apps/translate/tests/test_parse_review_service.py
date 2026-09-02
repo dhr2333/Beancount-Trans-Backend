@@ -411,3 +411,44 @@ class TestParseReviewService:
         assert ParseReviewService.row_matches_mapping_key(row, '0814') is False
         assert ParseReviewService.row_matches_mapping_key(row, '储蓄卡', mapping_type='asset') is True
 
+    def test_sync_entries_from_preview_removes_deleted_entry(self, mock_parse_result_data):
+        file_id = 88
+        mock_parse_result_data['file_id'] = file_id
+        ParseReviewService.save_parse_result(file_id, mock_parse_result_data)
+
+        updated_content = (
+            '2025-01-20 * "Updated" "Transaction 1"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test  -100.00 CNY'
+        )
+        result = ParseReviewService.sync_entries_from_preview(
+            file_id,
+            [{'uuid': 'entry-1', 'edited_formatted': updated_content}],
+        )
+
+        assert result is not None
+        assert result['removed_count'] == 1
+        assert len(result['formatted_data']) == 1
+        assert result['formatted_data'][0]['uuid'] == 'entry-1'
+        assert result['formatted_data'][0]['edited_formatted'] == updated_content
+        assert result['formatted_data'][0]['original_row'] is not None
+
+        cached = ParseReviewService.get_parse_result(file_id)
+        assert len(cached['formatted_data']) == 1
+
+        final = ParseReviewService.get_final_result(file_id)
+        assert len(final) == 1
+        assert final[0]['uuid'] == 'entry-1'
+        assert 'Updated' in final[0]['formatted']
+
+    def test_sync_entries_from_preview_unknown_uuid_returns_none(self, mock_parse_result_data):
+        file_id = 89
+        mock_parse_result_data['file_id'] = file_id
+        ParseReviewService.save_parse_result(file_id, mock_parse_result_data)
+
+        result = ParseReviewService.sync_entries_from_preview(
+            file_id,
+            [{'uuid': 'missing', 'edited_formatted': 'test'}],
+        )
+        assert result is None
+
