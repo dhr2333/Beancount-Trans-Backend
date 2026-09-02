@@ -97,7 +97,7 @@ def _finalize_cancelled(message: ChatMessage, accumulator: StreamAccumulator) ->
     publish(message.id, 'error', {'detail': '已停止生成'})
 
 
-@shared_task(bind=True, max_retries=0, time_limit=180)
+@shared_task(bind=True, max_retries=0, time_limit=600)
 def run_assistant_chat(
     self,
     user_id: int,
