@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.11.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.10.0...5.11.0) (2026-09-02)
+
+### Features
+
+* Copilot Fava 引用来源 ([d123342](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d1233426e8d5eab74fa0d5ca8ce5eec1324d330b))
+
+### Bug Fixes
+
+* 「Copilot 多轮按需查询」 ([a979b63](https://github.com/dhr2333/Beancount-Trans-Backend/commit/a979b632da2fff9b4d79afc99b1f5bc329d10f79))
+* increase Celery task time limit for run_assistant_chat to improve processing time ([7371372](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7371372065acae093fb30acd5ebcc7b13b210c3a))
+* 修复以下问题 ([bc7d6e8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/bc7d6e8ef75d6427f994a24c33ef3ef7b1c19b7b))
+* 修复审核草稿一致性问题 ([09db352](https://github.com/dhr2333/Beancount-Trans-Backend/commit/09db35294fac4e0663cef431f93a77a98e2cb2cf))
+* 修复或新增 Copilot 以下问题： ([6f14155](https://github.com/dhr2333/Beancount-Trans-Backend/commit/6f14155a4df434be21e4e71cf413143e9d022ae1))
+* 解决设置页两套 DeepSeek Key 的冗余问题 ([aecad75](https://github.com/dhr2333/Beancount-Trans-Backend/commit/aecad75309b45e16bfbf36d6c52dd175ef156918))
+* 解析审核支持新增资产映射（参考新增支出映射和新增收入映射） ([7dfbd65](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7dfbd65a624be00d4f89f2c19bac6c3d81b30d1d))
+* 请求只负责落库和投递任务，生成在 Celery 上跑；页面只订阅进度 ([307dd73](https://github.com/dhr2333/Beancount-Trans-Backend/commit/307dd73846db6308a8644e076d767991a56d8791))
+* 预览保存为真源，删除条目后无空行 ([b6f2011](https://github.com/dhr2333/Beancount-Trans-Backend/commit/b6f2011c8b628ae603562cec27fbe6c819e0f118))
+
 ## [5.10.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.9.0...5.10.0) (2026-06-20)
 
 ### Features
