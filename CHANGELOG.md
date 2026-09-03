@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.11.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.0...5.11.1) (2026-09-03)
+
+### Bug Fixes
+
+* 处理自动化测试失败 ([4d3bcb1](https://github.com/dhr2333/Beancount-Trans-Backend/commit/4d3bcb172361d80cb5483c2cc812a4e30966233a))
+
 ## [5.11.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.10.0...5.11.0) (2026-09-02)
 
 ### Features
