@@ -246,9 +246,9 @@ class ReparseEntryView(APIView):
                 "original_row": original_row,
             }, timeout=3600)
             response_ai_choose = (
-                parsed_entry.get('selected_expense_key')
-                if mapping_type != 'asset'
-                else cached_parsed.get('selected_expense_key')
+                cached_parsed.get('selected_expense_key')
+                if mapping_type == 'asset'
+                else selected_key
             )
             if parsed_entry.get('installment_role') == 'installment':
                 response_ai_choose = None

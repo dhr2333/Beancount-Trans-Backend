@@ -395,7 +395,11 @@ class TestAssistantSessions:
         assert assistant.content == '助手响应未完成，请重试'
         assert assistant.generation_status == ChatMessage.STATUS_FAILED
 
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     def test_append_while_generating_returns_409(self, api_client, user, bean_file):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+
         session = ChatSession.objects.create(user=user, title='生成中')
         ChatMessage.objects.create(
             session=session,

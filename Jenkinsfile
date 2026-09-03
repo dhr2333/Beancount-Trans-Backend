@@ -144,6 +144,7 @@ pipeline {
                                 mkdir -p \${REPORTS_DIR}
                                 chmod 777 \${REPORTS_DIR}
                                 python manage.py check --deploy || echo 'Django check failed, continuing...'
+                                set +e
                                 pytest --no-migrations --reuse-db \\
                                     --junitxml=\${REPORTS_DIR}/junit.xml \\
                                     --html=\${REPORTS_DIR}/pytest-report.html \\
@@ -151,9 +152,12 @@ pipeline {
                                     --cov-report=xml:\${REPORTS_DIR}/coverage.xml \\
                                     --cov-report=html:\${REPORTS_DIR}/htmlcov \\
                                     --tb=short \\
-                                    -v || echo 'pytest completed with exit code: \$?'
+                                    -v
+                                PYTEST_EXIT=\$?
+                                set -e
                                 chmod -R 777 \${REPORTS_DIR}
-                                echo '测试完成'
+                                echo "pytest completed with exit code: \$PYTEST_EXIT"
+                                exit \$PYTEST_EXIT
                             "
                     """
 

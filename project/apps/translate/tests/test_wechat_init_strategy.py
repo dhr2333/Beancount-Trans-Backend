@@ -10,17 +10,33 @@ from project.utils.file import convert_df_to_csv_bytes
 
 FIXTURES = Path(__file__).resolve().parents[3] / "fixtures" / "sample_files"
 SAMPLE_CSV = FIXTURES / "完整测试_微信.csv"
-COLLECT_XLSX = Path("/home/daihaorui/桌面/Syncthing/Bill/03_微信账单测试/微信_Collect.xlsx")
 
 
 def _init_from_csv_bytes(data: bytes):
     return WeChatPayInitStrategy().init(io.StringIO(data.decode("utf-8-sig")))
 
 
-def _init_from_xlsx(path: Path):
-    df = pd.read_excel(path, header=None, dtype=str).fillna("")
-    csv_bytes = convert_df_to_csv_bytes(df)
-    return _init_from_csv_bytes(csv_bytes)
+def _wechat_xlsx_like_df():
+    """模拟微信 xlsx 导出：元数据 + 分隔行 + 表头 + 两条交易。"""
+    empty = [""] * 10
+    return pd.DataFrame([
+        ["微信支付账单明细", *empty],
+        ["微信昵称：[测试]", *empty],
+        ["", *empty],
+        ["----------------------微信支付账单明细列表--------------------", *empty],
+        [
+            "交易时间", "交易类型", "交易对方", "商品", "收/支",
+            "金额(元)", "支付方式", "当前状态", "交易单号", "商户单号", "备注",
+        ],
+        [
+            "2026-07-01 10:00:00", "商户消费", "商店A", "商品A", "支出",
+            "¥10.00", "零钱", "支付成功", "1001", "m1", "/",
+        ],
+        [
+            "2026-07-02 11:00:00", "商户消费", "商店B", "商品B", "支出",
+            "¥20.00", "零钱", "支付成功", "1002", "m2", "/",
+        ],
+    ])
 
 
 class TestWeChatPayInitStrategy:
@@ -37,9 +53,7 @@ class TestWeChatPayInitStrategy:
         )
 
     def test_xlsx_export_skips_separator_row(self):
-        if not COLLECT_XLSX.exists():
-            pytest.skip("collect xlsx missing")
-        records = _init_from_xlsx(COLLECT_XLSX)
+        records = _init_from_csv_bytes(convert_df_to_csv_bytes(_wechat_xlsx_like_df()))
         assert len(records) >= 2
         assert records[0]["transaction_time"].startswith("2026-07-")
         assert all(
