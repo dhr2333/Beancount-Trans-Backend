@@ -44,11 +44,24 @@ class QueryReportLinkSerializer(serializers.Serializer):
     path = serializers.CharField()
 
 
+class QueryEvidenceSerializer(serializers.Serializer):
+    summary = serializers.CharField(allow_blank=True, required=False, default='')
+    columns = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+    rows = serializers.ListField(
+        child=serializers.ListField(child=serializers.CharField(allow_blank=True)),
+        required=False,
+        default=list,
+    )
+    row_count = serializers.IntegerField(required=False, default=0)
+    truncated = serializers.BooleanField(required=False, default=False)
+
+
 class QueryRecordSerializer(serializers.Serializer):
     bql = serializers.CharField()
     result_preview = serializers.CharField()
     fava_path = serializers.CharField(required=False, allow_blank=True, default='')
     report = QueryReportLinkSerializer(required=False, allow_null=True)
+    evidence = QueryEvidenceSerializer(required=False, allow_null=True)
 
 
 class AssistantChatResponseSerializer(serializers.Serializer):

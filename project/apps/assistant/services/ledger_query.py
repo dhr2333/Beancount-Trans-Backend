@@ -17,6 +17,7 @@ from project.utils.file import BeanFileManager
 from .bql_errors import format_bql_error
 from .bql_validator import BQLValidationError, validate_bql
 from .metadata_catalog import build_path_to_description_map
+from .query_evidence import QueryEvidence, build_query_evidence
 from .result_enricher import enrich_bql_result_text
 from .result_normalizer import normalize_zero_balance_sums
 
@@ -33,6 +34,7 @@ class BQLQueryResult:
     result_text: str
     row_count: int
     truncated: bool
+    evidence: QueryEvidence | None = None
 
 
 class LedgerQueryService:
@@ -72,14 +74,22 @@ class LedgerQueryService:
                 result_text += f'\n... (结果已截断，仅显示前 {self.max_rows} 行，共 {row_count} 行)'
             currency = FormatConfig.get_user_config(self.user).currency or 'CNY'
             result_text = normalize_zero_balance_sums(result_text, bql, currency)
+            path_map = build_path_to_description_map(self.user) if enrich else {}
             if enrich and result_text:
-                path_map = build_path_to_description_map(self.user)
                 result_text = enrich_bql_result_text(result_text, path_map)
+            evidence = build_query_evidence(
+                cursor.description or (),
+                rows,
+                row_count=row_count,
+                truncated=truncated,
+                path_map=path_map or None,
+            )
             return BQLQueryResult(
                 bql=bql,
                 result_text=result_text or '(无结果)',
                 row_count=row_count,
                 truncated=truncated,
+                evidence=evidence,
             )
         except BQLValidationError:
             raise

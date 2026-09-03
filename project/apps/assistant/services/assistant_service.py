@@ -157,6 +157,7 @@ class QueryRecord:
     result_preview: str
     fava_path: str = ''
     report: dict[str, Any] | None = None
+    evidence: dict[str, Any] | None = None
 
 
 def query_record_to_dict(record: QueryRecord) -> dict[str, Any]:
@@ -168,6 +169,8 @@ def query_record_to_dict(record: QueryRecord) -> dict[str, Any]:
         payload['fava_path'] = record.fava_path
     if record.report:
         payload['report'] = record.report
+    if record.evidence:
+        payload['evidence'] = record.evidence
     return payload
 
 
@@ -181,6 +184,7 @@ def query_records_from_dicts(records: list[dict[str, Any]]) -> list[QueryRecord]
             result_preview=record['result_preview'],
             fava_path=record.get('fava_path') or '',
             report=record.get('report'),
+            evidence=record.get('evidence'),
         ))
     return result
 
@@ -260,6 +264,7 @@ class AssistantService:
                     result_preview=result.result_text,
                     fava_path=fava_fields.get('fava_path', ''),
                     report=fava_fields.get('report'),
+                    evidence=result.evidence.to_dict() if result.evidence else None,
                 ))
                 return result.result_text
             except BQLValidationError as exc:
