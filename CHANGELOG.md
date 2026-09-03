@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.11.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.1...5.11.2) (2026-09-03)
+
+### Bug Fixes
+
+* 落地「来源 = 证据切片 + Fava 链接」 ([9c7db50](https://github.com/dhr2333/Beancount-Trans-Backend/commit/9c7db50eaf4b0363cb640863a59f0f4bd03597b0))
+
 ## [5.11.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.0...5.11.1) (2026-09-03)
 
 ### Bug Fixes
