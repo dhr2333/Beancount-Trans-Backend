@@ -137,3 +137,88 @@ class TestFormatStepEnrichedFields:
         assert fd['original_row']['payment_method'] == '余额'
         assert fd['payment_method'] == '余额'
         assert fd['transaction_type'] == '支出'
+
+
+class TestParseStepNoIgnoreOrphanRefund:
+    """关闭默认忽略时，无原单支付宝退款也应进入 parsed_data"""
+
+    def _refund_row(self):
+        return {
+            'transaction_time': '2026-08-26 12:00:00',
+            'transaction_category': '退款',
+            'counterparty': '商店',
+            'commodity': '退款-商品',
+            'transaction_type': '收入',
+            'amount': 10.0,
+            'payment_method': '余额',
+            'transaction_status': '退款成功',
+            'notes': '/',
+            'bill_identifier': 'alipay',
+            'uuid': '2026082623001174561431978102_13180601326082620451502259894',
+            'discount': False,
+        }
+
+    def _run_parse_step(self, args):
+        from project.apps.translate.services.steps import ParseStep
+
+        row = self._refund_row()
+        config = MagicMock()
+        config.flag = '*'
+        config.ai_model = 'BERT'
+        user = MagicMock()
+        user.id = 1
+        context = {
+            'owner_id': 1,
+            'user': user,
+            'config': config,
+            'prefilter_bill': [row],
+            'args': args,
+            'parsed_data': [],
+            'status': 'pending',
+        }
+        parsed = {
+            'uuid': row['uuid'],
+            'cache_key': row['uuid'],
+            'selected_expense_key': None,
+            'installment_role': None,
+        }
+        with patch(
+            'project.apps.translate.services.steps.build_ledger_index_for_user',
+            return_value={},
+        ), patch(
+            'project.apps.translate.services.steps.build_raw_payment_index',
+            return_value={},
+        ), patch(
+            'project.apps.translate.services.steps.collect_refund_parent_uuids',
+            return_value=set(),
+        ), patch(
+            'project.apps.translate.services.steps.alipay_is_refund_row',
+            return_value=True,
+        ), patch(
+            'project.apps.translate.services.steps.alipay_parent_uuid',
+            return_value='2026082623001174561431978102',
+        ), patch(
+            'project.apps.translate.services.steps.resolve_alipay_refund_peer',
+            return_value=None,
+        ), patch(
+            'project.apps.translate.services.steps.single_parse_transaction',
+            return_value=dict(parsed),
+        ), patch(
+            'project.apps.translate.services.steps.expand_parsed_entry',
+            side_effect=lambda entry, *_a, **_k: [entry],
+        ), patch(
+            'project.apps.translate.services.steps.assign_transaction_links',
+        ), patch(
+            'project.apps.translate.services.steps.allocate_unique_cache_key',
+            side_effect=lambda key, _seen: key,
+        ):
+            return ParseStep().execute(context)
+
+    def test_default_skips_orphan_refund(self):
+        result = self._run_parse_step({})
+        assert result['parsed_data'] == []
+
+    def test_no_ignore_keeps_orphan_refund(self):
+        result = self._run_parse_step({'no_ignore': True})
+        assert len(result['parsed_data']) == 1
+        assert result['parsed_data'][0]['uuid'].startswith('2026082623001174561431978102')

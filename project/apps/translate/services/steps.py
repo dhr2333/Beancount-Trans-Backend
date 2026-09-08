@@ -157,6 +157,8 @@ class ParseStep(Step):
                 return expanded[0]
 
             context.setdefault('parsed_data', [])
+            args = context.get('args') or {}
+            no_ignore = args.get('no_ignore') is True
 
             for row in bill_data:
                 refund_peer = None
@@ -169,13 +171,20 @@ class ParseStep(Step):
                         _lazy_parse_payment,
                     )
                     # 原单已关闭被预过滤、或不在本批/账本：退款入账会凭空增加资产
-                    if refund_peer is None:
+                    # 「关闭默认忽略」时全部保留，便于对照原始账单
+                    if refund_peer is None and not no_ignore:
                         logger.info(
                             "忽略无原单关联的支付宝退款 uuid=%s parent=%s",
                             row.get("uuid"),
                             alipay_parent_uuid(row),
                         )
                         continue
+                    if refund_peer is None and no_ignore:
+                        logger.info(
+                            "关闭默认忽略：保留无原单关联的支付宝退款 uuid=%s parent=%s",
+                            row.get("uuid"),
+                            alipay_parent_uuid(row),
+                        )
 
                 # 每条账单行独立解析。parse_cache 仅供退款关联原单，不可复用为当前行结果
                 # （组合支付会共享交易订单号，复用会导致金额/账户被覆盖并在审核页撞 uuid）。
