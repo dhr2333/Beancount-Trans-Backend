@@ -21,6 +21,13 @@
 * "关闭默认忽略" 保留所有条目 ([1d8f6a8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/1d8f6a86bf8ea156f9d34a1e06495311f97f51f8))
 * 首页解析对齐现有解析审核 ([bdbdab0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/bdbdab04000d55aeb99ed8fdc196d8c3af95b952))
 
+## [5.11.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.1...5.11.2) (2026-09-08)
+
+### Bug Fixes
+
+* "关闭默认忽略" 保留所有条目 ([1d8f6a8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/1d8f6a86bf8ea156f9d34a1e06495311f97f51f8))
+* 首页解析对齐现有解析审核 ([bdbdab0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/bdbdab04000d55aeb99ed8fdc196d8c3af95b952))
+
 ## [5.11.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.0...5.11.1) (2026-09-03)
 
 ### Bug Fixes
