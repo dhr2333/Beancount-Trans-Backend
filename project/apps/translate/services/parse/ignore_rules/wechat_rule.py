@@ -9,6 +9,8 @@ def wechatpay_pre_filter(row: Dict, args: Dict) -> bool:
 
     只有返回为True时，才会忽略该行数据
     """
+    if args.get('no_ignore') is True:
+        return False
     return row["transaction_status"] in ["已全额退款", "对方已退还"]
 
 

@@ -148,22 +148,30 @@ class SingleBillAnalyzeView(APIView):
             formatted_data_list = context["formatted_data"]
             for formatted_data in formatted_data_list:
                 if isinstance(formatted_data, dict):
+                    formatted_text = formatted_data.get("formatted") or ''
+                    if isinstance(formatted_text, str):
+                        formatted_text = formatted_text.rstrip()
                     results.append({
-                        # "id": formatted_data.get("uuid") or formatted_data.get("id"),
                         "id": formatted_data.get("id"),
-                        "formatted": formatted_data.get("formatted"),
+                        "uuid": formatted_data.get("uuid") or formatted_data.get("id"),
+                        "formatted": formatted_text,
+                        "edited_formatted": formatted_data.get("edited_formatted") or formatted_text,
                         "ai_choose": formatted_data.get("selected_expense_key"),
                         "ai_candidates": formatted_data.get("expense_candidates_with_score", []),
                         "counterparty": formatted_data.get("counterparty", ""),
                         "commodity": formatted_data.get("commodity", ""),
                         "payment_method": formatted_data.get("payment_method", ""),
                         "transaction_type": formatted_data.get("transaction_type", ""),
+                        "installment_role": formatted_data.get("installment_role"),
+                        "installment_period": formatted_data.get("installment_period"),
+                        "tag_details": formatted_data.get("tag_details") or [],
+                        "original_row": formatted_data.get("original_row") or {},
                     })
                 else:
                     results.append({
-                        # "id": formatted_data.get("uuid") or formatted_data.get("id"),
-                        "id": formatted_data.get("id"),
+                        "id": formatted_data.get("id") if hasattr(formatted_data, 'get') else None,
                         "formatted": formatted_data,
+                        "edited_formatted": formatted_data,
                         "ai_choose": None,
                         "ai_candidates": [],
                     })
@@ -252,17 +260,51 @@ class ReparseEntryView(APIView):
             )
             if parsed_entry.get('installment_role') == 'installment':
                 response_ai_choose = None
+            formatted_text = formatted.rstrip() if formatted else ''
             return Response({
                 "id": entry_id,
-                "formatted": formatted,
+                "uuid": entry_id,
+                "formatted": formatted_text,
+                "edited_formatted": formatted_text,
                 "ai_choose": response_ai_choose,
                 "ai_candidates": parsed_entry.get('expense_candidates_with_score') or [],
                 "counterparty": original_row.get("counterparty", ""),
                 "commodity": original_row.get("commodity", ""),
+                "payment_method": original_row.get("payment_method", ""),
+                "transaction_type": original_row.get("transaction_type", ""),
+                "installment_role": parsed_entry.get("installment_role"),
+                "installment_period": parsed_entry.get("installment_period"),
+                "tag_details": parsed_entry.get("tag_details") or [],
+                "original_row": original_row,
             }, status=status.HTTP_200_OK)
         except Exception as e:
             logger.exception(e)
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ValidateEntryView(APIView):
+    """单条 Beancount 语法校验（不阻断保存，仅返回 warning）"""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        edited_formatted = request.data.get('edited_formatted')
+        if edited_formatted is None:
+            return Response(
+                {'error': '缺少必要参数：edited_formatted'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from project.apps.translate.utils.beancount_validator import BeancountValidator
+
+        response_data = {'edited_formatted': edited_formatted}
+        is_valid, validation_error = BeancountValidator.validate_single_entry(
+            edited_formatted or ''
+        )
+        if not is_valid and validation_error:
+            response_data['validation_warning'] = validation_error
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class MultiBillAnalyzeView(APIView):

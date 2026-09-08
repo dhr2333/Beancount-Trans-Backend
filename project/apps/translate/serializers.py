@@ -6,6 +6,8 @@ from project.apps.translate.models import FormatConfig
 class AnalyzeSerializer(serializers.Serializer):
     cmb_credit_ignore = serializers.BooleanField(required=False, default=False)
     boc_debit_ignore = serializers.BooleanField(required=False, default=False)
+    # 关闭支付宝/微信默认忽略（交易关闭、余额宝收益等），解析全部条目
+    no_ignore = serializers.BooleanField(required=False, default=False)
     write = serializers.BooleanField(required=False, default=False)
     password = serializers.CharField(required=False, allow_blank=True)
     passwords = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False)

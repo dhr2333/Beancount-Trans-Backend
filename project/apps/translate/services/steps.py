@@ -240,11 +240,15 @@ class CacheStep(Step):
         args = context['args']
         for entry in parsed_data:
             cache_key = entry['cache_key']
-            original_row = entry.pop('_original_row')
+            # 转为 original_row 供 FormatStep 使用；缓存仍存独立副本
+            original_row = entry.pop('_original_row', None) or entry.get('original_row') or {}
+            entry['original_row'] = original_row
             entry['counterparty'] = original_row.get('counterparty') or ''
             entry['commodity'] = original_row.get('commodity') or ''
+            # 缓存中的 parsed_entry 不含 original_row，避免与顶层重复
+            parsed_for_cache = {k: v for k, v in entry.items() if k != 'original_row'}
             cache_data = {
-                "parsed_entry": entry,
+                "parsed_entry": parsed_for_cache,
                 "original_row": original_row,
             }
             # 如果写入标志为False,则写入缓存
@@ -262,18 +266,23 @@ class FormatStep(Step):
             context['formatted_data'] = []
         for entry in parsed_data:
             formatted = FormatData.format_instance(entry, config=config)
+            formatted_text = formatted.rstrip() if formatted else ''
+            original_row = entry.get('original_row') or entry.get('_original_row') or {}
             formatted_dict = {
-                "formatted": formatted,
+                "formatted": formatted_text,
+                "edited_formatted": formatted_text,
                 "selected_expense_key": entry.get("selected_expense_key"),
                 "expense_candidates_with_score": entry.get("expense_candidates_with_score", []),
                 "counterparty": entry.get("counterparty", ""),
                 "commodity": entry.get("commodity", ""),
-                "payment_method": (entry.get("_original_row") or {}).get("payment_method", ""),
-                "transaction_type": (entry.get("_original_row") or {}).get("transaction_type", ""),
-                # "uuid": entry.get("uuid"),
+                "payment_method": original_row.get("payment_method", ""),
+                "transaction_type": original_row.get("transaction_type", ""),
+                "uuid": entry.get("uuid") or entry.get("cache_key"),
                 "id": entry.get("cache_key"),
                 "installment_role": entry.get("installment_role"),
                 "installment_period": entry.get("installment_period"),
+                "tag_details": entry.get("tag_details") or [],
+                "original_row": original_row,
             }
             context['formatted_data'].append(formatted_dict)
         return context

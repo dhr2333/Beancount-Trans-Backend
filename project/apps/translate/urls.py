@@ -12,6 +12,7 @@ urlpatterns = [
     path('task_group_status', views.TaskGroupStatusView.as_view(), name='task_group_status'),
     path('parse-task-status', views.ParseTaskStatusView.as_view(), name='parse_task_status'),
     path('reparse', views.ReparseEntryView.as_view(), name='reparse'),
+    path('validate-entry', views.ValidateEntryView.as_view(), name='validate_entry'),
     path('cancel', views.CancelParseView.as_view(), name='cancel'),
     # 解析待办审核 API
     path('parse-review/<int:task_id>/results', views.ParseReviewResultsView.as_view(), name='parse_review_results'),
