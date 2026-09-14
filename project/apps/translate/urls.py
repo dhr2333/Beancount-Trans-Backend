@@ -14,12 +14,12 @@ urlpatterns = [
     path('reparse', views.ReparseEntryView.as_view(), name='reparse'),
     path('validate-entry', views.ValidateEntryView.as_view(), name='validate_entry'),
     path('cancel', views.CancelParseView.as_view(), name='cancel'),
-    # 解析待办审核 API
-    path('parse-review/<int:task_id>/results', views.ParseReviewResultsView.as_view(), name='parse_review_results'),
-    path('parse-review/<int:task_id>/reparse', views.ParseReviewReparseView.as_view(), name='parse_review_reparse'),
-    path('parse-review/<int:task_id>/entries/<str:uuid>/edit', views.ParseReviewEditView.as_view(), name='parse_review_edit'),
-    path('parse-review/<int:task_id>/entries/<str:uuid>/tags', views.ParseReviewTagsView.as_view(), name='parse_review_tags'),
-    path('parse-review/<int:task_id>/preview-sync', views.ParseReviewPreviewSyncView.as_view(), name='parse_review_preview_sync'),
-    path('parse-review/<int:task_id>/confirm', views.ParseReviewConfirmView.as_view(), name='parse_review_confirm'),
-    path('parse-review/<int:task_id>/reparse-all', views.ParseReviewReparseAllView.as_view(), name='parse_review_reparse_all'),
+    # 统一条目审核 API（用户级）
+    path('entry-review/results', views.EntryReviewResultsView.as_view(), name='entry_review_results'),
+    path('entry-review/reparse', views.EntryReviewReparseView.as_view(), name='entry_review_reparse'),
+    path('entry-review/entries/<str:uuid>/edit', views.EntryReviewEditView.as_view(), name='entry_review_edit'),
+    path('entry-review/entries/<str:uuid>/tags', views.EntryReviewTagsView.as_view(), name='entry_review_tags'),
+    path('entry-review/preview-sync', views.EntryReviewPreviewSyncView.as_view(), name='entry_review_preview_sync'),
+    path('entry-review/confirm', views.EntryReviewConfirmView.as_view(), name='entry_review_confirm'),
+    path('entry-review/reparse-all', views.EntryReviewReparseAllView.as_view(), name='entry_review_reparse_all'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

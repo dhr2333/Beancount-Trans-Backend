@@ -10,8 +10,6 @@ from project.apps.translate.services.analyze_service import AnalyzeService
 from project.apps.translate.services.parse_review_service import ParseReviewService
 # from project.apps.translate.utils import get_user_config
 from project.utils.tools import get_user_config
-from project.apps.reconciliation.models import ScheduledTask
-from django.contrib.contenttypes.models import ContentType
 import logging
 import time
 # import json
@@ -178,32 +176,57 @@ def parse_single_file_task(self, file_id, user_id, args):
                 timeout=ParseReviewService.DEFAULT_CACHE_TIMEOUT,
             )
             
-            # 更新 ParseFile 状态为待审核
-            parse_file.status = 'pending_review'
-            parse_file.save()
-            
-            # 激活解析待办任务
-            content_type = ContentType.objects.get_for_model(ParseFile)
-            parse_review_task = ScheduledTask.objects.filter(
-                task_type='parse_review',
-                content_type=content_type,
-                object_id=file_id,
-                status='inactive'
-            ).first()
-            
-            if parse_review_task:
-                parse_review_task.status = 'pending'
-                parse_review_task.save()
-            
-            # 更新 Redis 状态为 pending_review
+            # 合并进用户级统一审核队列 + 入队前去重
+            from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+            from project.apps.translate.services.entry_dedup_service import EntryDedupService
+
+            acquired = EntryReviewQueueService.acquire_lock(user_id)
+            try:
+                if acquired:
+                    # 重新解析场景：先移除该文件在队列中的旧引用，避免自比对
+                    EntryReviewQueueService.remove_file(user_id, file_id)
+                    existing_entries = EntryReviewQueueService.list_entries(user_id)
+                    kept, duplicates = EntryDedupService.dedup_new_entries(
+                        user, enhanced_formatted_data, existing_entries
+                    )
+                else:
+                    # 未拿到锁：跳过去重，全部入队，避免条目丢失
+                    logger.warning(
+                        '未获取到条目审核队列锁，跳过去重: file_id=%s, user_id=%s',
+                        file_id, user_id,
+                    )
+                    kept, duplicates = list(enhanced_formatted_data), []
+
+                if duplicates:
+                    dup_uuids = [e.get('uuid') for e in duplicates if e.get('uuid')]
+                    if dup_uuids:
+                        ParseReviewService.remove_entries(file_id, dup_uuids)
+
+                refs = [
+                    {'file_id': file_id, 'uuid': e.get('uuid')}
+                    for e in kept if e.get('uuid')
+                ]
+                if refs:
+                    EntryReviewQueueService.enqueue(user_id, refs)
+                    EntryReviewQueueService.activate_task(user)
+
+                # 有保留条目 -> 待审核；全部被去重 -> 已解析
+                final_status = 'pending_review' if refs else 'parsed'
+                parse_file.status = final_status
+                parse_file.save()
+            finally:
+                if acquired:
+                    EntryReviewQueueService.release_lock(user_id)
+
+            # 更新 Redis 状态
             cache.set(f'task_status:{task_id}', {
-                'status': 'pending_review',
+                'status': final_status,
                 'file_id': file_id,
                 'error': None
             }, timeout=24*3600)
-            
+
             return {
-                'status': 'pending_review',
+                'status': final_status,
                 'file_id': file_id
             }
         else:
@@ -255,24 +278,27 @@ def parse_single_file_task(self, file_id, user_id, args):
 
 
 @shared_task
-def auto_confirm_expired_parse_reviews():
+def auto_confirm_expired_entry_reviews():
     """定时任务：到期自动确认写入
-    
-    每小时执行一次，扫描审核截止时间已过的解析待办，
-    自动确认写入，更新状态为已完成
+
+    每小时执行一次，扫描所有待执行的条目审核待办，逐个处理该用户统一
+    审核队列中审核截止时间已过的文件，自动确认写入并从队列移除引用；
+    队列为空时把待办标记为已完成。
     """
+    from django.contrib.auth import get_user_model
     from project.apps.reconciliation.models import ScheduledTask
     from django.contrib.contenttypes.models import ContentType
     from project.apps.translate.services.parse_review_service import ParseReviewService
+    from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
     from project.apps.translate.utils.beancount_validator import BeancountValidator
     from project.utils.file import BeanFileManager
     
     logger.info("开始执行到期自动确认写入任务")
     
-    # 获取所有待审核的解析待办
-    content_type = ContentType.objects.get_for_model(ParseFile)
+    # 获取所有待执行的条目审核待办（关联到 User 模型）
+    content_type = ContentType.objects.get_for_model(get_user_model())
     pending_tasks = ScheduledTask.objects.filter(
-        task_type='parse_review',
+        task_type='entry_review',
         status='pending',
         content_type=content_type
     )
@@ -282,75 +308,98 @@ def auto_confirm_expired_parse_reviews():
     error_count = 0
     
     for task in pending_tasks:
-        try:
-            parse_file = task.content_object
-            if parse_file is None:
-                continue
+        user = task.content_object
+        if user is None:
+            continue
 
-            cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
-            if not ParseReviewService.is_review_expired(cached_data, task, now=now):
+        # 该用户统一审核队列中的文件（按队列顺序去重）
+        file_ids = []
+        seen_file_ids = set()
+        for ref in EntryReviewQueueService.list_refs(user.id):
+            file_id = ref.get('file_id')
+            if file_id is None or file_id in seen_file_ids:
                 continue
+            seen_file_ids.add(file_id)
+            file_ids.append(file_id)
 
-            # 从缓存获取最终结果
-            final_entries = ParseReviewService.get_final_result(parse_file.file_id)
-            
-            if not final_entries:
-                logger.warning(f"解析结果不存在或已过期: file_id={parse_file.file_id}")
-                # 如果缓存已过期，直接标记为已完成（避免重复处理）
-                task.status = 'completed'
-                task.save()
+        for file_id in file_ids:
+            try:
+                cached_data = ParseReviewService.get_parse_result(file_id)
+                if not ParseReviewService.is_review_expired(cached_data, task, now=now):
+                    continue
+
+                # 从缓存获取最终结果
+                final_entries = ParseReviewService.get_final_result(file_id)
+
+                if not final_entries:
+                    logger.warning(f"解析结果不存在或已过期: file_id={file_id}")
+                    # 如果缓存已过期，直接标记为已解析并从队列移除（避免重复处理）
+                    parse_file = ParseFile.objects.filter(file_id=file_id).select_related('file').first()
+                    if parse_file is not None:
+                        parse_file.status = 'parsed'
+                        parse_file.save()
+                    EntryReviewQueueService.remove_file(user.id, file_id)
+                    confirmed_count += 1
+                    continue
+
+                # 合并所有条目
+                formatted_text = '\n\n'.join([
+                    entry['formatted'].rstrip() for entry in final_entries
+                ])
+
+                # 进行 Beancount 语法校验
+                is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+
+                if not is_valid:
+                    # 逐条校验以定位具体错误条目并记录日志
+                    entries_list = [e['formatted'].rstrip() for e in final_entries]
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+                    error_details = [
+                        f"index={idx} uuid={final_entries[idx].get('uuid', '?')}: {msg}"
+                        for idx, msg in error_entries_indices
+                    ]
+                    logger.error(
+                        "Beancount 语法错误，跳过自动确认: file_id=%s, error=%s, 错误条目: %s",
+                        file_id,
+                        error_message,
+                        "; ".join(error_details),
+                    )
+                    error_count += 1
+                    continue
+
+                # 写入文件
+                parse_file = ParseFile.objects.filter(file_id=file_id).select_related('file').first()
+                if parse_file is None:
+                    logger.error(f"解析文件记录不存在，跳过自动确认: file_id={file_id}")
+                    error_count += 1
+                    continue
+
+                bean_file_path = BeanFileManager.get_bean_file_path(user, parse_file.file.name)
+
+                with open(bean_file_path, 'w', encoding='utf-8') as f:
+                    f.write(formatted_text)
+
+                # 更新状态
                 parse_file.status = 'parsed'
                 parse_file.save()
+
+                # 从用户统一审核队列中移除该文件引用
+                EntryReviewQueueService.remove_file(user.id, file_id)
+
                 confirmed_count += 1
-                continue
-            
-            # 合并所有条目
-            formatted_text = '\n\n'.join([
-                entry['formatted'].rstrip() for entry in final_entries
-            ])
-            
-            # 进行 Beancount 语法校验
-            is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
-            
-            if not is_valid:
-                # 逐条校验以定位具体错误条目并记录日志
-                entries_list = [e['formatted'].rstrip() for e in final_entries]
-                _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
-                error_details = [
-                    f"index={idx} uuid={final_entries[idx].get('uuid', '?')}: {msg}"
-                    for idx, msg in error_entries_indices
-                ]
+                logger.info(f"自动确认写入成功: file_id={file_id}, task_id={task.id}")
+
+            except Exception as e:
                 logger.error(
-                    "Beancount 语法错误，跳过自动确认: file_id=%s, error=%s, 错误条目: %s",
-                    parse_file.file_id,
-                    error_message,
-                    "; ".join(error_details),
+                    f"自动确认写入失败: file_id={file_id}, task_id={task.id}, error={str(e)}",
+                    exc_info=True,
                 )
                 error_count += 1
                 continue
-            
-            # 写入文件
-            user = parse_file.file.owner
-            original_filename = parse_file.file.name
-            bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename)
-            
-            with open(bean_file_path, 'w', encoding='utf-8') as f:
-                f.write(formatted_text)
-            
-            # 更新状态
-            parse_file.status = 'parsed'
-            parse_file.save()
-            
-            task.status = 'completed'
-            task.save()
-            
-            confirmed_count += 1
-            logger.info(f"自动确认写入成功: file_id={parse_file.file_id}, task_id={task.id}")
-            
-        except Exception as e:
-            logger.error(f"自动确认写入失败: task_id={task.id}, error={str(e)}", exc_info=True)
-            error_count += 1
-            continue
+
+        # 该用户队列已清空，完成待办；否则保持 pending
+        if EntryReviewQueueService.is_empty(user.id):
+            EntryReviewQueueService.complete_task(user)
     
     logger.info(f"到期自动确认写入任务完成: 成功={confirmed_count}, 失败={error_count}")
     return {

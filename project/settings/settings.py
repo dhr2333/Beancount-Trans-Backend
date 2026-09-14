@@ -562,8 +562,8 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fava_instances.tasks.cleanup_fava_containers',
         'schedule': datetime.timedelta(seconds=60),  # 每1分钟执行一次清理任务
     },
-    'auto_confirm_expired_parse_reviews': {
-        'task': 'project.apps.translate.tasks.auto_confirm_expired_parse_reviews',
+    'auto_confirm_expired_entry_reviews': {
+        'task': 'project.apps.translate.tasks.auto_confirm_expired_entry_reviews',
         'schedule': datetime.timedelta(hours=1),  # 每小时执行一次
     },
 }
@@ -595,3 +595,8 @@ ASSISTANT_MODEL = os.environ.get('ASSISTANT_MODEL', 'deepseek-v4-flash')
 ASSISTANT_MAX_BQL_ROWS = int(os.environ.get('ASSISTANT_MAX_BQL_ROWS', '100'))
 ASSISTANT_MAX_BQL_RUNS = int(os.environ.get('ASSISTANT_MAX_BQL_RUNS', '5'))
 ASSISTANT_MAX_TOOL_ROUNDS = int(os.environ.get('ASSISTANT_MAX_TOOL_ROUNDS', '8'))
+
+# 条目审核去重
+ENTRY_REVIEW_DEDUP_ENABLED = os.environ.get('ENTRY_REVIEW_DEDUP_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on')
+ENTRY_REVIEW_DEDUP_AMOUNT_TOLERANCE = float(os.environ.get('ENTRY_REVIEW_DEDUP_AMOUNT_TOLERANCE', '1.00'))
+ENTRY_REVIEW_DEDUP_LLM_TIMEOUT = float(os.environ.get('ENTRY_REVIEW_DEDUP_LLM_TIMEOUT', '15'))

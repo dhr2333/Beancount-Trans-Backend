@@ -88,37 +88,41 @@ def parse_file(user, file_obj):
 
 
 @pytest.fixture
-def parse_review_task(user, parse_file):
-    """创建解析审核待办任务"""
-    content_type = ContentType.objects.get_for_model(ParseFile)
+def entry_review_task(user):
+    """创建用户级统一条目审核待办（pending）。
+
+    统一改造后每个用户全局唯一一个条目审核待办：
+    task_type='entry_review'，content_type=User，object_id=user.id。
+    """
+    content_type = ContentType.objects.get_for_model(User)
     return ScheduledTask.objects.create(
-        task_type='parse_review',
+        task_type='entry_review',
         content_type=content_type,
-        object_id=parse_file.file_id,
+        object_id=user.id,
         status='pending'
     )
 
 
 @pytest.fixture
-def parse_review_task_inactive(user, parse_file):
-    """创建未激活的解析审核待办任务"""
-    content_type = ContentType.objects.get_for_model(ParseFile)
+def entry_review_task_inactive(user):
+    """创建未激活的用户级条目审核待办"""
+    content_type = ContentType.objects.get_for_model(User)
     return ScheduledTask.objects.create(
-        task_type='parse_review',
+        task_type='entry_review',
         content_type=content_type,
-        object_id=parse_file.file_id,
+        object_id=user.id,
         status='inactive'
     )
 
 
 @pytest.fixture
-def parse_review_task_completed(user, parse_file):
-    """创建已完成的解析审核待办任务"""
-    content_type = ContentType.objects.get_for_model(ParseFile)
+def entry_review_task_completed(user):
+    """创建已完成的用户级条目审核待办"""
+    content_type = ContentType.objects.get_for_model(User)
     return ScheduledTask.objects.create(
-        task_type='parse_review',
+        task_type='entry_review',
         content_type=content_type,
-        object_id=parse_file.file_id,
+        object_id=user.id,
         status='completed'
     )
 
@@ -158,6 +162,21 @@ def mock_parse_result_data():
         'created_at': current_time,
         'review_expires_at': current_time + 86400  # 24小时后
     }
+
+
+@pytest.fixture(autouse=True)
+def clear_cache_between_tests():
+    """每个测试前后清空默认缓存
+
+    统一条目审核队列（entry_review_queue:{user_id}）与解析结果缓存
+    均存于 LocMem，测试间共享同一进程，user_id 可能重复导致跨测试污染，
+    因此每个测试前后都清空默认缓存。
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)

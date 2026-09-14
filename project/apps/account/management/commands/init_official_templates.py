@@ -547,14 +547,6 @@ class Command(BaseCommand):
 
             # 创建解析记录
             parse_file = ParseFile.objects.create(file=file_obj)
-            # 初始化解析审核待办（inactive，等待用户触发解析后激活）
-            ScheduledTask.objects.create(
-                task_type='parse_review',
-                content_type=parse_file_content_type,
-                object_id=parse_file.file_id,
-                status='inactive',
-                scheduled_date=None,
-            )
 
             # 创建对应的 .bean 文件
             bean_filename = BeanFileManager.create_bean_file(

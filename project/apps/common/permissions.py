@@ -44,6 +44,11 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
             # ParseFile 类型：通过 file.owner 获取所有者
             if hasattr(content_obj, 'file') and hasattr(content_obj.file, 'owner'):
                 return content_obj.file.owner == request.user
+            
+            # User 类型（条目审核待办）：content_object 即为用户自身
+            from django.contrib.auth import get_user_model
+            if isinstance(content_obj, get_user_model()):
+                return content_obj == request.user
 
         # 如果没有owner或user属性，拒绝访问
         return False

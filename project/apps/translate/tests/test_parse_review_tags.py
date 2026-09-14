@@ -187,7 +187,7 @@ class TestParseReviewTagsView:
         cache.clear()
         self.client = APIClient()
 
-    def test_patch_remove_tag(self, user, parse_review_task, parse_file):
+    def test_patch_remove_tag(self, user, entry_review_task, parse_file):
         self.client.force_authenticate(user=user)
         ParseReviewService.save_parse_result(parse_file.file_id, {
             'file_id': parse_file.file_id,
@@ -203,15 +203,15 @@ class TestParseReviewTagsView:
         })
 
         response = self.client.patch(
-            f'/api/translate/parse-review/{parse_review_task.id}/entries/entry-1/tags',
-            {'action': 'remove', 'tag_path': 'RemoveMe'},
+            '/api/translate/entry-review/entries/entry-1/tags',
+            {'file_id': parse_file.file_id, 'action': 'remove', 'tag_path': 'RemoveMe'},
             format='json',
         )
         assert response.status_code == 200
         assert '#RemoveMe' not in response.data['edited_formatted']
         assert 'RemoveMe' in response.data['tag_overrides']['removed_paths']
 
-    def test_patch_add_tag(self, user, parse_review_task, parse_file):
+    def test_patch_add_tag(self, user, entry_review_task, parse_file):
         self.client.force_authenticate(user=user)
         ParseReviewService.save_parse_result(parse_file.file_id, {
             'file_id': parse_file.file_id,
@@ -225,15 +225,15 @@ class TestParseReviewTagsView:
         })
 
         response = self.client.patch(
-            f'/api/translate/parse-review/{parse_review_task.id}/entries/entry-1/tags',
-            {'action': 'add', 'tag_path': 'Manual/Added'},
+            '/api/translate/entry-review/entries/entry-1/tags',
+            {'file_id': parse_file.file_id, 'action': 'add', 'tag_path': 'Manual/Added'},
             format='json',
         )
         assert response.status_code == 200
         assert '#Manual/Added' in response.data['edited_formatted']
         assert 'Manual/Added' in response.data['tag_overrides']['added_paths']
 
-    def test_patch_add_tag_preserves_manual_account_edit(self, user, parse_review_task, parse_file):
+    def test_patch_add_tag_preserves_manual_account_edit(self, user, entry_review_task, parse_file):
         self.client.force_authenticate(user=user)
         ParseReviewService.save_parse_result(parse_file.file_id, {
             'file_id': parse_file.file_id,
@@ -247,8 +247,8 @@ class TestParseReviewTagsView:
         })
 
         response = self.client.patch(
-            f'/api/translate/parse-review/{parse_review_task.id}/entries/entry-1/tags',
-            {'action': 'add', 'tag_path': 'Manual/Added'},
+            '/api/translate/entry-review/entries/entry-1/tags',
+            {'file_id': parse_file.file_id, 'action': 'add', 'tag_path': 'Manual/Added'},
             format='json',
         )
         assert response.status_code == 200

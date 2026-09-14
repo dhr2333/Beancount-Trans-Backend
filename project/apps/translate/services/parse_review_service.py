@@ -508,6 +508,33 @@ class ParseReviewService:
         }
 
     @classmethod
+    def remove_entries(cls, file_id: int, uuids: List[str]) -> bool:
+        """从解析缓存中删除指定 uuid 的条目（用于去重后剔除）。
+
+        Args:
+            file_id: 文件 ID
+            uuids: 需要删除的条目 uuid 列表
+
+        Returns:
+            是否保存成功；缓存不存在时返回 False
+        """
+        cached_data = cls.get_parse_result_migrated(file_id)
+        if cached_data is None:
+            return False
+
+        uuid_set = {u for u in (uuids or []) if u}
+
+        # 过滤掉 uuid 命中的条目，重建列表
+        formatted_data = cached_data.get('formatted_data') or []
+        cached_data['formatted_data'] = [
+            entry for entry in formatted_data
+            if entry.get('uuid') not in uuid_set
+        ]
+
+        timeout = cls._ttl_for_resave(file_id)
+        return cls.save_parse_result(file_id, cached_data, timeout=timeout)
+
+    @classmethod
     def update_entry_tags(
         cls,
         file_id: int,

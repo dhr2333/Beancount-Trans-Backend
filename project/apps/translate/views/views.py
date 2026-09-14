@@ -402,16 +402,10 @@ class MultiBillAnalyzeView(APIView):
         }
         
         if parsing_mode == 'review':
-            # 获取解析待办ID列表
-            content_type = ContentType.objects.get_for_model(ParseFile)
-            parse_review_tasks = ScheduledTask.objects.filter(
-                task_type='parse_review',
-                content_type=content_type,
-                object_id__in=file_ids,
-                status='inactive'
-            )
-            parse_review_task_ids = list(parse_review_tasks.values_list('id', flat=True))
-            response_data['parse_review_task_ids'] = parse_review_task_ids
+            # 审核模式：返回当前用户全局唯一的条目审核待办ID
+            from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+            review_task = EntryReviewQueueService.get_or_create_task(request.user)
+            response_data['entry_review_task_id'] = review_task.id
 
         return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
@@ -487,6 +481,9 @@ class CancelParseView(APIView):
 
         from project.apps.file_manager.models import File
         from project.utils.file import BeanFileManager
+        from project.apps.translate.services.entry_review_queue_service import (
+            EntryReviewQueueService,
+        )
 
         cancelled_files = []
         for file_id in file_ids:
@@ -511,25 +508,11 @@ class CancelParseView(APIView):
                 bean_filename = f"{base_name}.bean"
                 BeanFileManager.clear_bean_file(request.user, bean_filename)
                 
-                # 更新对应的解析待办任务状态为 inactive（如果存在）
-                # 这样用户可以重新解析文件
-                content_type = ContentType.objects.get_for_model(ParseFile)
-                parse_review_task = ScheduledTask.objects.filter(
-                    task_type='parse_review',
-                    content_type=content_type,
-                    object_id=file_id
-                ).first()
-                
-                if parse_review_task:
-                    # 如果任务已完成，重置为 inactive 以便重新解析
-                    if parse_review_task.status == 'completed':
-                        parse_review_task.status = 'inactive'
-                        parse_review_task.save()
-                    # 如果任务处于 pending 状态，也重置为 inactive
-                    elif parse_review_task.status == 'pending':
-                        parse_review_task.status = 'inactive'
-                        parse_review_task.save()
-                
+                # 从用户级统一审核队列中移除该文件的所有引用
+                # 队列为空时把条目审核待办置为未激活，便于用户重新解析文件
+                EntryReviewQueueService.remove_file(request.user.id, file_id)
+                EntryReviewQueueService.deactivate_if_empty(request.user)
+
                 cancelled_files.append(file_id)
                 
                 # 注意：这里无法直接撤销已提交到 Celery 队列的任务
@@ -552,62 +535,45 @@ class CancelParseView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class ParseReviewViewSet(APIView):
-    """解析待办审核视图集
-    
-    提供解析待办的审核功能，包括获取结果、重解析、编辑、确认写入等
+class EntryReviewViewSet(APIView):
+    """统一条目审核视图基类
+
+    每个用户全局唯一一个条目审核待办，所有审核接口以 file_id 定位具体文件，
+    待审核条目集合由 EntryReviewQueueService 管理。
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-    
-    def get_task_and_file(self, request, task_id):
-        """获取待办任务和关联的文件"""
-        try:
-            task = ScheduledTask.objects.get(id=task_id, task_type='parse_review')
-            
-            # 验证权限：确保待办关联的文件属于当前用户
-            parse_file = task.content_object
-            
-            if parse_file is None:
-                return None, None, Response(
-                    {'error': '待办任务关联的文件不存在'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            if parse_file.file.owner != request.user:
-                return None, None, Response(
-                    {'error': '无权访问此待办任务'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            
-            return task, parse_file, None
-        except ScheduledTask.DoesNotExist:
-            return None, None, Response(
-                {'error': '待办任务不存在'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            logger.error(f"获取待办任务失败: {str(e)}", exc_info=True)
-            return None, None, Response(
-                {'error': f'获取待办任务失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
-    def ensure_review_editable(self, task, parse_file):
-        """校验解析待办是否仍在用户审核期内（仅 pending 且未过期）。"""
-        if task.status != 'pending':
-            return Response(
-                {'error': '待办任务已完成或已取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    def get_review_task(self, request):
+        """返回当前用户的统一条目审核待办（可能为 None）"""
+        from django.contrib.auth import get_user_model
+        content_type = ContentType.objects.get_for_model(get_user_model())
+        return ScheduledTask.objects.filter(
+            task_type='entry_review',
+            content_type=content_type,
+            object_id=request.user.id,
+        ).first()
 
+    def get_parse_file(self, request, file_id):
+        """校验 file_id 归属当前用户；返回 (parse_file, error_response)"""
+        parse_file = ParseFile.objects.filter(file_id=file_id).select_related('file').first()
+        if parse_file is None:
+            return None, Response({'error': '文件不存在'}, status=status.HTTP_404_NOT_FOUND)
+        if parse_file.file.owner != request.user:
+            return None, Response({'error': '无权访问该文件'}, status=status.HTTP_403_FORBIDDEN)
+        return parse_file, None
+
+    def ensure_editable(self, request, parse_file):
+        """校验：待办处于 pending、文件处于 pending_review、未过期；返回 error_response 或 None"""
         from project.apps.translate.services.parse_review_service import ParseReviewService
+        task = self.get_review_task(request)
+        if task is None or task.status != 'pending':
+            return Response({'error': '待办任务已完成或已取消'}, status=status.HTTP_400_BAD_REQUEST)
+        if parse_file.status != 'pending_review':
+            return Response({'error': '该文件当前不可审核'}, status=status.HTTP_400_BAD_REQUEST)
         cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
-        if ParseReviewService.is_review_expired(cached_data, task):
-            return Response(
-                {'error': '解析待办已过期，系统将自动写入'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        if ParseReviewService.is_review_expired(cached_data, None):
+            return Response({'error': '解析待办已过期，系统将自动写入'}, status=status.HTTP_400_BAD_REQUEST)
         return None
 
 
@@ -788,99 +754,98 @@ def _propagate_mapping_to_batch(
     return propagated
 
 
-class ParseReviewResultsView(ParseReviewViewSet):
-    """获取解析结果"""
-    
-    def get(self, request, task_id):
-        """获取解析结果
-        
-        GET /api/translate/parse-review/{task_id}/results
+class EntryReviewResultsView(EntryReviewViewSet):
+    """获取用户级统一审核结果"""
+
+    def get(self, request):
+        """获取待审核条目列表
+
+        GET /api/translate/entry-review/results
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
-        if error_response:
-            return error_response
-        
-        if task.status != 'pending':
-            return Response(
-                {'error': '待办任务已完成或已取消'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # 从缓存获取解析结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
-        parse_result = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
-        
-        if parse_result is None:
-            return Response(
-                {'error': '解析结果不存在或已过期，请重新解析'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
 
         config = get_user_config(request.user)
-        if ParseReviewService.backfill_tag_details_in_data(
-            parse_result,
-            request.user.id,
-            config,
-            user=request.user,
-        ):
-            ParseReviewService.save_parse_result(
-                parse_file.file_id,
-                parse_result,
-                timeout=ParseReviewService._ttl_for_resave(parse_file.file_id),
-            )
-        
-        # 去除 formatted_data 中每个条目的 formatted 和 edited_formatted 末尾的换行符
-        if 'formatted_data' in parse_result:
-            for entry in parse_result['formatted_data']:
-                ParseReviewService.normalize_entry_tag_fields(entry)
-                if 'formatted' in entry:
-                    entry['formatted'] = entry['formatted'].rstrip() if entry['formatted'] else ''
-                if 'edited_formatted' in entry:
-                    entry['edited_formatted'] = entry['edited_formatted'].rstrip() if entry['edited_formatted'] else ''
-                entry['tag_details'] = ParseReviewService.get_effective_tag_details(entry)
-        
-        return Response(parse_result, status=status.HTTP_200_OK)
+
+        # 收集队列涉及的全部 file_id（去重）
+        file_ids = []
+        seen = set()
+        for ref in EntryReviewQueueService.list_refs(request.user.id):
+            file_id = ref.get('file_id')
+            if file_id is None or file_id in seen:
+                continue
+            seen.add(file_id)
+            file_ids.append(file_id)
+
+        # 逐文件回填 tag_details，并做 uuid 迁移
+        for file_id in file_ids:
+            data = ParseReviewService.get_parse_result_migrated(file_id)
+            if data is None:
+                continue
+            if ParseReviewService.backfill_tag_details_in_data(
+                data, request.user.id, config, user=request.user
+            ):
+                ParseReviewService.save_parse_result(
+                    file_id, data, timeout=ParseReviewService._ttl_for_resave(file_id)
+                )
+
+        # 条目副本，可安全修改
+        entries = EntryReviewQueueService.list_entries(request.user.id)
+        for entry in entries:
+            ParseReviewService.normalize_entry_tag_fields(entry)
+            if 'formatted' in entry:
+                entry['formatted'] = entry['formatted'].rstrip() if entry['formatted'] else ''
+            if 'edited_formatted' in entry:
+                entry['edited_formatted'] = entry['edited_formatted'].rstrip() if entry['edited_formatted'] else ''
+            entry['tag_details'] = ParseReviewService.get_effective_tag_details(entry)
+
+        return Response({
+            'entries': entries,
+            'entry_count': len(entries),
+            'review_expires_at': EntryReviewQueueService.earliest_expires_at(request.user.id),
+        }, status=status.HTTP_200_OK)
 
 
-class ParseReviewReparseView(ParseReviewViewSet):
+class EntryReviewReparseView(EntryReviewViewSet):
     """重解析单个条目"""
-    
-    def post(self, request, task_id):
+
+    def post(self, request):
         """重解析单个条目
-        
-        POST /api/parse-review/{task_id}/reparse
-        Body: {"entry_uuid": "...", "selected_key": "..."}
+
+        POST /api/translate/entry-review/reparse
+        Body: {"file_id": ..., "entry_uuid": "...", "selected_key": "...", "mapping_type": "expense"}
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        file_id = request.data.get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
             return error_response
 
-        editable_error = self.ensure_review_editable(task, parse_file)
+        editable_error = self.ensure_editable(request, parse_file)
         if editable_error:
             return editable_error
-        
+
         entry_uuid = request.data.get('entry_uuid')
         selected_key = request.data.get('selected_key')
         mapping_type = request.data.get('mapping_type') or 'expense'
         if mapping_type not in ('expense', 'income', 'asset'):
             mapping_type = 'expense'
-        
+
         if not entry_uuid or not selected_key:
             return Response(
                 {'error': '缺少必要参数：entry_uuid 和 selected_key'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 从缓存获取解析结果
         from project.apps.translate.services.parse_review_service import ParseReviewService
-        parse_result = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
-        
+        parse_result = ParseReviewService.get_parse_result_migrated(file_id)
+
         if parse_result is None:
             return Response(
                 {'error': '解析结果不存在或已过期'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # 查找对应的条目
         formatted_data = parse_result.get('formatted_data', [])
         target_entry = None
@@ -888,13 +853,13 @@ class ParseReviewReparseView(ParseReviewViewSet):
             if entry.get('uuid') == entry_uuid:
                 target_entry = entry
                 break
-        
+
         if not target_entry:
             return Response(
                 {'error': '未找到对应的条目'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # 获取原始数据
         original_row = target_entry.get('original_row')
         if not original_row:
@@ -902,13 +867,13 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 {'error': '条目缺少原始数据，无法重解析'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 执行重解析
         try:
             owner_id = request.user.id
             config = get_user_config(request.user)
             payload = _reparse_review_entry(
-                file_id=parse_file.file_id,
+                file_id=file_id,
                 entry=target_entry,
                 owner_id=owner_id,
                 config=config,
@@ -923,7 +888,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 )
 
             propagated_entries = _propagate_mapping_to_batch(
-                file_id=parse_file.file_id,
+                file_id=file_id,
                 owner_id=owner_id,
                 config=config,
                 user=request.user,
@@ -936,7 +901,7 @@ class ParseReviewReparseView(ParseReviewViewSet):
                 **payload,
                 'propagated_entries': propagated_entries,
             }, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             logger.exception(e)
             return Response(
@@ -945,35 +910,36 @@ class ParseReviewReparseView(ParseReviewViewSet):
             )
 
 
-class ParseReviewEditView(ParseReviewViewSet):
+class EntryReviewEditView(EntryReviewViewSet):
     """更新编辑内容"""
-    
-    def put(self, request, task_id, uuid):
+
+    def put(self, request, uuid):
         """更新编辑内容
-        
-        PUT /api/parse-review/{task_id}/entries/{uuid}/edit
-        Body: {"edited_formatted": "..."}
+
+        PUT /api/translate/entry-review/entries/{uuid}/edit
+        Body: {"file_id": ..., "edited_formatted": "..."}
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        file_id = request.data.get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
             return error_response
 
-        editable_error = self.ensure_review_editable(task, parse_file)
+        editable_error = self.ensure_editable(request, parse_file)
         if editable_error:
             return editable_error
-        
+
         edited_formatted = request.data.get('edited_formatted')
         if edited_formatted is None:
             return Response(
                 {'error': '缺少必要参数：edited_formatted'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 更新缓存（先迁移 uuid，再解析路径中的占位符）
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
 
-        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        migrated = ParseReviewService.get_parse_result_migrated(file_id)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -987,23 +953,23 @@ class ParseReviewEditView(ParseReviewViewSet):
                 entry_uuid = fd[0]['uuid']
 
         success = ParseReviewService.update_entry_edited_formatted(
-            parse_file.file_id, entry_uuid, edited_formatted
+            file_id, entry_uuid, edited_formatted
         )
-        
+
         if not success:
             return Response(
                 {'error': '更新编辑内容失败'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
         # 返回更新后的结果
-        updated_result = ParseReviewService.get_parse_result(parse_file.file_id)
+        updated_result = ParseReviewService.get_parse_result(file_id)
         updated_entry = None
         for entry in updated_result.get('formatted_data', []):
             if entry.get('uuid') == entry_uuid:
                 updated_entry = entry
                 break
-        
+
         content_to_validate = updated_entry.get('edited_formatted') if updated_entry else edited_formatted
         response_data = {
             'uuid': entry_uuid,
@@ -1013,23 +979,24 @@ class ParseReviewEditView(ParseReviewViewSet):
         is_valid, validation_error = BeancountValidator.validate_single_entry(content_to_validate or '')
         if not is_valid and validation_error:
             response_data['validation_warning'] = validation_error
-        
+
         return Response(response_data, status=status.HTTP_200_OK)
 
 
-class ParseReviewTagsView(ParseReviewViewSet):
+class EntryReviewTagsView(EntryReviewViewSet):
     """更新条目标签（添加/移除）"""
 
-    def patch(self, request, task_id, uuid):
-        """PATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags
+    def patch(self, request, uuid):
+        """PATCH /api/translate/entry-review/entries/{uuid}/tags
 
-        Body: {"action": "add|remove", "tag_path": "Category/EDUCATION"}
+        Body: {"file_id": ..., "action": "add|remove", "tag_path": "Category/EDUCATION"}
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        file_id = request.data.get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
             return error_response
 
-        editable_error = self.ensure_review_editable(task, parse_file)
+        editable_error = self.ensure_editable(request, parse_file)
         if editable_error:
             return editable_error
 
@@ -1043,7 +1010,7 @@ class ParseReviewTagsView(ParseReviewViewSet):
 
         from project.apps.translate.services.parse_review_service import ParseReviewService
 
-        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        migrated = ParseReviewService.get_parse_result_migrated(file_id)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -1057,7 +1024,7 @@ class ParseReviewTagsView(ParseReviewViewSet):
                 entry_uuid = fd[0]['uuid']
 
         result = ParseReviewService.update_entry_tags(
-            parse_file.file_id,
+            file_id,
             entry_uuid,
             action,
             tag_path,
@@ -1071,19 +1038,20 @@ class ParseReviewTagsView(ParseReviewViewSet):
         return Response(result, status=status.HTTP_200_OK)
 
 
-class ParseReviewPreviewSyncView(ParseReviewViewSet):
+class EntryReviewPreviewSyncView(EntryReviewViewSet):
     """预览批量同步（以预览文本为真源，支持删条）"""
 
-    def put(self, request, task_id):
-        """PUT /api/translate/parse-review/{task_id}/preview-sync
+    def put(self, request):
+        """PUT /api/translate/entry-review/preview-sync
 
-        Body: {"entries": [{"uuid": "...", "edited_formatted": "..."}]}
+        Body: {"file_id": ..., "entries": [{"uuid": "...", "edited_formatted": "..."}]}
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        file_id = request.data.get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
             return error_response
 
-        editable_error = self.ensure_review_editable(task, parse_file)
+        editable_error = self.ensure_editable(request, parse_file)
         if editable_error:
             return editable_error
 
@@ -1097,7 +1065,7 @@ class ParseReviewPreviewSyncView(ParseReviewViewSet):
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
 
-        migrated = ParseReviewService.get_parse_result_migrated(parse_file.file_id)
+        migrated = ParseReviewService.get_parse_result_migrated(file_id)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -1105,7 +1073,7 @@ class ParseReviewPreviewSyncView(ParseReviewViewSet):
             )
 
         sync_result = ParseReviewService.sync_entries_from_preview(
-            parse_file.file_id,
+            file_id,
             entries,
         )
         if sync_result is None:
@@ -1140,55 +1108,91 @@ class ParseReviewPreviewSyncView(ParseReviewViewSet):
         )
 
 
-class ParseReviewConfirmView(ParseReviewViewSet):
-    """确认写入"""
-    
-    def post(self, request, task_id):
-        """确认写入
-        
-        POST /api/translate/parse-review/{task_id}/confirm
-        """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
-        if error_response:
-            return error_response
+class EntryReviewConfirmView(EntryReviewViewSet):
+    """确认写入（用户级统一审核）"""
 
-        editable_error = self.ensure_review_editable(task, parse_file)
-        if editable_error:
-            return editable_error
-        
-        # 从缓存获取最终结果
+    def post(self, request):
+        """确认写入
+
+        POST /api/translate/entry-review/confirm
+        """
         from project.apps.translate.services.parse_review_service import ParseReviewService
+        from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
         from project.utils.file import BeanFileManager
-        
-        final_entries = ParseReviewService.get_final_result(parse_file.file_id)
-        
-        if not final_entries:
+
+        task = self.get_review_task(request)
+        if task is None or task.status != 'pending':
             return Response(
-                {'error': '审核缓存缺失，请勿重新解析，请先检查网络后重试写入'},
-                status=status.HTTP_404_NOT_FOUND
+                {'error': '待办任务已完成或已取消'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # 合并所有条目
-        formatted_text = '\n\n'.join([
-            entry['formatted'].rstrip() for entry in final_entries
-        ])
-        
-        # 进行 Beancount 语法校验
-        is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
-        
-        if not is_valid:
-            # 逐条校验以定位错误条目，返回结构化错误信息
-            entries_list = [entry['formatted'].rstrip() for entry in final_entries]
-            _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
-            error_entries = [
-                {
-                    'uuid': final_entries[idx]['uuid'],
-                    'index': idx,
-                    'error_message': msg or error_message,
-                }
-                for idx, msg in error_entries_indices
-            ]
+
+        refs = EntryReviewQueueService.list_refs(request.user.id)
+        if not refs:
+            return Response(
+                {'error': '待审核队列为空'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 按 file_id 分组并保持顺序
+        file_ids = []
+        seen = set()
+        for ref in refs:
+            file_id = ref.get('file_id')
+            if file_id is None or file_id in seen:
+                continue
+            seen.add(file_id)
+            file_ids.append(file_id)
+
+        # 先校验全部文件，全部通过后再写入
+        validations = []  # 待写入文件：[{file_id, parse_file, text, entry_count}]
+        error_entries = []  # 结构化错误条目
+        pending_removal = []  # 无有效条目、待清理引用的 file_id
+        for file_id in file_ids:
+            parse_file, error_response = self.get_parse_file(request, file_id)
+            if error_response:
+                # 文件丢失：从队列移除该文件引用后跳过
+                EntryReviewQueueService.remove_file(request.user.id, file_id)
+                continue
+
+            final_entries = ParseReviewService.get_final_result(file_id)
+            if not final_entries:
+                # 该文件无有效条目，记录待清理引用
+                pending_removal.append(file_id)
+                continue
+
+            # 合并所有条目
+            formatted_text = '\n\n'.join([
+                entry['formatted'].rstrip() for entry in final_entries
+            ])
+
+            # 进行 Beancount 语法校验
+            is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+            if not is_valid:
+                # 逐条校验以定位错误条目
+                entries_list = [entry['formatted'].rstrip() for entry in final_entries]
+                _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+                error_entries.extend([
+                    {
+                        'file_id': file_id,
+                        'uuid': final_entries[idx]['uuid'],
+                        'index': idx,
+                        'error_message': msg or error_message,
+                    }
+                    for idx, msg in error_entries_indices
+                ])
+                continue
+
+            validations.append({
+                'file_id': file_id,
+                'parse_file': parse_file,
+                'text': formatted_text,
+                'entry_count': len(final_entries),
+            })
+
+        # 只要有任何错误，不写入任何文件、不改状态
+        if error_entries:
             return Response(
                 {
                     'error': f'Beancount 语法错误: 共 {len(error_entries)} 条格式有误',
@@ -1196,36 +1200,42 @@ class ParseReviewConfirmView(ParseReviewViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # 写入文件
+
+        # 全部通过后再写入文件
+        written_files = []
         try:
-            original_filename = parse_file.file.name
-            bean_file_path = BeanFileManager.get_bean_file_path(request.user, original_filename)
-            
-            with open(bean_file_path, 'w', encoding='utf-8') as f:
-                f.write(formatted_text)
-            
-            # 更新状态
-            parse_file.status = 'parsed'
-            parse_file.save()
-            
-            task.status = 'completed'
-            task.save()
-            
-            # 删除缓存（可选，也可以保留一段时间）
-            # ParseReviewService.delete_parse_result(parse_file.file_id)
-            
-            return Response({
-                'message': '确认写入成功',
-                'file_id': parse_file.file_id
-            }, status=status.HTTP_200_OK)
-            
+            for item in validations:
+                parse_file = item['parse_file']
+                bean_file_path = BeanFileManager.get_bean_file_path(
+                    request.user, parse_file.file.name
+                )
+                with open(bean_file_path, 'w', encoding='utf-8') as f:
+                    f.write(item['text'])
+
+                parse_file.status = 'parsed'
+                parse_file.save()
+
+                written_files.append({
+                    'file_id': item['file_id'],
+                    'entry_count': item['entry_count'],
+                })
         except Exception as e:
             logger.error(f"确认写入失败: {str(e)}", exc_info=True)
             return Response(
                 {'error': f'写入文件失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+        # 清理无有效条目的文件引用后清空队列并完成待办
+        for file_id in pending_removal:
+            EntryReviewQueueService.remove_file(request.user.id, file_id)
+        EntryReviewQueueService.clear(request.user.id)
+        EntryReviewQueueService.complete_task(request.user)
+
+        return Response({
+            'message': '确认写入成功',
+            'files': written_files,
+        }, status=status.HTTP_200_OK)
 
 
 class ParseTaskStatusView(APIView):
@@ -1265,35 +1275,36 @@ class ParseTaskStatusView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class ParseReviewReparseAllView(ParseReviewViewSet):
-    """重新解析所有条目"""
-    
-    def post(self, request, task_id):
+class EntryReviewReparseAllView(EntryReviewViewSet):
+    """重新解析某文件的所有条目"""
+
+    def post(self, request):
         """重新解析所有条目
-        
-        POST /api/parse-review/{task_id}/reparse-all
+
+        POST /api/translate/entry-review/reparse-all
+        Body: {"file_id": ...}
         """
-        task, parse_file, error_response = self.get_task_and_file(request, task_id)
+        file_id = request.data.get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
             return error_response
 
-        if task.status != 'pending':
+        task = self.get_review_task(request)
+        if task is None or task.status != 'pending':
             return Response(
                 {'error': '待办任务已完成或已取消'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # 重新执行解析任务（相当于在文件管理中再次解析）
         from project.apps.translate.tasks import parse_single_file_task
-        from project.utils.tools import get_user_config
-        
+
         try:
             # 更新文件状态为待解析
             parse_file.status = 'pending'
             parse_file.save()
-            
+
             # 创建解析任务（审核模式）
-            config = get_user_config(request.user)
             password = request.data.get('password') or None
             if password == '':
                 password = None
@@ -1303,7 +1314,7 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
                 'boc_debit_ignore': True,
                 'password': password,
             }
-            
+
             # 异步执行解析任务
             async_result = parse_single_file_task.delay(parse_file.file_id, request.user.id, args)
             cache.set(f'task_status:{async_result.id}', {
@@ -1311,13 +1322,13 @@ class ParseReviewReparseAllView(ParseReviewViewSet):
                 'file_id': parse_file.file_id,
                 'error': None,
             }, timeout=24 * 3600)
-            
+
             return Response({
                 'message': '重新解析任务已提交',
                 'file_id': parse_file.file_id,
                 'celery_task_id': async_result.id,
             }, status=status.HTTP_202_ACCEPTED)
-            
+
         except Exception as e:
             logger.error(f"重新解析失败: {str(e)}", exc_info=True)
             return Response(

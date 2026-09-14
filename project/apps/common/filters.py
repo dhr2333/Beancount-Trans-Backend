@@ -30,12 +30,13 @@ class AnonymousUserFilterBackend(BaseFilterBackend):
 
 
 class ScheduledTaskUserFilterBackend(BaseFilterBackend):
-    """ScheduledTask 用户过滤器：通过关联的 Account 或 ParseFile 筛选
+    """ScheduledTask 用户过滤器：通过关联的 Account、ParseFile 或 User 筛选
     
     由于 ScheduledTask 使用 GenericForeignKey 关联不同的模型，
     无法直接通过 owner 字段过滤，需要根据 content_type 分别处理：
     1. Account 类型：通过 Account.owner 过滤
     2. ParseFile 类型：通过 ParseFile.file.owner 过滤
+    3. User 类型：通过 object_id == 当前用户 ID 过滤（用户级统一审核待办）
     
     使用场景：
     - ScheduledTaskViewSet 需要根据关联对象的 owner 过滤待办任务
@@ -52,6 +53,9 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
         
         # 获取 Account 类型的 ContentType
         account_content_type = ContentType.objects.get_for_model(Account)
+        
+        # 获取 User 类型的 ContentType（用户级统一审核待办）
+        user_content_type = ContentType.objects.get_for_model(get_user_model())
         
         # 获取用户账户ID列表
         user_account_ids = list(Account.objects.filter(
@@ -74,8 +78,11 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
                 file_id__in=user_file_ids
             ).values_list('file_id', flat=True))
             
-            # 构建查询条件：Account 类型 OR ParseFile 类型
-            conditions = Q()
+            # 构建查询条件：Account 类型 OR ParseFile 类型 OR User 类型
+            conditions = Q(
+                content_type=user_content_type,
+                object_id=request.user.id
+            )
             
             if user_account_ids:
                 conditions |= Q(
@@ -89,18 +96,17 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
                     object_id__in=user_parse_file_ids
                 )
             
-            if not conditions:
-                # 用户既没有账户也没有文件，返回空查询集
-                return queryset.none()
-            
             return queryset.filter(conditions)
             
         except Exception as e:
-            # 如果 ParseFile 导入失败，回退到只支持 Account
-            if not user_account_ids:
-                return queryset.none()
-            
-            return queryset.filter(
-                content_type=account_content_type,
-                object_id__in=user_account_ids
+            # 如果 ParseFile 导入失败，回退到 Account + User
+            conditions = Q(
+                content_type=user_content_type,
+                object_id=request.user.id
             )
+            if user_account_ids:
+                conditions |= Q(
+                    content_type=account_content_type,
+                    object_id__in=user_account_ids
+                )
+            return queryset.filter(conditions)

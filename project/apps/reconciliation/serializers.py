@@ -42,6 +42,9 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     # 缓存审核截止时间（解析待办）
     review_expires_at = serializers.SerializerMethodField()
     
+    # 待审核条目数量（条目审核待办）
+    entry_count = serializers.SerializerMethodField()
+    
     class Meta:
         model = ScheduledTask
         fields = [
@@ -50,7 +53,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'account_name', 'account_type',
             'file_name', 'file_id',
-            'review_expires_at',
+            'review_expires_at', 'entry_count',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -84,7 +87,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
         return None
     
     def get_review_expires_at(self, obj):
-        """获取用户审核截止时间（解析待办）"""
+        """获取用户审核截止时间（解析待办/条目审核待办）"""
         if obj.task_type == 'parse_review':
             from project.apps.translate.models import ParseFile
             from project.apps.translate.services.parse_review_service import ParseReviewService
@@ -93,6 +96,17 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
                 expires_at = ParseReviewService.get_review_expires_at(parse_result, obj)
                 if expires_at is not None:
                     return expires_at
+        elif obj.task_type == 'entry_review':
+            # 条目审核待办：返回用户统一队列中最早到期时间
+            from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+            return EntryReviewQueueService.earliest_expires_at(obj.object_id)
+        return None
+    
+    def get_entry_count(self, obj):
+        """获取待审核条目数量（仅条目审核待办返回，否则为 None）"""
+        if obj.task_type == 'entry_review':
+            from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+            return len(EntryReviewQueueService.list_refs(obj.object_id))
         return None
 
 
