@@ -732,7 +732,7 @@ class TestEntryReviewConfirmView:
 
         bean_paths = {}
 
-        def _bean_path(user_arg, filename):
+        def _bean_path(user_arg, filename, relative_dir=''):
             path = tmp_path / f'{filename}.bean'
             bean_paths[filename] = path
             return str(path)

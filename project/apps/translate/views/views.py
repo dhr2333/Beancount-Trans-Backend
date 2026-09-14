@@ -504,9 +504,7 @@ class CancelParseView(APIView):
                 parse_file.save()
                 
                 # 清空对应的 .bean 文件内容
-                base_name = os.path.splitext(file_obj.name)[0]
-                bean_filename = f"{base_name}.bean"
-                BeanFileManager.clear_bean_file(request.user, bean_filename)
+                BeanFileManager.clear_bean_file(request.user, file_obj.get_bean_relative_path())
                 
                 # 从用户级统一审核队列中移除该文件的所有引用
                 # 队列为空时把条目审核待办置为未激活，便于用户重新解析文件
@@ -1207,7 +1205,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
             for item in validations:
                 parse_file = item['parse_file']
                 bean_file_path = BeanFileManager.get_bean_file_path(
-                    request.user, parse_file.file.name
+                    request.user, parse_file.file.name, parse_file.file.get_bean_dir()
                 )
                 with open(bean_file_path, 'w', encoding='utf-8') as f:
                     f.write(item['text'])

@@ -48,6 +48,8 @@ def parse_single_file_task(self, file_id, user_id, args):
         # 获取文件对象
 
         file_obj = parse_file.file
+        # 账本目录镜像平台目录结构：把文件在平台中的相对目录注入解析上下文
+        args['bean_relative_dir'] = file_obj.get_bean_dir()
         storage_client = get_storage_client()
 
         # 从存储获取文件内容
@@ -374,7 +376,9 @@ def auto_confirm_expired_entry_reviews():
                     error_count += 1
                     continue
 
-                bean_file_path = BeanFileManager.get_bean_file_path(user, parse_file.file.name)
+                bean_file_path = BeanFileManager.get_bean_file_path(
+                    user, parse_file.file.name, parse_file.file.get_bean_dir()
+                )
 
                 with open(bean_file_path, 'w', encoding='utf-8') as f:
                     f.write(formatted_text)

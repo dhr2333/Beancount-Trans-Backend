@@ -6,7 +6,11 @@
 
 import os
 import sys
+import shutil
+import tempfile
 import django
+from unittest.mock import patch
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase, TransactionTestCase
 from django.db import transaction
@@ -27,6 +31,13 @@ class SampleFilesTestCase(TransactionTestCase):
 
     def setUp(self):
         """测试前准备"""
+        # 将 ASSETS_BASE_PATH 指向临时目录，避免写入真实 Assets 目录
+        self._tmp_assets = tempfile.mkdtemp(prefix='bt-test-assets-')
+        self.addCleanup(shutil.rmtree, self._tmp_assets, ignore_errors=True)
+        assets_patcher = patch.object(settings, 'ASSETS_BASE_PATH', self._tmp_assets)
+        assets_patcher.start()
+        self.addCleanup(assets_patcher.stop)
+
         # 清理所有数据
         from project.apps.reconciliation.models import ScheduledTask
         ScheduledTask.objects.all().delete()

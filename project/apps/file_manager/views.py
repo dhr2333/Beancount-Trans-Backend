@@ -95,6 +95,27 @@ class DirectoryViewSet(ModelViewSet):
             'root_name': '/  ' + root_dir.name
         })
 
+    def update(self, request, *args, **kwargs):
+        directory = self.get_object()
+        old_name = directory.name
+        old_parent = directory.parent
+        old_rel_dir = directory.get_relative_path()
+
+        response = super().update(request, *args, **kwargs)
+
+        directory.refresh_from_db()
+        new_rel_dir = directory.get_relative_path()
+        if old_rel_dir and old_rel_dir != new_rel_dir:
+            try:
+                BeanFileManager.move_bean_dir(request.user, old_rel_dir, new_rel_dir)
+            except FileExistsError as e:
+                # 回滚数据库变更，保持与磁盘一致
+                directory.name = old_name
+                directory.parent = old_parent
+                directory.save()
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return response
+
     def destroy(self, request, *args, **kwargs):
         directory = self.get_object()
 
@@ -136,17 +157,16 @@ class DirectoryViewSet(ModelViewSet):
         """递归删除目录下所有文件对应的.bean文件并更新trans/main.bean"""
         # 处理当前目录下的文件
         for file in directory.files.all():
-            base_name = os.path.splitext(file.name)[0]
-            bean_filename = f"{base_name}.bean"
+            bean_relative_path = file.get_bean_relative_path()
 
             # 从trans/main.bean中移除include语句
             BeanFileManager.remove_bean_from_trans_main(
                 user,
-                bean_filename
+                bean_relative_path
             )
 
             # 删除.bean文件（从trans目录）
-            BeanFileManager.delete_bean_file(user, bean_filename)
+            BeanFileManager.delete_bean_file(user, bean_relative_path)
 
         # 递归处理子目录
         for child in directory.children.all():
@@ -198,8 +218,20 @@ class DirectoryViewSet(ModelViewSet):
             if Directory.objects.filter(parent=target_directory, name=dir_obj.name).exclude(id=dir_obj.id).exists():
                 errors.append({'directory_id': dir_obj.id, 'name': dir_obj.name, 'reason': '目标目录下已存在同名目录'})
                 continue
+            old_parent = dir_obj.parent
+            old_rel_dir = dir_obj.get_relative_path()
             dir_obj.parent = target_directory
             dir_obj.save()
+            new_rel_dir = dir_obj.get_relative_path()
+            if old_rel_dir and old_rel_dir != new_rel_dir:
+                try:
+                    BeanFileManager.move_bean_dir(request.user, old_rel_dir, new_rel_dir)
+                except FileExistsError:
+                    errors.append({'directory_id': dir_obj.id, 'name': dir_obj.name, 'reason': '目标目录已存在同名账本目录'})
+                    # 回滚数据库变更，保持与磁盘一致
+                    dir_obj.parent = old_parent
+                    dir_obj.save()
+                    continue
             moved.append(dir_obj.id)
 
         if errors and not moved:
@@ -276,14 +308,15 @@ class FileViewSet(ModelViewSet):
                file=file_obj,
             )
 
-            bean_filename = BeanFileManager.create_bean_file(
+            bean_relative_path = BeanFileManager.create_bean_file(
                 request.user,
-                uploaded_file.name
+                uploaded_file.name,
+                file_obj.get_bean_dir()
             )
             # 上传文件时即向trans/main.bean增加对应文件的include
             BeanFileManager.add_bean_to_trans_main(
                 request.user,
-                bean_filename
+                bean_relative_path
             )
 
             return Response(FileSerializer(file_obj).data, status=status.HTTP_201_CREATED)
@@ -347,6 +380,19 @@ class FileViewSet(ModelViewSet):
             if File.objects.filter(directory=target_directory, name=file_obj.name).exclude(id=file_obj.id).exists():
                 errors.append({'file_id': file_obj.id, 'name': file_obj.name, 'reason': '目标目录已存在同名文件'})
                 continue
+
+            old_rel = file_obj.get_bean_relative_path()
+            new_rel = BeanFileManager.get_bean_relative_path(
+                file_obj.name,
+                target_directory.get_relative_path()
+            )
+            if old_rel != new_rel:
+                try:
+                    BeanFileManager.move_bean_file(request.user, old_rel, new_rel)
+                except FileExistsError:
+                    errors.append({'file_id': file_obj.id, 'name': file_obj.name, 'reason': '目标目录已存在同名账本文件'})
+                    continue
+
             file_obj.directory = target_directory
             file_obj.save()
             moved.append(file_obj.id)
@@ -395,19 +441,18 @@ class FileViewSet(ModelViewSet):
 
         # ParseFile.objects.filter(file=file_obj).delete()
 
-        base_name = os.path.splitext(file_obj.name)[0]
-        bean_filename = f"{base_name}.bean"
+        bean_relative_path = file_obj.get_bean_relative_path()
 
         # 从trans/main.bean中移除include语句
         BeanFileManager.remove_bean_from_trans_main(
             request.user,
-            bean_filename
+            bean_relative_path
         )
 
         # 删除.bean文件（从trans目录）
         BeanFileManager.delete_bean_file(
             request.user,
-            bean_filename
+            bean_relative_path
         )
 
         # 检查是否有其他文件引用相同的存储文件

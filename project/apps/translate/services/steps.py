@@ -317,7 +317,8 @@ class FileWritingStep(Step):
             formatted_data = "\n\n".join([entry['formatted'].rstrip() for entry in context['formatted_data']])
 
             original_filename = context['uploaded_file'].name
-            bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename)
+            relative_dir = (context.get('args') or {}).get('bean_relative_dir', '') or ''
+            bean_file_path = BeanFileManager.get_bean_file_path(user, original_filename, relative_dir)
 
             # 确保trans目录存在
             # BeanFileManager.ensure_trans_directory(user)

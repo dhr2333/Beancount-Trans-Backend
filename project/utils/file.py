@@ -2,6 +2,7 @@
 import io
 import os
 import re
+import shutil
 import tempfile
 import zipfile
 import PyPDF2
@@ -279,12 +280,96 @@ class BeanFileManager:
     #     return trans_dir
 
     @staticmethod
-    def get_bean_file_path(user_or_username, original_filename):
-        """获取完整bean文件路径（写入trans/目录）"""
+    def _normalize_relative_path(relative_path):
+        """规范化 trans/ 下的相对路径（统一为 POSIX 分隔符）
+
+        过滤空段、"." 与 ".." 段，等价于剥离开头的路径分隔符，
+        从而保证结果始终位于 trans/ 目录之下。
+
+        Args:
+            relative_path: 以 "/" 或当前系统分隔符表示的相对路径
+
+        Returns:
+            str: 以 "/" 分隔的规范化相对路径，空路径返回 ""
+        """
+        if not relative_path:
+            return ""
+        segments = re.split(r'[/\\]+', str(relative_path))
+        parts = [s.strip() for s in segments if s.strip() and s.strip() not in ('.', '..')]
+        return "/".join(parts)
+
+    @staticmethod
+    def _resolve_trans_path(user_or_username, relative_bean_path):
+        """将 trans/ 下的相对路径解析为绝对路径（防御目录穿越）
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            relative_bean_path: 相对于 trans/ 的路径（POSIX 或系统分隔符）
+
+        Returns:
+            str: trans/ 下的绝对路径，relative_bean_path 为空时返回 trans/ 目录本身
+        """
+        trans_dir = os.path.join(BeanFileManager.get_user_assets_path(user_or_username), 'trans')
+        normalized = BeanFileManager._normalize_relative_path(relative_bean_path)
+        if not normalized:
+            return trans_dir
+        return os.path.join(trans_dir, normalized.replace('/', os.sep))
+
+    @staticmethod
+    def _cleanup_empty_dirs(user_or_username, start_dir):
+        """删除 trans/ 目录下的空父目录（不会删除 trans/ 本身）
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            start_dir: 从该目录开始向上清理
+        """
+        trans_dir = os.path.abspath(os.path.join(
+            BeanFileManager.get_user_assets_path(user_or_username), 'trans'))
+        current = os.path.abspath(start_dir)
+        while current != trans_dir and current.startswith(trans_dir + os.sep):
+            try:
+                if not os.path.isdir(current) or os.listdir(current):
+                    break
+                os.rmdir(current)
+            except OSError:
+                break
+            current = os.path.dirname(current)
+
+    @staticmethod
+    def get_bean_file_path(user_or_username, original_filename, relative_dir=""):
+        """获取完整bean文件路径（写入trans/目录，支持子目录）
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            original_filename: 原始文件名（不带路径）
+            relative_dir: 相对于 trans/ 的子目录（POSIX 或系统分隔符），默认为空
+
+        Returns:
+            str: trans/ 下（含子目录）的完整bean文件路径
+        """
         base_name = os.path.splitext(original_filename)[0]
         trans_dir = os.path.join(BeanFileManager.get_user_assets_path(user_or_username),'trans')
-        os.makedirs(trans_dir, exist_ok=True)
-        return os.path.join(trans_dir, f"{base_name}.bean")
+        normalized_dir = BeanFileManager._normalize_relative_path(relative_dir)
+        target_dir = os.path.join(trans_dir, normalized_dir.replace('/', os.sep)) if normalized_dir else trans_dir
+        os.makedirs(target_dir, exist_ok=True)
+        return os.path.join(target_dir, f"{base_name}.bean")
+
+    @staticmethod
+    def get_bean_relative_path(original_filename, relative_dir=""):
+        """获取bean文件相对于 trans/ 目录的相对路径（POSIX 格式）
+
+        Args:
+            original_filename: 原始文件名（不带路径）
+            relative_dir: 相对于 trans/ 的子目录（POSIX 或系统分隔符），默认为空
+
+        Returns:
+            str: 如 "Test/202505_alipay.bean"，位于 trans/ 根目录时为 "202505_alipay.bean"
+        """
+        base_name = os.path.splitext(original_filename)[0]
+        normalized_dir = BeanFileManager._normalize_relative_path(relative_dir)
+        if normalized_dir:
+            return f"{normalized_dir}/{base_name}.bean"
+        return f"{base_name}.bean"
 
     @staticmethod
     def get_main_bean_path(user_or_username):
@@ -425,32 +510,36 @@ include "trans/main.bean"
         #         logger.debug(f"在 main.bean 中添加 include \"trans/main.bean\"")
 
     @staticmethod
-    def create_bean_file(user_or_username, filename):
+    def create_bean_file(user_or_username, filename, relative_dir=""):
         """
         文件上传时创建对应的{{filename}}.bean文件
         :param user_or_username: User 对象或 username 字符串
         :param filename: 原始文件名（不带路径）
-        :return: .bean文件名（如 "202505_alipay.bean"）
+        :param relative_dir: 相对于 trans/ 的子目录（POSIX 或系统分隔符），默认为空
+        :return: .bean文件相对于 trans/ 的相对路径（如 "Test/202505_alipay.bean"）
         """
-        bean_path = BeanFileManager.get_bean_file_path(user_or_username, filename)
+        bean_path = BeanFileManager.get_bean_file_path(user_or_username, filename, relative_dir)
         BeanFileManager.ensure_user_assets_dir(user_or_username)
 
         if not os.path.exists(bean_path):
             with open(bean_path, 'w', encoding='utf-8') as f:
                 pass  # 创建空文件
 
-        return os.path.basename(bean_path)
+        return BeanFileManager.get_bean_relative_path(filename, relative_dir)
 
     @staticmethod
-    def add_bean_to_trans_main(user_or_username, bean_filename):
+    def add_bean_to_trans_main(user_or_username, bean_relative_path):
         """向 trans/main.bean 添加 include 语句
         
         Args:
             user_or_username: User 对象或 username 字符串
-            bean_filename: .bean文件名（如 "202505_alipay.bean"）
+            bean_relative_path: 相对于 trans/ 的.bean文件路径（如 "202505_alipay.bean" 或 "Test/202505_alipay.bean"）
         """
         # 确保 trans/main.bean 文件存在
         BeanFileManager.ensure_trans_main_bean(user_or_username)
+
+        # 统一为 POSIX 分隔符（Beancount 要求 include 使用 "/"）
+        bean_relative_path = BeanFileManager._normalize_relative_path(bean_relative_path)
         
         trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
 
@@ -459,8 +548,8 @@ include "trans/main.bean"
             lines = f.readlines()
 
         # 构建include语句（相对trans目录）
-        include_line = f'include "{bean_filename}"\n'
-        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(bean_filename)}"\s*$')
+        include_line = f'include "{bean_relative_path}"\n'
+        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(bean_relative_path)}"\s*$')
 
         # 检查是否已存在
         found = any(include_pattern.match(line) for line in lines)
@@ -475,15 +564,15 @@ include "trans/main.bean"
             # 写入更新后的内容
             with open(trans_main_path, 'w', encoding='utf-8') as f:
                 f.writelines(lines)
-            logger.debug(f"在 trans/main.bean 中添加 include: {bean_filename}")
+            logger.debug(f"在 trans/main.bean 中添加 include: {bean_relative_path}")
 
     @staticmethod
-    def remove_bean_from_trans_main(user_or_username, bean_filename):
+    def remove_bean_from_trans_main(user_or_username, bean_relative_path):
         """从 trans/main.bean 删除 include 语句
         
         Args:
             user_or_username: User 对象或 username 字符串
-            bean_filename: .bean文件名（如 "202505_alipay.bean"）
+            bean_relative_path: 相对于 trans/ 的.bean文件路径（如 "202505_alipay.bean" 或 "Test/202505_alipay.bean"）
         """
         trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
 
@@ -491,12 +580,15 @@ include "trans/main.bean"
         # if not os.path.exists(trans_main_path):
         #     return
 
+        # 统一为 POSIX 分隔符（Beancount 要求 include 使用 "/"）
+        bean_relative_path = BeanFileManager._normalize_relative_path(bean_relative_path)
+
         # 读取现有内容
         with open(trans_main_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
         # 构建匹配模式
-        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(bean_filename)}"\s*$')
+        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(bean_relative_path)}"\s*$')
 
         # 过滤掉匹配的行
         new_lines = [line for line in lines if not include_pattern.match(line)]
@@ -505,7 +597,7 @@ include "trans/main.bean"
         if len(new_lines) != len(lines):
             with open(trans_main_path, 'w', encoding='utf-8') as f:
                 f.writelines(new_lines)
-            logger.debug(f"从 trans/main.bean 中移除 include: {bean_filename}")
+            logger.debug(f"从 trans/main.bean 中移除 include: {bean_relative_path}")
 
     # # 向后兼容的别名方法
     # @staticmethod
@@ -535,19 +627,198 @@ include "trans/main.bean"
     #         BeanFileManager.remove_bean_from_trans_main(user_or_username, bean_filename)
 
     @staticmethod
-    def delete_bean_file(user_or_username, bean_filename):
-        """删除对应的.bean文件（从trans目录）"""
-        bean_path = BeanFileManager.get_bean_file_path(user_or_username, bean_filename)
+    def delete_bean_file(user_or_username, bean_relative_path):
+        """删除对应的.bean文件（从trans目录）
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            bean_relative_path: 相对于 trans/ 的.bean文件路径
+        """
+        bean_path = BeanFileManager._resolve_trans_path(user_or_username, bean_relative_path)
         if os.path.exists(bean_path):
             os.remove(bean_path)
+        # 清理遗留的空父目录（不会删除 trans/ 本身）
+        BeanFileManager._cleanup_empty_dirs(user_or_username, os.path.dirname(bean_path))
 
     @staticmethod
-    def clear_bean_file(user_or_username, bean_filename):
-        """清空对应的.bean文件内容（保留文件）"""
-        bean_path = BeanFileManager.get_bean_file_path(user_or_username, bean_filename)
+    def clear_bean_file(user_or_username, bean_relative_path):
+        """清空对应的.bean文件内容（保留文件）
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            bean_relative_path: 相对于 trans/ 的.bean文件路径
+        """
+        bean_path = BeanFileManager._resolve_trans_path(user_or_username, bean_relative_path)
         if os.path.exists(bean_path):
             with open(bean_path, 'w', encoding='utf-8') as f:
                 f.write('')  # 清空内容
+
+    @staticmethod
+    def _rewrite_include_prefix(user_or_username, old_prefix, new_prefix):
+        """重写 trans/main.bean 中指定目录前缀的 include 路径
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            old_prefix: 原目录前缀（POSIX，如 "Test"）
+            new_prefix: 新目录前缀（POSIX，可为 "" 表示 trans/ 根目录）
+        """
+        if not old_prefix:
+            return
+
+        trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
+        if not os.path.exists(trans_main_path):
+            return
+
+        with open(trans_main_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        prefix = f"{old_prefix}/"
+        replacement = f"{new_prefix}/" if new_prefix else ""
+        include_pattern = re.compile(
+            rf'^(\s*include\s*"){re.escape(prefix)}([^"]*)(")(\s*)$'
+        )
+
+        def replace_include(match):
+            return f"{match.group(1)}{replacement}{match.group(2)}{match.group(3)}{match.group(4)}"
+
+        new_lines = [include_pattern.sub(replace_include, line) for line in lines]
+
+        if new_lines != lines:
+            with open(trans_main_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+            logger.debug(f"重写 trans/main.bean 中的 include 前缀: {old_prefix} -> {new_prefix}")
+
+    @staticmethod
+    def _remove_includes_by_prefix(user_or_username, prefix_dir):
+        """移除 trans/main.bean 中指向指定目录（及其子目录）的 include 语句
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            prefix_dir: 目录前缀（POSIX，如 "Test"）
+        """
+        if not prefix_dir:
+            return
+
+        trans_main_path = BeanFileManager.get_trans_main_bean_path(user_or_username)
+        if not os.path.exists(trans_main_path):
+            return
+
+        with open(trans_main_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+
+        include_pattern = re.compile(rf'^\s*include\s*"{re.escape(prefix_dir)}/[^"]+"\s*$')
+        new_lines = [line for line in lines if not include_pattern.match(line)]
+
+        if len(new_lines) != len(lines):
+            with open(trans_main_path, 'w', encoding='utf-8') as f:
+                f.writelines(new_lines)
+            logger.debug(f"从 trans/main.bean 中移除目录 include: {prefix_dir}")
+
+    @staticmethod
+    def move_bean_file(user_or_username, old_rel_path, new_rel_path):
+        """移动 trans/ 下的.bean文件，并同步更新 trans/main.bean 的 include
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            old_rel_path: 原文件相对于 trans/ 的路径
+            new_rel_path: 新文件相对于 trans/ 的路径
+
+        Returns:
+            bool: 源文件不存在时返回 False，移动成功返回 True
+
+        Raises:
+            FileExistsError: 目标文件已存在（不覆盖）
+        """
+        old_abs_path = BeanFileManager._resolve_trans_path(user_or_username, old_rel_path)
+        new_abs_path = BeanFileManager._resolve_trans_path(user_or_username, new_rel_path)
+
+        if not os.path.exists(old_abs_path):
+            return False
+        if os.path.exists(new_abs_path):
+            raise FileExistsError(f"目标bean文件已存在: {new_rel_path}")
+
+        # 创建目标父目录并移动文件
+        os.makedirs(os.path.dirname(new_abs_path), exist_ok=True)
+        shutil.move(old_abs_path, new_abs_path)
+
+        # 同步更新 trans/main.bean
+        BeanFileManager.remove_bean_from_trans_main(user_or_username, old_rel_path)
+        BeanFileManager.add_bean_to_trans_main(user_or_username, new_rel_path)
+
+        # 清理原位置遗留的空目录（不会删除 trans/ 本身）
+        BeanFileManager._cleanup_empty_dirs(user_or_username, os.path.dirname(old_abs_path))
+        return True
+
+    @staticmethod
+    def move_bean_dir(user_or_username, old_rel_dir, new_rel_dir):
+        """移动 trans/ 下的目录，并重写 trans/main.bean 中对应的 include 路径
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            old_rel_dir: 原目录相对于 trans/ 的路径（POSIX），不可为空
+            new_rel_dir: 新目录相对于 trans/ 的路径（POSIX），为空表示移动到 trans/ 根目录
+
+        Returns:
+            bool: 源目录不存在时返回 False，移动成功返回 True
+
+        Raises:
+            ValueError: old_rel_dir 为空（不允许移动 trans/ 根目录）
+            FileExistsError: 目标目录已存在（不合并、不覆盖）
+        """
+        old_norm_dir = BeanFileManager._normalize_relative_path(old_rel_dir)
+        new_norm_dir = BeanFileManager._normalize_relative_path(new_rel_dir)
+
+        if not old_norm_dir:
+            raise ValueError("old_rel_dir 不能为空，不允许移动 trans/ 根目录")
+
+        old_abs_dir = BeanFileManager._resolve_trans_path(user_or_username, old_norm_dir)
+
+        if not os.path.isdir(old_abs_dir):
+            return False
+
+        if new_norm_dir:
+            new_abs_dir = BeanFileManager._resolve_trans_path(user_or_username, new_norm_dir)
+            if os.path.exists(new_abs_dir):
+                raise FileExistsError(f"目标bean目录已存在: {new_norm_dir}")
+
+            # 创建目标父目录并移动整个目录树
+            os.makedirs(os.path.dirname(new_abs_dir), exist_ok=True)
+            shutil.move(old_abs_dir, new_abs_dir)
+        else:
+            # 目标为 trans/ 根目录：将目录内容上移，再删除空目录
+            trans_dir = BeanFileManager._resolve_trans_path(user_or_username, "")
+            for entry in os.listdir(old_abs_dir):
+                shutil.move(os.path.join(old_abs_dir, entry), os.path.join(trans_dir, entry))
+            os.rmdir(old_abs_dir)
+
+        # 重写 trans/main.bean 中的 include 前缀
+        BeanFileManager._rewrite_include_prefix(user_or_username, old_norm_dir, new_norm_dir)
+        return True
+
+    @staticmethod
+    def delete_bean_dir(user_or_username, rel_dir):
+        """删除 trans/ 下的整个目录，并移除 trans/main.bean 中对应的 include
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+            rel_dir: 相对于 trans/ 的目录路径（POSIX），为空时不执行任何操作
+
+        Returns:
+            bool: rel_dir 为空或目录不存在时返回 False，删除成功返回 True
+        """
+        norm_dir = BeanFileManager._normalize_relative_path(rel_dir)
+        if not norm_dir:
+            return False
+
+        target_dir = BeanFileManager._resolve_trans_path(user_or_username, norm_dir)
+        if not os.path.isdir(target_dir):
+            return False
+
+        shutil.rmtree(target_dir)
+
+        # 移除 trans/main.bean 中指向该目录的 include 语句
+        BeanFileManager._remove_includes_by_prefix(user_or_username, norm_dir)
+        return True
 
     @staticmethod
     def update_main_bean_username(user_or_username, new_username):

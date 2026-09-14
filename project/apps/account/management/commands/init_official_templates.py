@@ -461,10 +461,9 @@ class Command(BaseCommand):
                     content_type=parse_file_content_type,
                     object_id=file_obj.id,
                 ).delete()
-                base_name = os.path.splitext(file_obj.name)[0]
-                bean_filename = f"{base_name}.bean"
-                BeanFileManager.remove_bean_from_trans_main(admin_user, bean_filename)
-                BeanFileManager.delete_bean_file(admin_user, bean_filename)
+                bean_relative_path = file_obj.get_bean_relative_path()
+                BeanFileManager.remove_bean_from_trans_main(admin_user, bean_relative_path)
+                BeanFileManager.delete_bean_file(admin_user, bean_relative_path)
                 other_refs = File.objects.filter(
                     storage_name=file_obj.storage_name
                 ).exclude(id=file_obj.id).exists()
@@ -549,14 +548,15 @@ class Command(BaseCommand):
             parse_file = ParseFile.objects.create(file=file_obj)
 
             # 创建对应的 .bean 文件
-            bean_filename = BeanFileManager.create_bean_file(
+            bean_relative_path = BeanFileManager.create_bean_file(
                 admin_user.username,
-                file_config['name']
+                file_config['name'],
+                file_obj.get_bean_dir()
             )
             # 上传文件时即向trans/main.bean增加对应文件的include
             BeanFileManager.add_bean_to_trans_main(
                 admin_user.username,
-                bean_filename
+                bean_relative_path
             )
 
             created_files.append(file_config['name'])

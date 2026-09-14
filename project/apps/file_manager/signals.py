@@ -99,15 +99,16 @@ def create_sample_files_for_new_user(sender, instance, created, **kwargs):
                 ParseFile.objects.create(file=new_file)
 
                 # 创建对应的 .bean 文件
-                bean_filename = BeanFileManager.create_bean_file(
+                bean_relative_path = BeanFileManager.create_bean_file(
                     instance,
-                    admin_file.name
+                    admin_file.name,
+                    new_file.get_bean_dir()
                 )
                 
                 # 向 trans/main.bean 添加对应文件的 include
                 BeanFileManager.add_bean_to_trans_main(
                     instance,
-                    bean_filename
+                    bean_relative_path
                 )
                 
                 logger.debug(f"为用户 {instance.username} 创建示例文件: {admin_file.name}")
