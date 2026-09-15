@@ -11,6 +11,17 @@
 * 账单完成解析后，不再以账单进行分组，而是统一为条目审核待办，重复条目自动去重 ([9117b12](https://github.com/dhr2333/Beancount-Trans-Backend/commit/9117b1283bcdb1311a436664487ed4ac2e303408))
 * 首页解析对齐现有解析审核 ([bdbdab0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/bdbdab04000d55aeb99ed8fdc196d8c3af95b952))
 
+## [5.11.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.1...5.11.2) (2026-09-15)
+
+### Bug Fixes
+
+* "关闭默认忽略" 保留所有条目 ([1d8f6a8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/1d8f6a86bf8ea156f9d34a1e06495311f97f51f8))
+* **git_repository:** 完善各托管平台支持 ([dc8fb3d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/dc8fb3d8541dce73e0b0662cfae088b7d897d6fe))
+* **git:** 新增取消同步 ([ad3b8bb](https://github.com/dhr2333/Beancount-Trans-Backend/commit/ad3b8bb8ad0e92fe6e43d2c9fbc5b02449f336c0))
+* 用户账本在 `trans/` 中的目录结构与平台文件管理的目录结构保持一致 ([04bf390](https://github.com/dhr2333/Beancount-Trans-Backend/commit/04bf390d121f4cb26b2a16b75cd488efecf9b424))
+* 账单完成解析后，不再以账单进行分组，而是统一为条目审核待办，重复条目自动去重 ([9117b12](https://github.com/dhr2333/Beancount-Trans-Backend/commit/9117b1283bcdb1311a436664487ed4ac2e303408))
+* 首页解析对齐现有解析审核 ([bdbdab0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/bdbdab04000d55aeb99ed8fdc196d8c3af95b952))
+
 ## [5.11.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.1...5.11.2) (2026-09-08)
 
 ### Bug Fixes
