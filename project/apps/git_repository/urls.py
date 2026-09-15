@@ -5,6 +5,7 @@ from .views import (
     GitRepositoryViewSet, 
     GitSyncView, 
     GitSyncStatusView,
+    GitSyncCancelView,
     GitWebhookView,
     GitTransDownloadView
 )
@@ -20,6 +21,7 @@ urlpatterns = [
     # 同步相关
     path('sync/', GitSyncView.as_view(), name='git-sync'),
     path('sync/status/', GitSyncStatusView.as_view(), name='git-sync-status'),
+    path('sync/cancel/', GitSyncCancelView.as_view(), name='git-sync-cancel'),
 
     # Webhook（无需认证）
     path('webhook/', GitWebhookView.as_view(), name='git-webhook'),

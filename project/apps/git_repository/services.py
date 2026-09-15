@@ -282,7 +282,7 @@ class PlatformGitService:
 
             raise GitServiceException(f"创建仓库失败: {e}")
 
-    def sync_repository(self, user: User) -> Dict[str, Any]:
+    def sync_repository(self, user: User, *, manual: bool = False) -> Dict[str, Any]:
         """从远程仓库同步到本地
 
         核心处理逻辑：
@@ -292,6 +292,12 @@ class PlatformGitService:
 
         冲突处理：始终以远程仓库为准，平台本地修改会被覆盖
 
+        Args:
+            user: 用户对象
+            manual: 是否为用户手动触发的同步。手动同步视为显式重新授权，
+                会解除「取消同步」状态并执行拉取；自动同步（Webhook）
+                在已取消同步时直接跳过
+
         Returns:
             同步结果信息
         """
@@ -299,6 +305,19 @@ class PlatformGitService:
             git_repo = user.git_repo
         except GitRepository.DoesNotExist:
             raise GitServiceException("用户未启用 Git 功能")
+
+        # 已取消同步：自动拉取（Webhook）直接跳过；手动同步视为显式恢复
+        if git_repo.sync_paused:
+            if not manual:
+                logger.info(
+                    f"Skipped sync for user {user.username}: sync cancelled"
+                )
+                return {
+                    'status': 'paused',
+                    'message': '同步已取消，已跳过拉取',
+                }
+            git_repo.sync_paused = False
+            git_repo.save()
 
         # 更新同步状态
         git_repo.sync_status = 'syncing'
@@ -724,6 +743,58 @@ class PlatformGitService:
     #                 "; Trans directory - No parsed files yet\n",
     #                 encoding='utf-8'
     #             )
+
+    def clear_synced_ledger(self, user: User) -> Dict[str, Any]:
+        """清除服务器本地由 Git 同步引入的账本内容，恢复至启用 Git 前的形态
+
+        流程：
+        1. 删除 Assets/{repo_name}/ 下除 trans/ 之外的全部内容（含 .git/ 全量历史）
+        2. 重建标准 main.bean
+        3. 置 sync_paused=True，使后续 Webhook 不再自动拉取
+
+        不修改任何既有 Git 同步配置（仓库记录、远端地址、Deploy Key、Webhook、
+        默认分支、目录名、last_sync_at/sync_status/sync_error）。
+
+        Args:
+            user: 用户对象
+
+        Returns:
+            清除结果信息，含 cleaned_files / trans_preserved / repo_name
+        """
+        try:
+            git_repo = user.git_repo
+        except GitRepository.DoesNotExist:
+            raise GitServiceException("用户未启用 Git 功能")
+
+        user_assets_path = self.assets_base_path / git_repo.repo_name
+        # 必须在清除前记录，清除后 trans/ 是唯一被保留的目录
+        trans_preserved = (user_assets_path / 'trans').exists()
+
+        try:
+            if user_assets_path.exists():
+                cleaned_files = self._cleanup_git_files_and_restore_structure(
+                    user_assets_path, user
+                )
+            else:
+                self._rebuild_standard_main_bean(user)
+                cleaned_files = ['重建标准 main.bean']
+
+            # 清除与暂停需同时生效：否则远端一次 push 即会把内容拉回
+            git_repo.sync_paused = True
+            git_repo.save()
+
+            logger.info(f"Cleared synced ledger for user {user.username}")
+
+            return {
+                'message': '已清除服务器本地账本副本',
+                'cleaned_files': cleaned_files,
+                'trans_preserved': trans_preserved,
+                'repo_name': git_repo.repo_name,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to clear synced ledger for user {user.username}: {e}")
+            raise GitServiceException(f"清除本地账本副本失败: {e}")
 
     def delete_user_repository(self, user: User) -> Dict[str, Any]:
         """删除用户 Git 仓库和相关资源

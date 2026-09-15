@@ -117,6 +117,10 @@ class GitRepository(BaseModel):
         blank=True, 
         help_text="最后一次同步错误信息"
     )
+    sync_paused = models.BooleanField(
+        default=False,
+        help_text="是否已取消同步（暂停自动拉取）"
+    )
 
     class Meta:
         db_table = 'git_repository'

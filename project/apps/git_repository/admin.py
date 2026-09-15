@@ -11,14 +11,14 @@ class GitRepositoryAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('基本信息', {
-            'fields': ('owner', 'repo_name', 'repo_url', 'gitea_repo_id', 'created_with_template')
+            'fields': ('owner', 'repo_name', 'gitea_repo_id', 'created_with_template')
         }),
         ('Deploy Key', {
             'fields': ('deploy_key_id', 'deploy_key_public'),
             'classes': ('collapse',)
         }),
         ('同步状态', {
-            'fields': ('sync_status', 'last_sync_at', 'sync_error')
+            'fields': ('sync_status', 'sync_paused', 'last_sync_at', 'sync_error')
         }),
         ('系统信息', {
             'fields': ('created', 'modified'),

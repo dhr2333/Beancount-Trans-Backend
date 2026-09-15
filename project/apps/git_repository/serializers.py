@@ -32,14 +32,15 @@ class GitRepositorySerializer(serializers.ModelSerializer):
             'remote_ssh_url', 'external_full_name', 'default_branch',
             'deploy_key_public', 'webhook_callback_url', 'setup_instructions',
             'created_with_template',
-            'last_sync_at', 'sync_status', 'sync_error',
+            'last_sync_at', 'sync_status', 'sync_error', 'sync_paused',
             'deploy_key_download_url', 'created', 'modified',
         ]
         read_only_fields = [
             'id', 'ssh_clone_url', 'repo_name', 'setup_mode', 'provider',
             'remote_ssh_url', 'external_full_name', 'default_branch',
             'deploy_key_public', 'webhook_callback_url', 'setup_instructions',
-            'last_sync_at', 'sync_status', 'sync_error', 'created', 'modified',
+            'last_sync_at', 'sync_status', 'sync_error', 'sync_paused',
+            'created', 'modified',
         ]
 
     def get_deploy_key_download_url(self, obj):
@@ -111,6 +112,7 @@ class SyncStatusSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="错误信息"
     )
+    paused = serializers.BooleanField(help_text="是否已取消同步")
 
 
 class SyncResponseSerializer(serializers.Serializer):
@@ -162,3 +164,17 @@ class DeleteRepositoryResponseSerializer(serializers.Serializer):
         child=serializers.CharField(),
         help_text="已清理的文件列表"
     )
+
+
+class ClearSyncedLedgerResponseSerializer(serializers.Serializer):
+    """取消同步响应序列化器"""
+
+    message = serializers.CharField(help_text="操作结果消息")
+    cleaned_files = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="已清理的文件/目录列表"
+    )
+    trans_preserved = serializers.BooleanField(
+        help_text="是否保留了 trans/ 解析结果"
+    )
+    repo_name = serializers.CharField(help_text="仓库目录名（未变更）")

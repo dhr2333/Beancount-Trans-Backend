@@ -18,7 +18,7 @@ from .serializers import (
     GitRepositorySerializer, CreateRepositorySerializer, LinkRepositorySerializer,
     SyncStatusSerializer, SyncResponseSerializer,
     WebhookPayloadSerializer, DeployKeyResponseSerializer,
-    DeleteRepositoryResponseSerializer,
+    DeleteRepositoryResponseSerializer, ClearSyncedLedgerResponseSerializer,
 )
 from .services import PlatformGitService, GitServiceException
 
@@ -235,7 +235,8 @@ class GitSyncView(APIView):
         """手动触发从远程仓库同步"""
         try:
             git_service = self.get_git_service()
-            result = git_service.sync_repository(request.user)
+            # 手动同步视为显式重新授权：会解除「取消同步」状态并执行拉取
+            result = git_service.sync_repository(request.user, manual=True)
 
             serializer = SyncResponseSerializer(result)
             return Response(serializer.data)
@@ -244,6 +245,43 @@ class GitSyncView(APIView):
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class GitSyncCancelView(APIView):
+    """取消同步视图：清除服务器本地账本副本并暂停自动拉取"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_git_service(self):
+        """获取 Git 服务实例"""
+        return PlatformGitService()
+
+    @extend_schema(
+        summary="取消同步：清除服务器本地账本副本",
+        responses={
+            200: ClearSyncedLedgerResponseSerializer,
+            404: OpenApiResponse(description="用户未启用 Git 功能"),
+            500: OpenApiResponse(description="清除失败")
+        }
+    )
+    def post(self, request: Request) -> Response:
+        """清除服务器本地由 Git 同步引入的账本内容，并暂停后续自动拉取"""
+        if not GitRepository.objects.filter(owner=request.user).exists():
+            return Response(
+                {'error': '用户未启用 Git 功能'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            result = self.get_git_service().clear_synced_ledger(request.user)
+            serializer = ClearSyncedLedgerResponseSerializer(result)
+            return Response(serializer.data)
+
+        except GitServiceException as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -267,7 +305,8 @@ class GitSyncStatusView(APIView):
             data = {
                 'status': git_repo.sync_status,
                 'last_sync_at': git_repo.last_sync_at,
-                'error': git_repo.sync_error
+                'error': git_repo.sync_error,
+                'paused': git_repo.sync_paused,
             }
 
             serializer = SyncStatusSerializer(data)
