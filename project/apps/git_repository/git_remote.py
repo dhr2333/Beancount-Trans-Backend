@@ -35,3 +35,48 @@ def guess_external_full_name_from_ssh(remote_ssh_url: str) -> str:
         return path
 
     return ''
+
+
+def parse_ssh_host(remote_ssh_url: str) -> str:
+    """从 SSH Git URL 中提取主机名（不含用户名与端口）。无法解析时返回空串。"""
+    url = (remote_ssh_url or '').strip()
+    if not url:
+        return ''
+    if url.startswith('ssh://'):
+        return (urlparse(url).hostname or '').lower()
+    m = re.match(r'^(?:[^@/]+@)?([^:/]+):(.+)$', url)
+    if not m:
+        return ''
+    return m.group(1).lower()
+
+
+def guess_provider_from_ssh(remote_ssh_url: str) -> str:
+    """根据 SSH 地址的主机名推断代码托管平台，无法识别时返回 'other'。"""
+    host = parse_ssh_host(remote_ssh_url)
+    if not host:
+        return 'other'
+    if host == 'github.com' or host.endswith('.github.com'):
+        return 'github'
+    if host == 'gitlab.com' or host.endswith('.gitlab.com') or 'gitlab' in host:
+        return 'gitlab'
+    if 'gitea' in host:
+        return 'gitea'
+    if 'gogs' in host:
+        return 'gogs'
+    return 'other'
+
+
+def is_valid_ssh_git_url(remote_ssh_url: str) -> bool:
+    """校验是否为受支持的 SSH Git 地址（git@host:path 或 ssh://[user@]host[:port]/path）。"""
+    url = (remote_ssh_url or '').strip()
+    if not url:
+        return False
+    if url.startswith('http://') or url.startswith('https://'):
+        return False
+    if url.startswith('ssh://'):
+        parsed = urlparse(url)
+        return bool(parsed.hostname) and bool((parsed.path or '').strip('/'))
+    m = re.match(r'^(?:[^@/]+@)?([^:/]+):(.+)$', url)
+    if not m:
+        return False
+    return bool(m.group(1)) and bool(m.group(2).strip('/'))

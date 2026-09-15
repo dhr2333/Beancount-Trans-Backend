@@ -26,6 +26,10 @@ def _gitea_sig(body: bytes, secret: str) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
+def _gogs_sig(body: bytes, secret: str) -> str:
+    return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
 @pytest.fixture
 def api_client():
     return APIClient()
@@ -159,6 +163,163 @@ def test_gitea_hosted_webhook_by_repo_name(mock_sync, api_client, user):
         data=raw,
         content_type="application/json",
         HTTP_X_GITEA_SIGNATURE=sig,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    mock_sync.assert_called_once_with(user)
+
+
+@pytest.mark.django_db
+@patch("project.apps.git_repository.views.PlatformGitService.sync_repository")
+def test_gogs_webhook_valid_triggers_sync(mock_sync, api_client, user):
+    mock_sync.return_value = {"status": "success"}
+    secret = "whsec_gogs_test"
+    GitRepository.objects.create(
+        owner=user,
+        repo_name="u4-assets",
+        gitea_repo_id=None,
+        deploy_key_private="priv",
+        deploy_key_public="pub",
+        external_full_name="owner/ledger",
+        webhook_secret=secret,
+        provider="gogs",
+        default_branch="main",
+        setup_mode="link",
+        remote_ssh_url="ssh://git@gogs.example.com/owner/ledger.git",
+    )
+    payload = {
+        "ref": "refs/heads/main",
+        "repository": {"full_name": "owner/ledger", "name": "ledger"},
+    }
+    raw = json.dumps(payload).encode("utf-8")
+    url = reverse("git-webhook")
+    response = api_client.post(
+        url,
+        data=raw,
+        content_type="application/json",
+        HTTP_X_GOGS_SIGNATURE=_gogs_sig(raw, secret),
+    )
+    assert response.status_code == status.HTTP_200_OK
+    mock_sync.assert_called_once_with(user)
+
+
+@pytest.mark.django_db
+def test_gogs_webhook_invalid_signature(api_client, user):
+    GitRepository.objects.create(
+        owner=user,
+        repo_name="u5-assets",
+        gitea_repo_id=None,
+        deploy_key_private="priv",
+        deploy_key_public="pub",
+        external_full_name="owner/ledger",
+        webhook_secret="correct",
+        provider="gogs",
+        default_branch="main",
+        setup_mode="link",
+        remote_ssh_url="ssh://git@gogs.example.com/owner/ledger.git",
+    )
+    payload = {"ref": "refs/heads/main", "repository": {"full_name": "owner/ledger"}}
+    raw = json.dumps(payload).encode("utf-8")
+    url = reverse("git-webhook")
+    response = api_client.post(
+        url,
+        data=raw,
+        content_type="application/json",
+        HTTP_X_GOGS_SIGNATURE="deadbeef",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+@patch("project.apps.git_repository.views.PlatformGitService.sync_repository")
+def test_gitlab_webhook_valid_triggers_sync(mock_sync, api_client, user):
+    mock_sync.return_value = {"status": "success"}
+    secret = "whsec_gitlab_test"
+    GitRepository.objects.create(
+        owner=user,
+        repo_name="u6-assets",
+        gitea_repo_id=None,
+        deploy_key_private="priv",
+        deploy_key_public="pub",
+        external_full_name="group/ledger",
+        webhook_secret=secret,
+        provider="gitlab",
+        default_branch="main",
+        setup_mode="link",
+        remote_ssh_url="git@gitlab.com:group/ledger.git",
+    )
+    payload = {
+        "ref": "refs/heads/main",
+        "project": {"path_with_namespace": "group/ledger"},
+    }
+    raw = json.dumps(payload).encode("utf-8")
+    url = reverse("git-webhook")
+    response = api_client.post(
+        url,
+        data=raw,
+        content_type="application/json",
+        HTTP_X_GITLAB_TOKEN=secret,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    mock_sync.assert_called_once_with(user)
+
+
+@pytest.mark.django_db
+def test_gitlab_webhook_invalid_token(api_client, user):
+    GitRepository.objects.create(
+        owner=user,
+        repo_name="u7-assets",
+        gitea_repo_id=None,
+        deploy_key_private="priv",
+        deploy_key_public="pub",
+        external_full_name="group/ledger",
+        webhook_secret="correct",
+        provider="gitlab",
+        default_branch="main",
+        setup_mode="link",
+        remote_ssh_url="git@gitlab.com:group/ledger.git",
+    )
+    payload = {"ref": "refs/heads/main", "project": {"path_with_namespace": "group/ledger"}}
+    raw = json.dumps(payload).encode("utf-8")
+    url = reverse("git-webhook")
+    response = api_client.post(
+        url,
+        data=raw,
+        content_type="application/json",
+        HTTP_X_GITLAB_TOKEN="wrong",
+    )
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+@patch("project.apps.git_repository.views.PlatformGitService.sync_repository")
+def test_self_hosted_gitea_webhook_by_full_name(mock_sync, api_client, user):
+    """关联的自建 Gitea 仓库（provider=gitea）应按 full_name 触发同步。"""
+    mock_sync.return_value = {"status": "success"}
+    secret = "whsec_gitea_linked"
+    GitRepository.objects.create(
+        owner=user,
+        repo_name="u8-assets",
+        gitea_repo_id=None,
+        deploy_key_private="priv",
+        deploy_key_public="pub",
+        external_full_name="owner/ledger",
+        webhook_secret=secret,
+        provider="gitea",
+        default_branch="main",
+        setup_mode="link",
+        remote_ssh_url="git@git.gitea.example.com:owner/ledger.git",
+    )
+    payload = {
+        "ref": "refs/heads/main",
+        "repository": {"full_name": "owner/ledger", "name": "ledger"},
+    }
+    raw = json.dumps(payload).encode("utf-8")
+    url = reverse("git-webhook")
+    response = api_client.post(
+        url,
+        data=raw,
+        content_type="application/json",
+        HTTP_X_GITEA_SIGNATURE=_gitea_sig(raw, secret),
     )
     assert response.status_code == status.HTTP_200_OK
     mock_sync.assert_called_once_with(user)

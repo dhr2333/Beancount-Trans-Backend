@@ -294,8 +294,38 @@ def _ref_matches_branch(ref: str, branch: str) -> bool:
     return ref == f'refs/heads/{branch}'
 
 
+def _extract_full_name(data: dict) -> str:
+    """GitHub/Gitea/Gogs 用 repository.full_name；GitLab 用 project.path_with_namespace。"""
+    repo = data.get('repository') or {}
+    project = data.get('project') or {}
+    return (
+        (repo.get('full_name') or '').strip()
+        or (project.get('path_with_namespace') or '').strip()
+    )
+
+
+def _find_repo_by_full_name(full_name: str):
+    """按 full_name 匹配仓库，返回 (git_repo, ambiguous)。未命中时 git_repo 为 None。"""
+    qs = GitRepository.objects.filter(external_full_name__iexact=full_name)
+    count = qs.count()
+    if count > 1:
+        logger.error('Multiple GitRepository for external_full_name=%s', full_name)
+        return None, True
+    return (qs.first() if count == 1 else None), False
+
+
+def _locate_repo_by_full_name(full_name: str):
+    """要求 full_name 唯一命中仓库，返回 (git_repo, error_response)。"""
+    git_repo, ambiguous = _find_repo_by_full_name(full_name)
+    if ambiguous:
+        return None, Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
+    if git_repo is None:
+        return None, Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
+    return git_repo, None
+
+
 class GitWebhookView(APIView):
-    """Git Webhook：支持 GitHub 与平台托管 Gitea。"""
+    """Git Webhook：支持 GitHub、GitLab、Gitea（含平台托管）与 Gogs。"""
 
     permission_classes = []
 
@@ -320,32 +350,26 @@ class GitWebhookView(APIView):
 
         if request.headers.get('X-Gitea-Signature'):
             return self._handle_gitea(body, data, request)
+        if request.headers.get('X-Gogs-Signature'):
+            return self._handle_gogs(body, data, request)
+        if request.headers.get('X-Gitlab-Token'):
+            return self._handle_gitlab(body, data, request)
         if request.headers.get('X-Hub-Signature-256'):
             return self._handle_github(body, data, request)
 
-        if settings.GIT_WEBHOOK_STRICT:
-            return Response({'error': 'Unknown webhook type'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'error': 'Unknown webhook type'}, status=status.HTTP_400_BAD_REQUEST)
 
     def _handle_github(self, body: bytes, data: dict, request: Request) -> Response:
-        repo = data.get('repository') or {}
-        full_name = (repo.get('full_name') or '').strip()
+        full_name = _extract_full_name(data)
         if not full_name:
             return Response({'error': 'Missing repository.full_name'}, status=status.HTTP_400_BAD_REQUEST)
 
-        qs = GitRepository.objects.filter(external_full_name__iexact=full_name)
-        n = qs.count()
-        if n == 0:
-            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
-        if n > 1:
-            logger.error('Multiple GitRepository for external_full_name=%s', full_name)
-            return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
-        git_repo = qs.first()
+        git_repo, error = _locate_repo_by_full_name(full_name)
+        if error is not None:
+            return error
 
         secret = _webhook_secret_for_repo(git_repo)
         if not secret:
-            if settings.GIT_WEBHOOK_STRICT:
-                return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
 
         sig_header = request.headers.get('X-Hub-Signature-256', '')
@@ -362,29 +386,74 @@ class GitWebhookView(APIView):
 
         return self._sync_and_respond(git_repo, full_name)
 
+    def _handle_gogs(self, body: bytes, data: dict, request: Request) -> Response:
+        """Gogs push Webhook：X-Gogs-Signature 为 body 的 HMAC-SHA256 十六进制摘要。"""
+        full_name = _extract_full_name(data)
+        if not full_name:
+            return Response({'error': 'Missing repository.full_name'}, status=status.HTTP_400_BAD_REQUEST)
+
+        git_repo, error = _locate_repo_by_full_name(full_name)
+        if error is not None:
+            return error
+
+        secret = _webhook_secret_for_repo(git_repo)
+        if not secret:
+            return Response({'error': 'Webhook secret not configured'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sig = request.headers.get('X-Gogs-Signature', '')
+        expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return Response({'error': 'Invalid signature'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ref = data.get('ref') or ''
+        branch = (git_repo.default_branch or 'main').strip() or 'main'
+        if not _ref_matches_branch(ref, branch):
+            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
+
+        return self._sync_and_respond(git_repo, full_name)
+
+    def _handle_gitlab(self, body: bytes, data: dict, request: Request) -> Response:
+        """GitLab push Webhook：X-Gitlab-Token 与仓库密钥做明文比对（GitLab 不使用 HMAC）。"""
+        full_name = _extract_full_name(data)
+        if not full_name:
+            return Response(
+                {'error': 'Missing project.path_with_namespace'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        git_repo, error = _locate_repo_by_full_name(full_name)
+        if error is not None:
+            return error
+
+        secret = _webhook_secret_for_repo(git_repo)
+        token = request.headers.get('X-Gitlab-Token', '')
+        if not secret or not hmac.compare_digest(token, secret):
+            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        ref = data.get('ref') or ''
+        branch = (git_repo.default_branch or 'main').strip() or 'main'
+        if not _ref_matches_branch(ref, branch):
+            return Response({'message': 'Ignored non-default branch', 'status': 'ignored'})
+
+        return self._sync_and_respond(git_repo, full_name)
+
     def _handle_gitea(self, body: bytes, data: dict, request: Request) -> Response:
-        repo = data.get('repository') or {}
-        full_name = (repo.get('full_name') or '').strip()
-        short_name = (repo.get('name') or '').strip()
+        full_name = _extract_full_name(data)
+        short_name = ((data.get('repository') or {}).get('name') or '').strip()
 
         git_repo = None
         if full_name:
-            qs = GitRepository.objects.filter(external_full_name__iexact=full_name)
-            if qs.count() == 1:
-                git_repo = qs.first()
-            elif qs.count() > 1:
-                logger.error('Multiple GitRepository for external_full_name=%s', full_name)
+            git_repo, ambiguous = _find_repo_by_full_name(full_name)
+            if ambiguous:
                 return Response({'error': 'Ambiguous repository'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # 平台托管仓库不写 external_full_name，按 repo_name 兜底匹配（仅限托管仓库，避免跨仓误命中）
         if git_repo is None and short_name.endswith('-assets'):
-            try:
-                git_repo = GitRepository.objects.get(repo_name=short_name)
-            except GitRepository.DoesNotExist:
-                pass
+            git_repo = GitRepository.objects.filter(
+                repo_name=short_name, provider='gitea_hosted'
+            ).first()
 
         if git_repo is None:
-            return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
-        if git_repo.provider != 'gitea_hosted':
             return Response({'error': 'Repository not found'}, status=status.HTTP_404_NOT_FOUND)
 
         secret = _webhook_secret_for_repo(git_repo)

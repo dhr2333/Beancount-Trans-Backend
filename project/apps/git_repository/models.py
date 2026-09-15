@@ -33,6 +33,7 @@ class GitRepository(BaseModel):
             ('github', 'GitHub'),
             ('gitlab', 'GitLab'),
             ('gitea', 'Gitea'),
+            ('gogs', 'Gogs'),
             ('other', '其他'),
         ],
         help_text="远程代码托管平台"

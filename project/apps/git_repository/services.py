@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .models import GitRepository
 from .clients import GiteaAPIClient, GiteaAPIException
-from .git_remote import guess_external_full_name_from_ssh
+from .git_remote import guess_external_full_name_from_ssh, guess_provider_from_ssh
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -60,12 +60,16 @@ class PlatformGitService:
         default_branch: str = 'main',
         external_full_name: str = '',
     ) -> GitRepository:
-        """关联用户已在托管平台上的远程仓库（仅平台侧生成密钥与 Webhook secret，不调用第三方 API）。"""
+        """关联用户已在远程 Git 平台上的远程仓库（仅平台侧生成密钥与 Webhook secret，不调用第三方 API）。
+
+        provider 为空时按 SSH 地址自动识别，支持 GitHub / GitLab / Gitea / Gogs / 自建等任意远程。
+        """
         if hasattr(user, 'git_repo'):
             raise GitServiceException("用户已有 Git 仓库")
         remote_ssh_url = (remote_ssh_url or '').strip()
         if not remote_ssh_url:
             raise GitServiceException("请提供 remote_ssh_url")
+        provider = (provider or '').strip() or guess_provider_from_ssh(remote_ssh_url)
         full_name = self._resolve_external_full_name(remote_ssh_url, external_full_name)
         if not full_name:
             raise GitServiceException("无法解析仓库全名，请填写 external_full_name 或检查 SSH URL 格式")

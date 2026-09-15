@@ -1,10 +1,20 @@
 from django.conf import settings
 from rest_framework import serializers
 from .models import GitRepository
+from .git_remote import is_valid_ssh_git_url
 
 
 def build_webhook_callback_url() -> str:
     return f"https://{settings.BASE_URL}/api/git/webhook/"
+
+
+PROVIDER_WEBHOOK_HINT = {
+    'github': 'GitHub 账本仓库：Settings → Webhooks → Add webhook，Secret 填 webhook_secret',
+    'gitlab': 'GitLab 账本仓库：Settings → Webhooks，Secret token 填 webhook_secret，勾选 Push events',
+    'gitea': 'Gitea 账本仓库：Settings → Webhooks → Add Webhook (Gitea)，Secret 填 webhook_secret',
+    'gogs': 'Gogs 账本仓库：Settings → Webhooks → Add Webhook，Secret 填 webhook_secret',
+    'other': '自建 Git 平台：添加 push Webhook；GitHub/Gitea/Gogs 使用 HMAC-SHA256 签名，GitLab 使用明文 Token 匹配',
+}
 
 
 class GitRepositorySerializer(serializers.ModelSerializer):
@@ -50,8 +60,7 @@ class GitRepositorySerializer(serializers.ModelSerializer):
             'Secret 填入启用时返回的 webhook_secret（仅此一次展示，请保存）。',
             f'仅当推送分支为 {obj.default_branch or "main"} 时触发平台同步。',
         ]
-        if obj.provider == 'github':
-            lines.insert(0, 'GitHub 账本仓库：Settings → Webhooks → Add webhook')
+        lines.insert(0, PROVIDER_WEBHOOK_HINT.get(obj.provider, PROVIDER_WEBHOOK_HINT['other']))
         return lines
 
 
@@ -65,17 +74,28 @@ class CreateRepositorySerializer(serializers.Serializer):
 
 
 class LinkRepositorySerializer(serializers.Serializer):
-    """关联已有远程仓库。"""
+    """关联已有远程仓库。支持任意可公网访问的 SSH 仓库（GitHub / GitLab / Gitea / Gogs / 自建）。"""
 
     remote_ssh_url = serializers.CharField(required=True, max_length=500)
     provider = serializers.ChoiceField(
-        choices=['github'],
-        default='github',
+        choices=['', 'github', 'gitlab', 'gitea', 'gogs', 'other'],
+        required=False,
+        allow_blank=True,
+        default='',
+        help_text="留空则由平台从 SSH 地址自动识别",
     )
     default_branch = serializers.CharField(required=False, default='main', max_length=100)
     external_full_name = serializers.CharField(
         required=False, allow_blank=True, default='', max_length=255,
     )
+
+    def validate_remote_ssh_url(self, value: str) -> str:
+        url = (value or '').strip()
+        if not is_valid_ssh_git_url(url):
+            raise serializers.ValidationError(
+                "请填写 SSH 格式的仓库地址，如 git@host:owner/repo.git 或 ssh://git@host[:port]/owner/repo.git"
+            )
+        return url
 
 
 class SyncStatusSerializer(serializers.Serializer):
@@ -109,10 +129,11 @@ class SyncResponseSerializer(serializers.Serializer):
 
 
 class WebhookPayloadSerializer(serializers.Serializer):
-    """GitHub / 平台托管 Gitea push Webhook 载荷（宽松校验，具体分支在视图中比对）。"""
+    """GitHub / GitLab / Gitea / Gogs push Webhook 载荷（宽松校验，具体分支在视图中比对）。"""
 
     ref = serializers.CharField(required=False, allow_blank=True)
     repository = serializers.DictField(required=False)
+    project = serializers.DictField(required=False)
     pusher = serializers.DictField(required=False, allow_null=True)
     commits = serializers.ListField(
         child=serializers.DictField(),
