@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.12.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.12.0...5.12.1) (2026-09-16)
+
+### Bug Fixes
+
+* **mcp:** DCR 注册令牌过期时间 ([5cd6d57](https://github.com/dhr2333/Beancount-Trans-Backend/commit/5cd6d57f909c5e8378f38073e1cd0e1bdcc4a93f))
+
 ## [5.12.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.2...5.12.0) (2026-09-16)
 
 ### Features
