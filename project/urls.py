@@ -80,4 +80,9 @@ urlpatterns = [
     path('api/git/', include('project.apps.git_repository.urls')),  # Git仓库管理
     path('api/reconciliation/', include('project.apps.reconciliation.urls')),  # 对账功能
     path('api/assistant/', include('project.apps.assistant.urls')),  # AI 账本助手
+
+    # OAuth 2.1 授权服务器（MCP 客户端浏览器授权流程）
+    # 挂在根路径，使 /.well-known/oauth-authorization-server 与
+    # /.well-known/oauth-protected-resource/<path> 符合 RFC 8414 / RFC 9728
+    path('', include('oauth2_provider.urls', namespace='oauth2_provider')),
 ]

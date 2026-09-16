@@ -1,9 +1,13 @@
+import hashlib
+import hmac
 import random
 import logging
+import secrets
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.conf import settings
+from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 from project.models import BaseModel
 
@@ -217,4 +221,116 @@ class UserProfile(BaseModel):
             cache.delete(UserProfile.get_email_code_cache_key(email))
             logger.error(f"发送邮箱验证码失败: {email}, {e}")
             raise
+
+
+class PersonalAccessToken(BaseModel):
+    """长期只读访问令牌（供 MCP 客户端等外部程序使用）。
+
+    明文令牌只在创建时返回一次，库内仅保存前缀与 SHA-256 摘要。
+    """
+
+    TOKEN_PREFIX = 'bct_'
+    PREFIX_LENGTH = 8
+    DEFAULT_SCOPES = 'ledger:read'
+    LAST_USED_THROTTLE_SECONDS = 60
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='personal_access_tokens',
+        verbose_name='用户',
+    )
+    name = models.CharField(
+        max_length=64,
+        verbose_name='名称',
+        help_text='便于用户识别的用途说明，如 Claude Code',
+    )
+    prefix = models.CharField(
+        max_length=16,
+        unique=True,
+        verbose_name='令牌前缀',
+        help_text='明文前缀，用于按前缀定位令牌记录',
+    )
+    token_hash = models.CharField(
+        max_length=64,
+        unique=True,
+        verbose_name='令牌摘要',
+        help_text='SHA-256 摘要，明文不落库',
+    )
+    scopes = models.CharField(
+        max_length=200,
+        default=DEFAULT_SCOPES,
+        verbose_name='权限范围',
+        help_text='空格分隔的 scope 列表',
+    )
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name='过期时间')
+    last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最后使用时间')
+    revoked_at = models.DateTimeField(null=True, blank=True, verbose_name='撤销时间')
+
+    class Meta:
+        db_table = 'personal_access_token'
+        verbose_name = '个人访问令牌'
+        verbose_name_plural = verbose_name
+        ordering = ['-created']
+
+    def __str__(self):
+        return f'{self.user.username} - {self.name} ({self.prefix}…)'
+
+    @staticmethod
+    def hash_token(raw_token: str) -> str:
+        return hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+
+    @classmethod
+    def issue(cls, user: User, name: str, *, expires_at=None, scopes: str | None = None):
+        """创建令牌，返回 (记录, 明文令牌)。明文只在此处返回一次。"""
+        prefix = secrets.token_hex(cls.PREFIX_LENGTH // 2)
+        raw_token = f'{cls.TOKEN_PREFIX}{prefix}{secrets.token_urlsafe(32)}'
+        token = cls.objects.create(
+            user=user,
+            name=name,
+            prefix=prefix,
+            token_hash=cls.hash_token(raw_token),
+            scopes=scopes or cls.DEFAULT_SCOPES,
+            expires_at=expires_at,
+        )
+        return token, raw_token
+
+    @property
+    def scope_list(self) -> list[str]:
+        return [scope for scope in self.scopes.split() if scope]
+
+    def is_usable(self) -> bool:
+        if self.revoked_at is not None:
+            return False
+        if self.expires_at is not None and self.expires_at <= timezone.now():
+            return False
+        return True
+
+    def matches(self, raw_token: str) -> bool:
+        return hmac.compare_digest(self.token_hash, self.hash_token(raw_token))
+
+    def touch(self, *, min_interval_seconds: int | None = None) -> None:
+        """记录最后使用时间（默认按间隔节流，避免每次调用都写库）。"""
+        interval = self.LAST_USED_THROTTLE_SECONDS if min_interval_seconds is None else min_interval_seconds
+        now = timezone.now()
+        if self.last_used_at and (now - self.last_used_at).total_seconds() < interval:
+            return
+        type(self).objects.filter(pk=self.pk).update(last_used_at=now)
+        self.last_used_at = now
+
+    @classmethod
+    def authenticate(cls, raw_token: str) -> 'PersonalAccessToken | None':
+        """校验明文令牌，返回可用令牌记录；失败返回 None。"""
+        if not raw_token or not raw_token.startswith(cls.TOKEN_PREFIX):
+            return None
+        start = len(cls.TOKEN_PREFIX)
+        prefix = raw_token[start:start + cls.PREFIX_LENGTH]
+        if len(prefix) < cls.PREFIX_LENGTH:
+            return None
+        token = cls.objects.select_related('user').filter(prefix=prefix).first()
+        if token is None or not token.matches(raw_token) or not token.is_usable():
+            return None
+        if not token.user.is_active:
+            return None
+        return token
 

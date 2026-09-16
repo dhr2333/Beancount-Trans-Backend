@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from django.utils import timezone
 from django.utils.crypto import get_random_string
 from allauth.socialaccount.models import SocialAccount
 
-from project.apps.authentication.models import UserProfile
+from project.apps.authentication.models import PersonalAccessToken, UserProfile
 from project.apps.authentication.utils import generate_unique_username, extract_local_phone_number
 from project.apps.fava_instances.tasks import schedule_fava_warmup
 from project.apps.authentication.serializers import (
@@ -32,6 +33,8 @@ from project.apps.authentication.serializers import (
     EmailLoginSendCodeSerializer,
     EmailLoginSerializer,
     UsernameLoginByPasswordSerializer,
+    PersonalAccessTokenSerializer,
+    PersonalAccessTokenCreateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -1189,5 +1192,46 @@ class AuthPublicConfigAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class PersonalAccessTokenViewSet(viewsets.GenericViewSet):
+    """个人访问令牌管理（供 MCP 等外部客户端使用）"""
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    serializer_class = PersonalAccessTokenSerializer
+
+    def get_queryset(self):
+        return PersonalAccessToken.objects.filter(user=self.request.user).order_by('-created')
+
+    def list(self, request):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def create(self, request):
+        serializer = PersonalAccessTokenCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        days = data.get('expires_in_days')
+        expires_at = timezone.now() + timedelta(days=days) if days else None
+
+        token, raw_token = PersonalAccessToken.issue(
+            request.user, data['name'], expires_at=expires_at
+        )
+        logger.info(f"用户 {request.user.username} 创建访问令牌 {token.prefix}…")
+        payload = PersonalAccessTokenSerializer(token).data
+        payload['token'] = raw_token
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='revoke')
+    def revoke(self, request, pk=None):
+        token = self.get_object()
+        if token.revoked_at is None:
+            token.revoked_at = timezone.now()
+            token.save(update_fields=['revoked_at', 'modified'])
+            logger.info(f"用户 {request.user.username} 撤销访问令牌 {token.prefix}…")
+        return Response(PersonalAccessTokenSerializer(token).data, status=status.HTTP_200_OK)
 
 

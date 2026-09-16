@@ -7,11 +7,13 @@ django-cors-headers==4.9.0
 django-filter==25.2
 django-mptt==0.18.0
 django-otp==1.7.0
+django-oauth-toolkit==3.4.1
 django-phonenumber-field==8.4.0
 django-redis==6.0.0
 djangorestframework_simplejwt==5.5.1
 docker==7.1.0
 drf-spectacular==0.29.0
+mcp==2.2.0
 minio==7.2.20
 openai==2.34.0
 openpyxl==3.1.5
@@ -24,3 +26,4 @@ PyPDF2==3.0.1
 python-dotenv==1.2.2
 qrcode==8.2
 transformers==5.7.0
+uvicorn==0.53.0

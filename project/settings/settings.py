@@ -91,6 +91,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     "allauth.usersessions",
     'mptt',
     'django_celery_beat',
+    'oauth2_provider',
 
     # 本地应用
     'phonenumber_field',
@@ -106,6 +107,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'project.apps.tags',
     'project.apps.translate',
     'project.apps.assistant',
+    'project.apps.mcp',
 ]
 
 # 根据 DEBUG 模式决定是否包含开发专用应用
@@ -573,6 +575,54 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Bean文件相关配置
 ASSETS_BASE_PATH = BASE_DIR / 'Assets'
 ASSETS_HOST_PATH = os.environ.get('ASSETS_HOST_PATH', str(ASSETS_BASE_PATH))
+
+# MCP 服务配置
+# 未配置访问令牌时的本地开发用户（留空则拒绝所有未认证请求）
+MCP_DEV_USERNAME = os.environ.get('MCP_DEV_USERNAME', '')
+# Streamable HTTP 端点的 Host / Origin 白名单，用于 DNS rebinding 防护
+MCP_ALLOWED_HOSTS = env_to_list('MCP_ALLOWED_HOSTS', '127.0.0.1:*,localhost:*,[::1]:*')
+MCP_ALLOWED_ORIGINS = env_to_list(
+    'MCP_ALLOWED_ORIGINS', 'http://127.0.0.1:*,http://localhost:*,http://[::1]:*'
+)
+# read_ledger_file 工具单文件读取上限（字节）
+MCP_MAX_FILE_BYTES = int(os.environ.get('MCP_MAX_FILE_BYTES', 1024 * 1024))
+# 是否要求携带访问令牌（关闭后仅 MCP_DEV_USERNAME 可用，仅供本地调试）
+MCP_AUTH_ENABLED = os.environ.get('MCP_AUTH_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+# MCP 端点对外地址（RFC 9728 资源标识）与令牌签发方地址（留空则复用前者）
+MCP_RESOURCE_SERVER_URL = os.environ.get('MCP_RESOURCE_SERVER_URL', '')
+MCP_ISSUER_URL = os.environ.get('MCP_ISSUER_URL', '')
+# 访问令牌必须具备的 scope
+MCP_REQUIRED_SCOPES = env_to_list('MCP_REQUIRED_SCOPES', 'ledger:read')
+# 允许 OAuth 回调使用的 URL scheme（自定义 scheme 的客户端需在此追加，如 cursor,vscode）
+MCP_OAUTH_REDIRECT_URI_SCHEMES = env_to_list('MCP_OAUTH_REDIRECT_URI_SCHEMES', 'http,https')
+
+# OAuth 2.1 授权服务器（django-oauth-toolkit），供 MCP 客户端走浏览器授权流程
+OAUTH2_PROVIDER = {
+    'OIDC_ENABLED': False,
+    'SCOPES': {'ledger:read': '只读访问账本数据'},
+    'DEFAULT_SCOPES': ['ledger:read'],
+    'PKCE_REQUIRED': True,
+    'REQUEST_APPROVAL_PROMPT': 'auto',
+    'ACCESS_TOKEN_EXPIRE_SECONDS': 60 * 60 * 24 * 30,
+    'REFRESH_TOKEN_EXPIRE_SECONDS': 60 * 60 * 24 * 180,
+    'ROTATE_REFRESH_TOKEN': True,
+    'ALLOWED_REDIRECT_URI_SCHEMES': MCP_OAUTH_REDIRECT_URI_SCHEMES,
+    'ALLOW_LOCALHOST_LOOPBACK': True,
+    # 允许 MCP 客户端匿名动态注册（RFC 7591）
+    'DCR_ENABLED': True,
+    'DCR_REGISTRATION_PERMISSION_CLASSES': ('oauth2_provider.dcr.AllowAllDCRPermission',),
+    # RFC 9728 受保护资源元数据
+    'OAUTH2_PROTECTED_RESOURCE_IDENTIFIER': MCP_RESOURCE_SERVER_URL,
+    'OAUTH2_PROTECTED_RESOURCE_AUTHORIZATION_SERVERS': (
+        [MCP_ISSUER_URL] if MCP_ISSUER_URL else []
+    ),
+    'OAUTH2_PROTECTED_RESOURCE_NAME': 'Beancount-Trans 账本',
+}
+if MCP_ISSUER_URL:
+    OAUTH2_PROVIDER['OIDC_ISS_ENDPOINT'] = MCP_ISSUER_URL
+
+# OAuth 授权页需要会话登录；项目无独立登录页，复用 allauth 的浏览器登录流程
+LOGIN_URL = '/api/accounts/login/'
 
 # 阿里云短信配置
 ALIYUN_SMS_ACCESS_KEY_ID = os.environ.get('ALIYUN_SMS_ACCESS_KEY_ID', '')

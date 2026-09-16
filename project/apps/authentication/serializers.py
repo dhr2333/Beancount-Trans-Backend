@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from phonenumber_field.serializerfields import PhoneNumberField
-from project.apps.authentication.models import UserProfile
+from project.apps.authentication.models import PersonalAccessToken, UserProfile
 from project.apps.authentication.utils import validate_username_format
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,32 @@ class PhoneLoginByPasswordSerializer(serializers.Serializer):
         if value and not value.isdigit():
             raise serializers.ValidationError("TOTP验证码必须是6位数字")
         return value
+
+
+class PersonalAccessTokenSerializer(serializers.ModelSerializer):
+    """个人访问令牌输出序列化器（不含明文令牌）"""
+    class Meta:
+        model = PersonalAccessToken
+        fields = ['id', 'name', 'prefix', 'scopes', 'expires_at', 'last_used_at', 'revoked_at', 'created']
+        read_only_fields = fields
+
+
+class PersonalAccessTokenCreateSerializer(serializers.Serializer):
+    """个人访问令牌创建序列化器"""
+    name = serializers.CharField(max_length=64, help_text='用途说明，如 Claude Code')
+    expires_in_days = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=1,
+        max_value=3650,
+        help_text='有效天数，留空表示长期有效',
+    )
+
+    def validate_name(self, value):
+        name = (value or '').strip()
+        if not name:
+            raise serializers.ValidationError('名称不能为空')
+        return name
 
 
 class PhoneRegisterSerializer(serializers.Serializer):

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from project.apps.authentication.models import UserProfile
+from project.apps.authentication.models import PersonalAccessToken, UserProfile
 
 
 @admin.register(UserProfile)
@@ -21,4 +21,12 @@ class UserProfileAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(PersonalAccessToken)
+class PersonalAccessTokenAdmin(admin.ModelAdmin):
+    list_display = ['name', 'user', 'prefix', 'scopes', 'expires_at', 'last_used_at', 'revoked_at', 'created']
+    list_filter = ['scopes', 'created', 'revoked_at']
+    search_fields = ['name', 'user__username', 'prefix']
+    readonly_fields = ['prefix', 'token_hash', 'last_used_at', 'created', 'modified']
 
