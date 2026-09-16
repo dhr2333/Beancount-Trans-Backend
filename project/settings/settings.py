@@ -611,6 +611,9 @@ OAUTH2_PROVIDER = {
     # 允许 MCP 客户端匿名动态注册（RFC 7591）
     'DCR_ENABLED': True,
     'DCR_REGISTRATION_PERMISSION_CLASSES': ('oauth2_provider.dcr.AllowAllDCRPermission',),
+    # DOT 默认不过期时会写入 year 9999（UTC），在东八区落库即变成 year 10000，
+    # 读取该行会抛 ValueError，故显式设置过期时间
+    'DCR_REGISTRATION_TOKEN_EXPIRE_SECONDS': 60 * 60 * 24 * 365,
     # RFC 9728 受保护资源元数据
     'OAUTH2_PROTECTED_RESOURCE_IDENTIFIER': MCP_RESOURCE_SERVER_URL,
     'OAUTH2_PROTECTED_RESOURCE_AUTHORIZATION_SERVERS': (
