@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.12.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.2...5.12.0) (2026-09-16)
+
+### Features
+
+* **mcp, auth:** 新增MCP账本服务及配套认证体系 ([5750993](https://github.com/dhr2333/Beancount-Trans-Backend/commit/575099301397adbcc97b32bdbb4bdc278f14f04f))
+
 ## [5.11.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.11.1...5.11.2) (2026-09-15)
 
 ### Bug Fixes
