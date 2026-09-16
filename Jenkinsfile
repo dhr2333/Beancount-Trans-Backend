@@ -55,6 +55,17 @@ pipeline {
             }
         }
 
+        stage('停止占用内存的容器') {
+            steps {
+                script {
+                    echo "⏹️ 构建前停止占用内存的容器（beancount-trans-beat, odoo19）..."
+                    sh '''
+                        docker stop beancount-trans-beat odoo19 2>/dev/null || true
+                    '''
+                }
+            }
+        }
+
         stage('构建生产镜像') {
             steps {
                 retry(3) {
@@ -354,6 +365,9 @@ pipeline {
 
         always {
             script {
+                echo "▶️ 重新启动构建前停止的容器（beancount-trans-beat, odoo19）..."
+                sh 'docker start beancount-trans-beat odoo19 2>/dev/null || true'
+
                 echo '🧹 清理临时文件...'
 
                 // 清理旧的测试报告（保留最近3个构建的报告）
