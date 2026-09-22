@@ -5,6 +5,7 @@ POST /api/translate/upload-parse
 
 - 不创建 File / ParseFile（文件不入文件管理，也不生成 .bean）；
 - 条目写入 Copilot 用户级暂存区并入队，激活 entry_review 待办；
+- 落库策略固定为审核模式，不随 parsing_mode_preference 变化；
 - 确认写入时追加到 trans/collect.bean。
 """
 from pathlib import Path
@@ -18,7 +19,7 @@ from rest_framework.test import APIClient
 
 from project.apps.file_manager.models import File
 from project.apps.reconciliation.models import ScheduledTask
-from project.apps.translate.models import ParseFile
+from project.apps.translate.models import FormatConfig, ParseFile
 from project.apps.translate.services.copilot_bookkeeping_service import (
     CopilotBookkeepingService,
 )
@@ -217,3 +218,25 @@ class TestUploadParseReviewView:
             task_type='entry_review', object_id=user.id
         )
         assert task.status == 'completed'
+
+    def test_always_review_mode_ignores_direct_write_preference(self, user):
+        """移动端上传解析固定走审核：即使用户开启直接写入模式也不直接入账"""
+        self.client.force_authenticate(user=user)
+        config = FormatConfig.get_user_config(user)
+        config.parsing_mode_preference = 'direct_write'
+        config.save(update_fields=['parsing_mode_preference'])
+
+        response = self._upload()
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['entry_count'] == 1
+        assert 'bean' not in response.data
+
+        # 仍进审核队列并激活待办，且未写入 collect.bean
+        refs = EntryReviewQueueService.list_refs(user.id)
+        assert refs == [{'source': 'copilot', 'file_id': None, 'uuid': CACHE_KEY}]
+        task = ScheduledTask.objects.get(
+            task_type='entry_review', object_id=user.id
+        )
+        assert task.status == 'pending'
+        assert response.data['entry_review_task_id'] == task.id

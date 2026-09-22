@@ -490,11 +490,12 @@ class UploadParseReviewView(APIView):
     """上传账单直接解析并生成解析审核待办
 
     与 Web 解析首页（`/translate/trans`）一样同步解析、不落文件管理：
-    不创建 File / ParseFile，不生成 ``.bean``，也不改动 main.bean 的 include。
+    不创建 File / ParseFile、不生成账单 ``.bean``、也不改动 main.bean 的 include。
 
-    解析结果写入 Copilot 用户级暂存区（后端唯一的「无账单文件」审核来源），
-    并入用户级统一审核队列并激活 entry_review 待办；确认写入或到期自动写入时
-    追加到 ``trans/collect.bean``。
+    落库策略固定为「审核模式」，**不随** ``FormatConfig.parsing_mode_preference``
+    变化：上传解析一律进入用户级审核队列并激活 entry_review 待办，确认写入或
+    到期自动写入时追加到 ``trans/collect.bean``。需要「解析后直接入账」请走
+    Web 解析页的「写入账本」（``/translate/write-collect``）。
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
