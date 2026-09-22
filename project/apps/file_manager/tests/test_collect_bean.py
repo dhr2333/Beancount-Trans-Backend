@@ -156,7 +156,7 @@ class TestAppendToCollectBean:
 
         text = _collect_text(user)
         assert text.startswith(COLLECT_HEADER)
-        assert text == COLLECT_HEADER + d1 + '\n' + d2 + '\n' + '\n'
+        assert text == COLLECT_HEADER + d1 + '\n\n' + d2 + '\n\n'
         assert COLLECT_INCLUDE in _include_lines(user)
 
     def test_second_write_appends_after_existing_content(self, user):

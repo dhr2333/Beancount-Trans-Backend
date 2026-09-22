@@ -88,6 +88,33 @@ class TestWriteCollectView:
         main_path = Path(BeanFileManager.get_trans_main_bean_path(user))
         assert 'include "collect.bean"' in main_path.read_text(encoding='utf-8')
 
+    def test_write_multiple_entries_separated_by_blank_line(self, user, temp_assets):
+        """同批多个条目之间以空行分隔，便于阅读且符合 Beancount 惯例"""
+        self.client.force_authenticate(user=user)
+        collect_path = _prepare_ledger(user)
+
+        second = (
+            '2025-01-21 * "第二商户" "第二笔"\n'
+            '    Expenses:Test  50.00 CNY\n'
+            '    Assets:Test  -50.00 CNY'
+        )
+        response = self.client.post(
+            '/api/translate/write-collect',
+            {
+                'entries': [
+                    {'uuid': 'entry-1', 'directive': VALID_DIRECTIVE},
+                    {'uuid': 'entry-2', 'directive': second},
+                ]
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['entry_count'] == 2
+
+        text = collect_path.read_text(encoding='utf-8')
+        assert VALID_DIRECTIVE + '\n\n' + second + '\n\n' in text
+
     def test_write_syntax_error_rejects_all(self, user, temp_assets):
         """存在语法错误时整批拒绝，不写入任何条目"""
         self.client.force_authenticate(user=user)

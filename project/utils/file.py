@@ -468,9 +468,9 @@ class BeanFileManager:
         
         with open(collect_path, 'a', encoding='utf-8') as f:
             for directive in directives:
-                f.write(directive)
-                f.write('\n')
-            f.write('\n')
+                # 条目之间以空行分隔（Beancount 惯例，也便于人工阅读）
+                f.write(directive.rstrip('\n'))
+                f.write('\n\n')
         
         logger.debug(f"已写入 {len(directives)} 条指令到 trans/collect.bean: {collect_path}")
 
