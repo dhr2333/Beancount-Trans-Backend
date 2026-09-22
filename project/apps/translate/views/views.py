@@ -410,6 +410,82 @@ class MultiBillAnalyzeView(APIView):
         return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 
+class WriteCollectView(APIView):
+    """解析结果直接写入账本（追加到 trans/collect.bean）
+
+    供 Web 解析页在解析、核对后一键入账：先做 Beancount 语法校验，
+    全部通过后按追加语义写入当前用户的 ``trans/collect.bean``
+    （文件与 include 缺失时自动补齐），不做条目去重、不产生审核待办。
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """写入解析条目
+
+        POST /api/translate/write-collect
+        请求体：``{"entries": [{"uuid": "...", "directive": "..."}]}``
+        """
+        from project.apps.translate.utils.beancount_validator import BeancountValidator
+        from project.utils.file import BeanFileManager
+
+        raw_entries = request.data.get('entries')
+        if not isinstance(raw_entries, list):
+            return Response({'error': '缺少必要参数：entries'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 保留 uuid 与指令的对应关系，便于定位错误条目
+        queued = []
+        for entry in raw_entries:
+            if not isinstance(entry, dict):
+                continue
+            directive = entry.get('directive')
+            if not isinstance(directive, str) or not directive.strip():
+                continue
+            queued.append({
+                'uuid': str(entry.get('uuid') or ''),
+                'directive': directive.rstrip(),
+            })
+
+        if not queued:
+            return Response({'error': '没有可写入的条目'}, status=status.HTTP_400_BAD_REQUEST)
+
+        directives = [item['directive'] for item in queued]
+        try:
+            is_valid, error_message, _ = BeancountValidator.validate_entries(
+                '\n\n'.join(directives)
+            )
+            if not is_valid:
+                _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(directives)
+                if not error_entries_indices:
+                    # 单条校验无法定位时，整体报错并指向首条
+                    error_entries_indices = [(0, error_message or '格式有误')]
+                return Response(
+                    {
+                        'error': f'Beancount 语法错误: 共 {len(error_entries_indices)} 条格式有误',
+                        'error_entries': [
+                            {
+                                'uuid': queued[idx]['uuid'],
+                                'index': idx,
+                                'error_message': msg or error_message or '格式有误',
+                            }
+                            for idx, msg in error_entries_indices
+                        ],
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            BeanFileManager.append_to_collect_bean(request.user, directives)
+        except Exception as e:
+            logger.exception(e)
+            return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'message': '写入成功',
+            'entry_count': len(directives),
+            'bean': 'trans/collect.bean',
+        }, status=status.HTTP_200_OK)
+
+
 class UploadParseReviewView(APIView):
     """上传账单直接解析并生成解析审核待办
 
