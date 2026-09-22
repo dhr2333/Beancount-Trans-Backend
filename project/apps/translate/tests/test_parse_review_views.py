@@ -11,6 +11,7 @@
 - POST /api/translate/entry-review/reparse-all
 """
 import time
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -19,8 +20,12 @@ from rest_framework import status
 
 from project.apps.translate.services.parse_review_service import ParseReviewService
 from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+from project.apps.translate.services.copilot_bookkeeping_service import (
+    CopilotBookkeepingService,
+)
 from project.apps.translate.models import ParseFile
 from project.apps.file_manager.models import File
+from project.utils.file import BeanFileManager
 
 
 def _make_entry(entry_uuid, formatted=None, **extra):
@@ -1007,3 +1012,416 @@ class TestCancelParseView:
         parse_file2.refresh_from_db()
         assert parse_file.status == 'cancelled'
         assert parse_file2.status == 'cancelled'
+
+
+# ======================================================================
+# Copilot 记账（source='copilot'）来源适配测试
+# ======================================================================
+COPILOT_EXPENSE_ACCOUNT = 'Expenses:Shopping:Food'
+COPILOT_ASSET_ACCOUNT = 'Assets:Bank:CMB'
+
+
+def _ensure_copilot_accounts(user):
+    """创建 Copilot 记账所需的启用账户。"""
+    from project.apps.account.models import Account
+
+    for path in (COPILOT_EXPENSE_ACCOUNT, COPILOT_ASSET_ACCOUNT):
+        Account.objects.get_or_create(account=path, owner=user)
+
+
+def _copilot_entry(**overrides):
+    """构造一笔合法的 Copilot 记账入参（默认支出）。"""
+    entry = {
+        'type': 'expense',
+        'date': '2025-01-20',
+        'amount': 35.0,
+        'narration': '午餐',
+        'payee': '食堂',
+        'account': COPILOT_EXPENSE_ACCOUNT,
+        'payment_account': COPILOT_ASSET_ACCOUNT,
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _create_copilot_entries(user, entries=None):
+    """通过服务写入 Copilot 暂存区并入队。"""
+    _ensure_copilot_accounts(user)
+    result = CopilotBookkeepingService.create_entries(user, entries or [_copilot_entry()])
+    assert result['ok'] is True, result
+    return result
+
+
+def _seed_copilot_staging(user, uuids=('copilot-1',), expires_in=86400):
+    """直接写入暂存区（避免 create_entries 改写待办状态）。"""
+    formatted = (
+        '2025-01-20 * "Copilot" "{u}"\n'
+        '    Expenses:Test  10.00 CNY\n'
+        '    Assets:Test  -10.00 CNY\n'
+    )
+    entries = [
+        {
+            'uuid': u,
+            'formatted': formatted.format(u=u),
+            'edited_formatted': formatted.format(u=u),
+            'tag_details': [],
+            'tag_overrides': ParseReviewService.default_tag_overrides(),
+        }
+        for u in uuids
+    ]
+    data = {
+        'formatted_data': entries,
+        'created_at': time.time(),
+        'review_expires_at': time.time() + expires_in,
+    }
+    ParseReviewService.save_parse_result(CopilotBookkeepingService.staging_key(user.id), data)
+    return data
+
+
+@pytest.fixture
+def temp_assets(tmp_path, monkeypatch):
+    """把 ASSETS_BASE_PATH 指向临时目录，隔离 collect.bean 写入。"""
+    from django.conf import settings
+
+    base = tmp_path / 'Assets'
+    base.mkdir()
+    monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', str(base))
+    return base
+
+
+class _CopilotApiTestBase:
+    """Copilot 审核 API 测试基类：关闭去重 LLM 判定，保证确定性。"""
+
+    @pytest.fixture(autouse=True)
+    def _no_dedup_llm(self, monkeypatch):
+        from project.apps.translate.services.entry_dedup_service import EntryDedupService
+
+        monkeypatch.setattr(EntryDedupService, '_llm_judge_pairs', lambda user, pairs: None)
+
+
+@pytest.mark.django_db
+class TestEntryReviewResultsViewCopilot(_CopilotApiTestBase):
+    """GET /api/translate/entry-review/results 的 Copilot 来源字段"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_results_copilot_entry_fields(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+
+        response = self.client.get('/api/translate/entry-review/results')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['entry_count'] == 1
+        entry = response.data['entries'][0]
+        assert entry['source'] == 'copilot'
+        assert entry['file_id'] is None
+        assert entry['file_name'] == 'Copilot 记账'
+        assert not entry['formatted'].endswith('\n')
+        assert response.data['review_expires_at'] == pytest.approx(
+            CopilotBookkeepingService.expires_at(user.id)
+        )
+
+    def test_results_mixed_sources_order_and_fields(self, user, entry_review_task, parse_file):
+        self.client.force_authenticate(user=user)
+        _save_review(parse_file.file_id, [_make_entry('entry-1')])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-1'}])
+        _create_copilot_entries(user)
+
+        response = self.client.get('/api/translate/entry-review/results')
+
+        assert response.status_code == status.HTTP_200_OK
+        entries = response.data['entries']
+        assert response.data['entry_count'] == 2
+        assert [e['source'] for e in entries] == ['file', 'copilot']
+
+        assert entries[0]['file_id'] == parse_file.file_id
+        assert entries[0]['file_name'] == parse_file.file.name
+
+        assert entries[1]['file_id'] is None
+        assert entries[1]['file_name'] == 'Copilot 记账'
+        assert response.data['review_expires_at'] is not None
+
+
+@pytest.mark.django_db
+class TestEntryReviewEditViewCopilot(_CopilotApiTestBase):
+    """PUT /api/translate/entry-review/entries/<uuid>/edit 的 Copilot 来源"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_edit_copilot_entry_success(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+        entry_uuid = CopilotBookkeepingService.list_entries(user.id)[0]['uuid']
+
+        updated = (
+            '2025-01-20 * "食堂" "午餐（已改）"\n'
+            '    Expenses:Shopping:Food  40.00 CNY\n'
+            '    Assets:Bank:CMB  -40.00 CNY'
+        )
+        response = self.client.put(
+            f'/api/translate/entry-review/entries/{entry_uuid}/edit',
+            {'source': 'copilot', 'edited_formatted': updated},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['uuid'] == entry_uuid
+        assert response.data['edited_formatted'] == updated
+        assert response.data['source'] == 'copilot'
+        assert response.data['file_id'] is None
+
+        staging = CopilotBookkeepingService.get_staging_data(user.id)
+        assert staging['formatted_data'][0]['edited_formatted'] == updated
+
+    def test_edit_copilot_missing_staging_returns_400(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+        entry_uuid = CopilotBookkeepingService.list_entries(user.id)[0]['uuid']
+        CopilotBookkeepingService.clear(user.id)
+
+        response = self.client.put(
+            f'/api/translate/entry-review/entries/{entry_uuid}/edit',
+            {'source': 'copilot', 'edited_formatted': 'x'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data['error'] == 'Copilot 记账待审核条目不存在或已过期'
+
+    def test_edit_copilot_task_completed_returns_400(self, user, entry_review_task_completed):
+        self.client.force_authenticate(user=user)
+        _seed_copilot_staging(user)
+
+        response = self.client.put(
+            '/api/translate/entry-review/entries/copilot-1/edit',
+            {'source': 'copilot', 'edited_formatted': 'x'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data['error'] == '待办任务已完成或已取消'
+
+
+@pytest.mark.django_db
+class TestEntryReviewTagsViewCopilot(_CopilotApiTestBase):
+    """PATCH /api/translate/entry-review/entries/<uuid>/tags 的 Copilot 来源"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_add_tag_copilot_entry(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+        entry_uuid = CopilotBookkeepingService.list_entries(user.id)[0]['uuid']
+
+        response = self.client.patch(
+            f'/api/translate/entry-review/entries/{entry_uuid}/tags',
+            {'source': 'copilot', 'action': 'add', 'tag_path': 'Manual/Tag'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert '#Manual/Tag' in response.data['edited_formatted']
+        assert response.data['tag_overrides']['added_paths'] == ['Manual/Tag']
+        assert response.data['source'] == 'copilot'
+        assert response.data['file_id'] is None
+
+        staging = CopilotBookkeepingService.get_staging_data(user.id)
+        assert staging['formatted_data'][0]['tag_overrides']['added_paths'] == ['Manual/Tag']
+
+
+@pytest.mark.django_db
+class TestEntryReviewPreviewSyncViewCopilot(_CopilotApiTestBase):
+    """PUT /api/translate/entry-review/preview-sync 的 Copilot 来源"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_preview_sync_copilot_removes_entry(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user, [
+            _copilot_entry(narration='第一笔'),
+            _copilot_entry(narration='第二笔'),
+        ])
+        entries = CopilotBookkeepingService.list_entries(user.id)
+        keep = entries[0]
+
+        response = self.client.put(
+            '/api/translate/entry-review/preview-sync',
+            {
+                'source': 'copilot',
+                'entries': [{'uuid': keep['uuid'], 'edited_formatted': keep['formatted']}],
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['removed_count'] == 1
+        assert response.data['source'] == 'copilot'
+        assert response.data['file_id'] is None
+        assert [e['uuid'] for e in response.data['formatted_data']] == [keep['uuid']]
+
+        staging = CopilotBookkeepingService.get_staging_data(user.id)
+        assert [e['uuid'] for e in staging['formatted_data']] == [keep['uuid']]
+
+
+@pytest.mark.django_db
+class TestEntryReviewReparseViewCopilot(_CopilotApiTestBase):
+    """reparse / reparse-all 对 Copilot 来源返回 400"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_reparse_copilot_returns_400(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+        entry_uuid = CopilotBookkeepingService.list_entries(user.id)[0]['uuid']
+
+        response = self.client.post(
+            '/api/translate/entry-review/reparse',
+            {'source': 'copilot', 'entry_uuid': entry_uuid, 'selected_key': 'Expenses:Other'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data['error'] == 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'
+
+    def test_reparse_all_copilot_returns_400(self, user, entry_review_task):
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+
+        response = self.client.post(
+            '/api/translate/entry-review/reparse-all',
+            {'source': 'copilot'},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data['error'] == 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'
+
+
+@pytest.mark.django_db
+class TestEntryReviewConfirmViewCopilot(_CopilotApiTestBase):
+    """POST /api/translate/entry-review/confirm 的 Copilot 来源写入"""
+
+    def setup_method(self):
+        self.client = APIClient()
+
+    def test_confirm_copilot_appends_to_collect_bean(
+        self, user, entry_review_task, temp_assets
+    ):
+        """Copilot 条目追加写入 collect.bean，保留注释头与已有内容"""
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user, [
+            _copilot_entry(narration='第一笔'),
+            _copilot_entry(narration='第二笔'),
+        ])
+        staging = CopilotBookkeepingService.get_staging_data(user.id)
+        directives = [e['formatted'].rstrip() for e in staging['formatted_data']]
+
+        collect_path = Path(BeanFileManager.get_collect_bean_path(user))
+        collect_path.parent.mkdir(parents=True, exist_ok=True)
+        header = (
+            '; Trans directory - Auto-generated includes\n'
+            '; This file is automatically generated by the platform\n\n'
+        )
+        existing = (
+            '2025-01-01 * "已有" "历史条目"\n'
+            '    Expenses:Old  1.00 CNY\n'
+            '    Assets:Old  -1.00 CNY\n\n'
+        )
+        collect_path.write_text(header + existing, encoding='utf-8')
+
+        response = self.client.post('/api/translate/entry-review/confirm')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['message'] == '确认写入成功'
+        assert response.data['files'] == [
+            {'source': 'copilot', 'entry_count': 2, 'bean': 'trans/collect.bean'}
+        ]
+
+        text = collect_path.read_text(encoding='utf-8')
+        assert text.startswith(header)
+        assert existing in text
+        for directive in directives:
+            assert directive in text
+
+        # 暂存区删除、队列清空、待办完成
+        assert CopilotBookkeepingService.has_staging(user.id) is False
+        assert EntryReviewQueueService.is_empty(user.id) is True
+        entry_review_task.refresh_from_db()
+        assert entry_review_task.status == 'completed'
+
+    def test_confirm_copilot_syntax_error_writes_nothing(
+        self, user, entry_review_task, temp_assets
+    ):
+        """Copilot 条目语法错误时整体 400 且不写入任何文件"""
+        self.client.force_authenticate(user=user)
+        _create_copilot_entries(user)
+        staging_key = CopilotBookkeepingService.staging_key(user.id)
+        entry_uuid = CopilotBookkeepingService.list_entries(user.id)[0]['uuid']
+        ParseReviewService.update_entry_edited_formatted(
+            staging_key, entry_uuid, 'invalid beancount syntax'
+        )
+
+        collect_path = Path(BeanFileManager.get_collect_bean_path(user))
+        before = collect_path.read_text(encoding='utf-8') if collect_path.exists() else None
+
+        response = self.client.post('/api/translate/entry-review/confirm')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Beancount 语法错误' in response.data['error']
+        error_entry = response.data['error_entries'][0]
+        assert error_entry['source'] == 'copilot'
+        assert error_entry['file_id'] is None
+        assert error_entry['uuid'] == entry_uuid
+
+        after = collect_path.read_text(encoding='utf-8') if collect_path.exists() else None
+        assert after == before
+        assert 'invalid beancount syntax' not in (after or '')
+
+        # 暂存区、队列、待办均不变
+        assert CopilotBookkeepingService.has_staging(user.id) is True
+        assert len(EntryReviewQueueService.list_refs(user.id)) == 1
+        entry_review_task.refresh_from_db()
+        assert entry_review_task.status == 'pending'
+
+    def test_confirm_mixed_sources_writes_both(
+        self, user, entry_review_task, parse_file, temp_assets
+    ):
+        """混合来源：账单覆盖写各自 .bean，Copilot 追加写 collect.bean"""
+        self.client.force_authenticate(user=user)
+        _save_review(parse_file.file_id, [_make_entry('entry-1')])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-1'}])
+        _create_copilot_entries(user)
+
+        response = self.client.post('/api/translate/entry-review/confirm')
+
+        assert response.status_code == status.HTTP_200_OK
+        files_by_source = {item['source']: item for item in response.data['files']}
+        assert files_by_source['copilot'] == {
+            'source': 'copilot',
+            'entry_count': 1,
+            'bean': 'trans/collect.bean',
+        }
+        assert files_by_source['file']['file_id'] == parse_file.file_id
+
+        parse_file.refresh_from_db()
+        assert parse_file.status == 'parsed'
+        bean_path = Path(BeanFileManager.get_bean_file_path(
+            user, parse_file.file.name, parse_file.file.get_bean_dir()
+        ))
+        assert 'Expenses:Test  100.00 CNY' in bean_path.read_text(encoding='utf-8')
+
+        collect_text = Path(
+            BeanFileManager.get_collect_bean_path(user)
+        ).read_text(encoding='utf-8')
+        assert COPILOT_EXPENSE_ACCOUNT in collect_text
+
+        assert CopilotBookkeepingService.has_staging(user.id) is False
+        assert EntryReviewQueueService.is_empty(user.id) is True
+        entry_review_task.refresh_from_db()
+        assert entry_review_task.status == 'completed'

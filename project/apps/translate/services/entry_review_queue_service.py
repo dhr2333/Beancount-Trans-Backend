@@ -3,8 +3,9 @@
 用户级统一审核队列服务
 
 每个用户维护一个全局唯一的审核队列（Redis list），仅保存
-{file_id, uuid} 形式的顺序引用；条目内容真源仍在各文件的
-parse_result:{file_id} 缓存中（由 ParseReviewService 管理）。
+{source, file_id, uuid} 形式的顺序引用；条目内容真源仍在各文件的
+parse_result:{file_id} 缓存中（由 ParseReviewService 管理），
+Copilot 记账条目则来自用户级暂存区（键 parse_result:copilot:{user_id}）。
 """
 import json
 import logging
@@ -26,6 +27,9 @@ class EntryReviewQueueService:
     LOCK_KEY_PREFIX = 'entry_review_lock'
     DEFAULT_TTL = 25 * 3600
 
+    SOURCE_FILE = 'file'
+    SOURCE_COPILOT = 'copilot'
+
     @classmethod
     def _queue_key(cls, user_id: int) -> str:
         """生成用户审核队列的缓存键"""
@@ -35,6 +39,28 @@ class EntryReviewQueueService:
     def _lock_key(cls, user_id: int) -> str:
         """生成用户审核队列锁的缓存键"""
         return f'{cls.LOCK_KEY_PREFIX}:{user_id}'
+
+    # ------------------------------------------------------------------
+    # 引用来源
+    # ------------------------------------------------------------------
+    @classmethod
+    def ref_source(cls, ref: Dict[str, Any]) -> str:
+        """引用来源；历史引用缺少 source 时按账单文件处理。"""
+        return str((ref or {}).get('source') or cls.SOURCE_FILE)
+
+    @classmethod
+    def _ref_still_valid(cls, user_id: int, ref: Dict[str, Any]) -> bool:
+        """引用的条目真源是否仍存在（缓存是否存在，不校验 uuid）。"""
+        if cls.ref_source(ref) == cls.SOURCE_COPILOT:
+            from project.apps.translate.services.copilot_bookkeeping_service import (
+                CopilotBookkeepingService,
+            )
+
+            return CopilotBookkeepingService.has_staging(user_id)
+        file_id = ref.get('file_id')
+        if file_id is None:
+            return False
+        return ParseReviewService.get_parse_result(file_id) is not None
 
     # ------------------------------------------------------------------
     # 用户级锁（串行化多文件并发解析时的合并/去重）
@@ -113,11 +139,10 @@ class EntryReviewQueueService:
         refs = cls._get_refs(user_id)
         valid_refs: List[Dict[str, Any]] = []
         for ref in refs:
-            file_id = ref.get('file_id')
-            if file_id is None or ref.get('uuid') is None:
+            if not isinstance(ref, dict) or ref.get('uuid') is None:
                 continue
-            # 文件解析缓存已失效，说明该引用已不可审核，剔除
-            if ParseReviewService.get_parse_result(file_id) is None:
+            # 条目真源缓存已失效，说明该引用已不可审核，剔除
+            if not cls._ref_still_valid(user_id, ref):
                 continue
             valid_refs.append(ref)
         if len(valid_refs) != len(refs):
@@ -126,22 +151,29 @@ class EntryReviewQueueService:
 
     @classmethod
     def enqueue(cls, user_id: int, refs: List[Dict[str, Any]]) -> int:
-        """把引用追加到队列，按 (file_id, uuid) 去重并保持顺序，返回新增数量"""
+        """把引用追加到队列，按 (source, file_id, uuid) 去重并保持顺序，返回新增数量"""
         existing = cls._get_refs(user_id)
         seen = {
-            (ref.get('file_id'), ref.get('uuid'))
+            (cls.ref_source(ref), ref.get('file_id'), ref.get('uuid'))
             for ref in existing
         }
         added = 0
         for ref in refs:
+            source = cls.ref_source(ref)
             file_id = ref.get('file_id')
-            uuid = ref.get('uuid')
-            if file_id is None or uuid is None:
+            entry_uuid = ref.get('uuid')
+            if entry_uuid is None:
                 continue
-            key = (file_id, uuid)
+            # 账单文件引用必须有 file_id；copilot 引用允许 file_id 为 None
+            if source == cls.SOURCE_FILE and file_id is None:
+                continue
+            key = (source, file_id, entry_uuid)
             if key in seen:
                 continue
-            existing.append({'file_id': file_id, 'uuid': uuid})
+            stored = {'file_id': file_id, 'uuid': entry_uuid}
+            if ref.get('source'):
+                stored = {'source': source, 'file_id': file_id, 'uuid': entry_uuid}
+            existing.append(stored)
             seen.add(key)
             added += 1
         # 即使没有新增也写回，用于刷新 TTL
@@ -150,23 +182,29 @@ class EntryReviewQueueService:
 
     @classmethod
     def remove_file(cls, user_id: int, file_id: int) -> None:
-        """移除指定文件的所有引用"""
+        """移除指定账单文件（source='file'）的所有引用，不影响 copilot 来源"""
         refs = cls._get_refs(user_id)
-        remaining = [ref for ref in refs if ref.get('file_id') != file_id]
+        remaining = [
+            ref for ref in refs
+            if not (
+                cls.ref_source(ref) == cls.SOURCE_FILE
+                and ref.get('file_id') == file_id
+            )
+        ]
         if len(remaining) != len(refs):
             cls._save_refs(user_id, remaining)
 
     @classmethod
     def remove_entries(cls, user_id: int, refs: List[Dict[str, Any]]) -> None:
-        """移除列表中指定的 (file_id, uuid) 引用"""
+        """移除列表中指定的 (source, file_id, uuid) 引用"""
         keys = {
-            (ref.get('file_id'), ref.get('uuid'))
+            (cls.ref_source(ref), ref.get('file_id'), ref.get('uuid'))
             for ref in refs
         }
         existing = cls._get_refs(user_id)
         remaining = [
             ref for ref in existing
-            if (ref.get('file_id'), ref.get('uuid')) not in keys
+            if (cls.ref_source(ref), ref.get('file_id'), ref.get('uuid')) not in keys
         ]
         if len(remaining) != len(existing):
             cls._save_refs(user_id, remaining)
@@ -184,34 +222,57 @@ class EntryReviewQueueService:
     @classmethod
     def earliest_expires_at(cls, user_id: int) -> Optional[float]:
         """返回队列中所有有效条目的最早审核截止时间，无有效引用返回 None"""
+        refs = cls.list_refs(user_id)
         expires_values: List[float] = []
-        for ref in cls.list_refs(user_id):
-            file_id = ref.get('file_id')
-            cached_data = ParseReviewService.get_parse_result(file_id)
+
+        if any(cls.ref_source(ref) == cls.SOURCE_COPILOT for ref in refs):
+            from project.apps.translate.services.copilot_bookkeeping_service import (
+                CopilotBookkeepingService,
+            )
+
+            expires_at = CopilotBookkeepingService.expires_at(user_id)
+            if expires_at is not None:
+                expires_values.append(expires_at)
+
+        for ref in refs:
+            if cls.ref_source(ref) == cls.SOURCE_COPILOT:
+                continue
+            cached_data = ParseReviewService.get_parse_result(ref.get('file_id'))
             if cached_data is None:
                 continue
             expires_at = ParseReviewService.get_review_expires_at(cached_data, None)
             if expires_at is not None:
                 expires_values.append(expires_at)
+
         if not expires_values:
             return None
         return min(expires_values)
 
     @classmethod
     def list_entries(cls, user_id: int) -> List[Dict[str, Any]]:
-        """按队列顺序返回待审核条目列表（补充 file_id 与 file_name）"""
+        """按队列顺序返回待审核条目列表（补充 source / file_id / file_name）"""
         from project.apps.translate.models import ParseFile
 
         entries: List[Dict[str, Any]] = []
         for ref in cls.list_refs(user_id):
+            entry_uuid = ref.get('uuid')
+            if cls.ref_source(ref) == cls.SOURCE_COPILOT:
+                from project.apps.translate.services.copilot_bookkeeping_service import (
+                    CopilotBookkeepingService,
+                )
+
+                entry = CopilotBookkeepingService.get_entry(user_id, entry_uuid)
+                if entry is not None:
+                    entries.append(entry)
+                continue
+
             file_id = ref.get('file_id')
-            uuid = ref.get('uuid')
             cached_data = ParseReviewService.get_parse_result_migrated(file_id)
             if cached_data is None:
                 continue
             target = None
             for entry in cached_data.get('formatted_data') or []:
-                if entry.get('uuid') == uuid:
+                if entry.get('uuid') == entry_uuid:
                     target = entry
                     break
             if target is None:
@@ -225,6 +286,7 @@ class EntryReviewQueueService:
             file_name = parse_file.file.name if parse_file else None
             # 复制条目后再补充字段，避免污染 Redis 缓存中的条目结构
             item = dict(target)
+            item['source'] = cls.SOURCE_FILE
             item['file_id'] = int(file_id)
             item['file_name'] = file_name
             entries.append(item)

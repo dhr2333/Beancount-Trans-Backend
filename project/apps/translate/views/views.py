@@ -542,6 +542,10 @@ class EntryReviewViewSet(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    SOURCE_FILE = 'file'
+    SOURCE_COPILOT = 'copilot'
+    VALID_SOURCES = (SOURCE_FILE, SOURCE_COPILOT)
+
     def get_review_task(self, request):
         """返回当前用户的统一条目审核待办（可能为 None）"""
         from django.contrib.auth import get_user_model
@@ -573,6 +577,66 @@ class EntryReviewViewSet(APIView):
         if ParseReviewService.is_review_expired(cached_data, None):
             return Response({'error': '解析待办已过期，系统将自动写入'}, status=status.HTTP_400_BAD_REQUEST)
         return None
+
+    def get_source(self, request, data):
+        """解析请求体中的 source；缺省与非法值均按账单文件来源处理。"""
+        raw_source = (data or {}).get('source')
+        source = str(raw_source or self.SOURCE_FILE).strip().lower()
+        if source not in self.VALID_SOURCES:
+            return self.SOURCE_FILE
+        return source
+
+    def ensure_copilot_editable(self, request):
+        """校验 Copilot 暂存区可审核：待办 pending、暂存区存在且未过期；返回 error_response 或 None"""
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+        from project.apps.translate.services.copilot_bookkeeping_service import (
+            CopilotBookkeepingService,
+        )
+
+        task = self.get_review_task(request)
+        if task is None or task.status != 'pending':
+            return Response({'error': '待办任务已完成或已取消'}, status=status.HTTP_400_BAD_REQUEST)
+        cached_data = CopilotBookkeepingService.get_staging_data(request.user.id)
+        if not cached_data:
+            return Response(
+                {'error': 'Copilot 记账待审核条目不存在或已过期'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ParseReviewService.is_review_expired(cached_data, None):
+            return Response(
+                {'error': '解析待办已过期，系统将自动写入'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
+    def resolve_source(self, request, data):
+        """解析来源并完成对应校验，返回 (source, file_id, error_response)。
+
+        - file：沿用 get_parse_file + ensure_editable（含 ParseFile 状态校验）
+        - copilot：不查 ParseFile，仅校验待办 / 暂存区 / 是否过期，file_id 恒为 None
+        """
+        source = self.get_source(request, data)
+        if source == self.SOURCE_COPILOT:
+            return source, None, self.ensure_copilot_editable(request)
+
+        file_id = (data or {}).get('file_id')
+        parse_file, error_response = self.get_parse_file(request, file_id)
+        if error_response:
+            return source, file_id, error_response
+        editable_error = self.ensure_editable(request, parse_file)
+        if editable_error:
+            return source, file_id, editable_error
+        return source, file_id, None
+
+    def source_cache_key(self, source, user, file_id):
+        """来源对应的 ParseReviewService 缓存键参数。"""
+        if source == self.SOURCE_COPILOT:
+            from project.apps.translate.services.copilot_bookkeeping_service import (
+                CopilotBookkeepingService,
+            )
+
+            return CopilotBookkeepingService.staging_key(user.id)
+        return file_id
 
 
 def _serialize_parse_review_entry(
@@ -765,10 +829,12 @@ class EntryReviewResultsView(EntryReviewViewSet):
 
         config = get_user_config(request.user)
 
-        # 收集队列涉及的全部 file_id（去重）
+        # 收集队列涉及的账单文件 file_id（去重）；Copilot 暂存区不做 tag 回填
         file_ids = []
         seen = set()
         for ref in EntryReviewQueueService.list_refs(request.user.id):
+            if EntryReviewQueueService.ref_source(ref) != EntryReviewQueueService.SOURCE_FILE:
+                continue
             file_id = ref.get('file_id')
             if file_id is None or file_id in seen:
                 continue
@@ -813,6 +879,13 @@ class EntryReviewReparseView(EntryReviewViewSet):
         POST /api/translate/entry-review/reparse
         Body: {"file_id": ..., "entry_uuid": "...", "selected_key": "...", "mapping_type": "expense"}
         """
+        source = self.get_source(request, request.data)
+        if source == self.SOURCE_COPILOT:
+            return Response(
+                {'error': 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         file_id = request.data.get('file_id')
         parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:
@@ -915,16 +988,11 @@ class EntryReviewEditView(EntryReviewViewSet):
         """更新编辑内容
 
         PUT /api/translate/entry-review/entries/{uuid}/edit
-        Body: {"file_id": ..., "edited_formatted": "..."}
+        Body: {"file_id": ..., "edited_formatted": "...", "source": "file|copilot"}
         """
-        file_id = request.data.get('file_id')
-        parse_file, error_response = self.get_parse_file(request, file_id)
+        source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
             return error_response
-
-        editable_error = self.ensure_editable(request, parse_file)
-        if editable_error:
-            return editable_error
 
         edited_formatted = request.data.get('edited_formatted')
         if edited_formatted is None:
@@ -937,7 +1005,9 @@ class EntryReviewEditView(EntryReviewViewSet):
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
 
-        migrated = ParseReviewService.get_parse_result_migrated(file_id)
+        cache_key = self.source_cache_key(source, request.user, file_id)
+
+        migrated = ParseReviewService.get_parse_result_migrated(cache_key)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -951,7 +1021,7 @@ class EntryReviewEditView(EntryReviewViewSet):
                 entry_uuid = fd[0]['uuid']
 
         success = ParseReviewService.update_entry_edited_formatted(
-            file_id, entry_uuid, edited_formatted
+            cache_key, entry_uuid, edited_formatted
         )
 
         if not success:
@@ -961,7 +1031,7 @@ class EntryReviewEditView(EntryReviewViewSet):
             )
 
         # 返回更新后的结果
-        updated_result = ParseReviewService.get_parse_result(file_id)
+        updated_result = ParseReviewService.get_parse_result(cache_key)
         updated_entry = None
         for entry in updated_result.get('formatted_data', []):
             if entry.get('uuid') == entry_uuid:
@@ -972,6 +1042,8 @@ class EntryReviewEditView(EntryReviewViewSet):
         response_data = {
             'uuid': entry_uuid,
             'edited_formatted': content_to_validate,
+            'source': source,
+            'file_id': file_id,
         }
         # 保存后对单条内容做校验，作为即时反馈（不阻断保存）
         is_valid, validation_error = BeancountValidator.validate_single_entry(content_to_validate or '')
@@ -987,16 +1059,11 @@ class EntryReviewTagsView(EntryReviewViewSet):
     def patch(self, request, uuid):
         """PATCH /api/translate/entry-review/entries/{uuid}/tags
 
-        Body: {"file_id": ..., "action": "add|remove", "tag_path": "Category/EDUCATION"}
+        Body: {"file_id": ..., "action": "add|remove", "tag_path": "Category/EDUCATION", "source": "file|copilot"}
         """
-        file_id = request.data.get('file_id')
-        parse_file, error_response = self.get_parse_file(request, file_id)
+        source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
             return error_response
-
-        editable_error = self.ensure_editable(request, parse_file)
-        if editable_error:
-            return editable_error
 
         action = request.data.get('action')
         tag_path = request.data.get('tag_path')
@@ -1008,7 +1075,9 @@ class EntryReviewTagsView(EntryReviewViewSet):
 
         from project.apps.translate.services.parse_review_service import ParseReviewService
 
-        migrated = ParseReviewService.get_parse_result_migrated(file_id)
+        cache_key = self.source_cache_key(source, request.user, file_id)
+
+        migrated = ParseReviewService.get_parse_result_migrated(cache_key)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -1022,7 +1091,7 @@ class EntryReviewTagsView(EntryReviewViewSet):
                 entry_uuid = fd[0]['uuid']
 
         result = ParseReviewService.update_entry_tags(
-            file_id,
+            cache_key,
             entry_uuid,
             action,
             tag_path,
@@ -1033,6 +1102,8 @@ class EntryReviewTagsView(EntryReviewViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        result['source'] = source
+        result['file_id'] = file_id
         return Response(result, status=status.HTTP_200_OK)
 
 
@@ -1042,16 +1113,11 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
     def put(self, request):
         """PUT /api/translate/entry-review/preview-sync
 
-        Body: {"file_id": ..., "entries": [{"uuid": "...", "edited_formatted": "..."}]}
+        Body: {"file_id": ..., "entries": [{"uuid": "...", "edited_formatted": "..."}], "source": "file|copilot"}
         """
-        file_id = request.data.get('file_id')
-        parse_file, error_response = self.get_parse_file(request, file_id)
+        source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
             return error_response
-
-        editable_error = self.ensure_editable(request, parse_file)
-        if editable_error:
-            return editable_error
 
         entries = request.data.get('entries')
         if not isinstance(entries, list):
@@ -1063,7 +1129,9 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.utils.beancount_validator import BeancountValidator
 
-        migrated = ParseReviewService.get_parse_result_migrated(file_id)
+        cache_key = self.source_cache_key(source, request.user, file_id)
+
+        migrated = ParseReviewService.get_parse_result_migrated(cache_key)
         if migrated is None:
             return Response(
                 {'error': '解析结果不存在或已过期，请重新解析'},
@@ -1071,7 +1139,7 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
             )
 
         sync_result = ParseReviewService.sync_entries_from_preview(
-            file_id,
+            cache_key,
             entries,
         )
         if sync_result is None:
@@ -1101,6 +1169,8 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
                 'formatted_data': formatted_data,
                 'removed_count': sync_result['removed_count'],
                 'validation_warnings': validation_warnings,
+                'source': source,
+                'file_id': file_id,
             },
             status=status.HTTP_200_OK,
         )
@@ -1116,6 +1186,9 @@ class EntryReviewConfirmView(EntryReviewViewSet):
         """
         from project.apps.translate.services.parse_review_service import ParseReviewService
         from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+        from project.apps.translate.services.copilot_bookkeeping_service import (
+            CopilotBookkeepingService,
+        )
         from project.apps.translate.utils.beancount_validator import BeancountValidator
         from project.utils.file import BeanFileManager
 
@@ -1133,21 +1206,65 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # 按 file_id 分组并保持顺序
-        file_ids = []
-        seen = set()
+        # 按 (source, file_id) 分组并保持顺序
+        groups = []
+        group_index = {}
         for ref in refs:
-            file_id = ref.get('file_id')
-            if file_id is None or file_id in seen:
-                continue
-            seen.add(file_id)
-            file_ids.append(file_id)
+            source = EntryReviewQueueService.ref_source(ref)
+            file_id = ref.get('file_id') if source == EntryReviewQueueService.SOURCE_FILE else None
+            group_key = (source, file_id)
+            if group_key not in group_index:
+                group_index[group_key] = len(groups)
+                groups.append({'source': source, 'file_id': file_id})
 
-        # 先校验全部文件，全部通过后再写入
-        validations = []  # 待写入文件：[{file_id, parse_file, text, entry_count}]
+        # 先校验全部来源，全部通过后再写入
+        validations = []  # 待写入项：[{source, file_id, parse_file|directives, text, entry_count}]
         error_entries = []  # 结构化错误条目
-        pending_removal = []  # 无有效条目、待清理引用的 file_id
-        for file_id in file_ids:
+        pending_removal = []  # 无有效条目、待清理引用的 (source, file_id)
+        copilot_key = CopilotBookkeepingService.staging_key(request.user.id)
+        for group in groups:
+            source = group['source']
+            file_id = group['file_id']
+
+            if source == EntryReviewQueueService.SOURCE_COPILOT:
+                cached = CopilotBookkeepingService.get_staging_data(request.user.id)
+                if not cached:
+                    # 暂存区已失效：跳过并记录待清理
+                    pending_removal.append((source, file_id))
+                    continue
+
+                final_entries = ParseReviewService.get_final_result(copilot_key)
+                if not final_entries:
+                    pending_removal.append((source, file_id))
+                    continue
+
+                directives = [entry['formatted'].rstrip() for entry in final_entries]
+                formatted_text = '\n\n'.join(directives)
+
+                is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+                if not is_valid:
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(directives)
+                    error_entries.extend([
+                        {
+                            'source': source,
+                            'file_id': None,
+                            'uuid': final_entries[idx]['uuid'],
+                            'index': idx,
+                            'error_message': msg or error_message,
+                        }
+                        for idx, msg in error_entries_indices
+                    ])
+                    continue
+
+                validations.append({
+                    'source': source,
+                    'file_id': None,
+                    'directives': directives,
+                    'text': formatted_text,
+                    'entry_count': len(final_entries),
+                })
+                continue
+
             parse_file, error_response = self.get_parse_file(request, file_id)
             if error_response:
                 # 文件丢失：从队列移除该文件引用后跳过
@@ -1157,7 +1274,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
             final_entries = ParseReviewService.get_final_result(file_id)
             if not final_entries:
                 # 该文件无有效条目，记录待清理引用
-                pending_removal.append(file_id)
+                pending_removal.append((source, file_id))
                 continue
 
             # 合并所有条目
@@ -1173,6 +1290,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
                 error_entries.extend([
                     {
+                        'source': source,
                         'file_id': file_id,
                         'uuid': final_entries[idx]['uuid'],
                         'index': idx,
@@ -1183,6 +1301,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 continue
 
             validations.append({
+                'source': source,
                 'file_id': file_id,
                 'parse_file': parse_file,
                 'text': formatted_text,
@@ -1201,8 +1320,20 @@ class EntryReviewConfirmView(EntryReviewViewSet):
 
         # 全部通过后再写入文件
         written_files = []
+        copilot_written = False
         try:
             for item in validations:
+                if item['source'] == EntryReviewQueueService.SOURCE_COPILOT:
+                    # Copilot 来源：追加写入 trans/collect.bean，不覆盖已有内容与注释头
+                    BeanFileManager.append_to_collect_bean(request.user, item['directives'])
+                    copilot_written = True
+                    written_files.append({
+                        'source': EntryReviewQueueService.SOURCE_COPILOT,
+                        'entry_count': item['entry_count'],
+                        'bean': 'trans/collect.bean',
+                    })
+                    continue
+
                 parse_file = item['parse_file']
                 bean_file_path = BeanFileManager.get_bean_file_path(
                     request.user, parse_file.file.name, parse_file.file.get_bean_dir()
@@ -1214,6 +1345,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 parse_file.save()
 
                 written_files.append({
+                    'source': EntryReviewQueueService.SOURCE_FILE,
                     'file_id': item['file_id'],
                     'entry_count': item['entry_count'],
                 })
@@ -1224,9 +1356,14 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+        # 写入成功后删除 Copilot 暂存区
+        if copilot_written:
+            CopilotBookkeepingService.clear(request.user.id)
+
         # 清理无有效条目的文件引用后清空队列并完成待办
-        for file_id in pending_removal:
-            EntryReviewQueueService.remove_file(request.user.id, file_id)
+        for source, file_id in pending_removal:
+            if source == EntryReviewQueueService.SOURCE_FILE:
+                EntryReviewQueueService.remove_file(request.user.id, file_id)
         EntryReviewQueueService.clear(request.user.id)
         EntryReviewQueueService.complete_task(request.user)
 
@@ -1280,8 +1417,15 @@ class EntryReviewReparseAllView(EntryReviewViewSet):
         """重新解析所有条目
 
         POST /api/translate/entry-review/reparse-all
-        Body: {"file_id": ...}
+        Body: {"file_id": ..., "source": "file|copilot"}
         """
+        source = self.get_source(request, request.data)
+        if source == self.SOURCE_COPILOT:
+            return Response(
+                {'error': 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         file_id = request.data.get('file_id')
         parse_file, error_response = self.get_parse_file(request, file_id)
         if error_response:

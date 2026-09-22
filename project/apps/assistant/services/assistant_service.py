@@ -53,13 +53,14 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 12. 用中文简洁回答，优先使用 Markdown 结构化展示，标明货币单位；若查无数据，明确说明。
 13. 余额查询若返回账户名但 sum 列为空白或 0.00，表示余额为 0，应直接告知用户，不要因「看不到数字」而反复换语法重查。
 14. 同一问题最多调用 run_bql {max_bql_runs} 次（系统硬限制）；若仍无满意结果，请根据已有查询结果作答，不要无限重试。
-15. 不要执行写操作。用户追问、解释上一轮结论、澄清问法或说明能力边界时，可直接回答，不必调用工具；与账本无关的闲聊不要展开。历史中已出现过的 BQL 勿原样重跑，除非用户要求刷新或时间范围变化。
-16. 使用 Markdown 格式化回答：金额与关键数字用 **粗体**；多项对比用 Markdown 表格；列举用有序/无序列表；不要输出原始 HTML。
-17. 调用工具前，用一两句话简要说明你的分析思路（会展示在「思考过程」中）；最终回答中不要重复这段思路。
-18. 复式记账符号：Income 累计为负表示收入，向用户展示时用绝对值并标明为收入，勿将负号误解为亏损；Income 为正表示冲销。Expenses 为正表示支出。Liabilities 累计为负表示欠款，展示时可取绝对值。展示时数字须来自 BQL 结果（可取绝对值），禁止心算。
-19. 禁止在回复正文中输出 DSML、XML 或任何工具调用原始标记；需要查询时必须通过工具接口调用；查无数据时直接说明，不要重复输出查询语法。
-20. 结论中引用具体账目时，须写清**日期**、**收款人/叙述**、**金额**（均来自 BQL 结果行，禁止心算或编造）。
-21. 不要在回复正文中输出 Fava 或平台 URL、uuid、查询链接；界面会在结论后自动附加「来源」链接。
+15. 记账只能通过 record_transaction 工具（只生成待审核条目，不直接写账本）；除此之外禁止任何写操作，包括改动账本文件、删除或修改已有条目、执行 BQL 写语句。用户追问、解释上一轮结论、澄清问法或说明能力边界时，可直接回答，不必调用工具；与账本无关的闲聊不要展开。历史中已出现过的 BQL 勿原样重跑，除非用户要求刷新或时间范围变化。
+16. 自然语言记账规则：仅在用户明确表达「记一笔 / 花了 / 收到 / 转账」等记账意图时调用 record_transaction，纯查询/分析类提问不要调用；账户不确定时先调用 get_ledger_context 核对平台账户目录，金额或日期不确定时先向用户确认，禁止编造金额、账户与日期；相对日期按上述基准日期换算为 YYYY-MM-DD；调用成功后必须在回复中告知用户「已生成 N 条待审核条目，需在「条目审核」中确认后写入 collect.bean」。
+17. 使用 Markdown 格式化回答：金额与关键数字用 **粗体**；多项对比用 Markdown 表格；列举用有序/无序列表；不要输出原始 HTML。
+18. 调用工具前，用一两句话简要说明你的分析思路（会展示在「思考过程」中）；最终回答中不要重复这段思路。
+19. 复式记账符号：Income 累计为负表示收入，向用户展示时用绝对值并标明为收入，勿将负号误解为亏损；Income 为正表示冲销。Expenses 为正表示支出。Liabilities 累计为负表示欠款，展示时可取绝对值。展示时数字须来自 BQL 结果（可取绝对值），禁止心算。
+20. 禁止在回复正文中输出 DSML、XML 或任何工具调用原始标记；需要查询时必须通过工具接口调用；查无数据时直接说明，不要重复输出查询语法。
+21. 结论中引用具体账目时，须写清**日期**、**收款人/叙述**、**金额**（均来自 BQL 结果行，禁止心算或编造）。
+22. 不要在回复正文中输出 Fava 或平台 URL、uuid、查询链接；界面会在结论后自动附加「来源」链接。
 
 {bql_capability_reference}
 
@@ -112,6 +113,22 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
             'links/tags 用 IN 语法；'
             '发现异常线索后必须追溯历史（同 payee 跨月、同 link、同 tag 等）。'
         )
+    max_bookkeeping_entries = int(
+        getattr(settings, 'COPILOT_BOOKKEEPING_MAX_ENTRIES', 10)
+    )
+    record_transaction_description = (
+        '把用户自然语言描述的交易记为「待审核条目」（不直接写入账本，'
+        '审核通过后才写入 collect.bean）。'
+        '仅在用户明确表达「记一笔 / 花了 / 收到 / 转账」等记账意图时调用；'
+        '分析、查询、闲聊不要调用。'
+        '账户必须来自平台账户目录（不确定时先调用 get_ledger_context 核对）；'
+        '禁止编造金额、账户与日期。'
+        '相对日期（今天/昨天）需按 system prompt 中的基准日期换算为 YYYY-MM-DD。'
+        f'一次可提交多笔交易（最多 {max_bookkeeping_entries} 条）。'
+        '币种缺省使用用户配置币种，当前仅支持默认币种。'
+        '调用成功后必须在回复中告知用户：已生成 N 条待审核条目，'
+        '需在「条目审核」中确认后写入 collect.bean。'
+    )
     return [
         {
             'type': 'function',
@@ -141,10 +158,148 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
                 },
             },
         },
+        {
+            'type': 'function',
+            'function': {
+                'name': 'record_transaction',
+                'description': record_transaction_description,
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'entries': {
+                            'type': 'array',
+                            'description': (
+                                f'待记账交易列表，1~{max_bookkeeping_entries} 条'
+                            ),
+                            'items': {
+                                'type': 'object',
+                                'properties': {
+                                    'type': {
+                                        'type': 'string',
+                                        'enum': ['expense', 'income', 'transfer'],
+                                        'description': (
+                                            'expense=支出，income=收入，'
+                                            'transfer=账户间转账'
+                                        ),
+                                    },
+                                    'date': {
+                                        'type': 'string',
+                                        'description': '交易日期 YYYY-MM-DD',
+                                    },
+                                    'amount': {
+                                        'type': 'number',
+                                        'description': '正数金额',
+                                    },
+                                    'narration': {
+                                        'type': 'string',
+                                        'description': '交易说明，如「午餐」「打车」',
+                                    },
+                                    'payee': {
+                                        'type': 'string',
+                                        'description': '交易对方，可选，缺省用 narration',
+                                    },
+                                    'account': {
+                                        'type': 'string',
+                                        'description': (
+                                            'expense/income：损益账户'
+                                            '（Expenses:/Income:）'
+                                        ),
+                                    },
+                                    'payment_account': {
+                                        'type': 'string',
+                                        'description': (
+                                            'expense/income：支付或收款账户'
+                                            '（Assets:/Liabilities:）'
+                                        ),
+                                    },
+                                    'from_account': {
+                                        'type': 'string',
+                                        'description': 'transfer：转出账户（Assets:）',
+                                    },
+                                    'to_account': {
+                                        'type': 'string',
+                                        'description': 'transfer：转入账户（Assets:）',
+                                    },
+                                    'tags': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'},
+                                        'description': (
+                                            '标签完整路径，可带或不带 # 前缀'
+                                        ),
+                                    },
+                                    'currency': {
+                                        'type': 'string',
+                                        'description': '币种，缺省用用户配置币种',
+                                    },
+                                },
+                                'required': ['type', 'date', 'amount', 'narration'],
+                            },
+                        }
+                    },
+                    'required': ['entries'],
+                },
+            },
+        },
     ]
 
 
 TOOLS = build_tools()
+
+_BOOKKEEPING_TYPE_LABELS = {'expense': '支出', 'income': '收入', 'transfer': '转账'}
+
+
+def format_bookkeeping_result(result: dict[str, Any]) -> str:
+    """把 CopilotBookkeepingService.create_entries 返回值转成可读中文文本。"""
+    created = result.get('created') or []
+    duplicates = result.get('duplicates') or []
+    errors = result.get('errors') or []
+    pending_total = result.get('pending_total') or 0
+    lines: list[str] = []
+
+    if created:
+        lines.append(f'已生成 {len(created)} 条待审核条目：')
+        for index, item in enumerate(created, start=1):
+            type_label = _BOOKKEEPING_TYPE_LABELS.get(
+                item.get('type'), item.get('type') or ''
+            )
+            account = item.get('account') or ''
+            counterparty = item.get('counterparty_account') or ''
+            route = f'{account} ← {counterparty}'
+            if item.get('type') == 'transfer':
+                route = f'{account} → {counterparty}'
+            lines.append(
+                f'{index}. {item.get("date", "")} {type_label} '
+                f'{item.get("amount", "")} {item.get("currency", "")} '
+                f'{item.get("narration", "")}（{route}）'
+            )
+
+    if duplicates:
+        lines.append(f'疑似重复，已跳过 {len(duplicates)} 条：')
+        for index, item in enumerate(duplicates, start=1):
+            lines.append(
+                f'{index}. {item.get("date", "")} {item.get("amount", "")} '
+                f'{item.get("narration", "")}：'
+                f'疑似重复，已跳过（{item.get("reason", "与已有条目重复")}）'
+            )
+
+    if errors:
+        lines.append(f'校验失败 {len(errors)} 条：')
+        for item in errors:
+            index = item.get('index')
+            prefix = f'第 {index} 条' if index else '整体'
+            lines.append(f'{prefix}：{item.get("error", "未知错误")}')
+
+    if not result.get('ok') and not created:
+        reason = '没有条目被写入，请核对账户、金额、日期或币种后重试。'
+        if not errors and not duplicates:
+            reason = '记账未成功：没有可处理的条目。'
+        lines.append(reason)
+
+    lines.append(
+        f'待审核条目共 {pending_total} 条，'
+        '请在「条目审核」中确认后写入 collect.bean。'
+    )
+    return '\n'.join(lines)
 
 
 def format_sse(event: str, data: dict[str, Any]) -> str:
@@ -268,6 +423,24 @@ class AssistantService:
                 return str(exc)
             except Exception as exc:
                 return f'查询失败: {exc}'
+
+        if name == 'record_transaction':
+            entries = arguments.get('entries')
+            if not isinstance(entries, list) or not entries:
+                return '记账失败: entries 必须是非空数组，请提供至少一笔交易。'
+            try:
+                # 延迟导入，避免 assistant 与 translate 模块级循环依赖
+                from project.apps.translate.services.copilot_bookkeeping_service import (
+                    CopilotBookkeepingService,
+                )
+
+                result = CopilotBookkeepingService.create_entries(self.user, entries)
+                if not isinstance(result, dict):
+                    return '记账失败: 记账服务返回了异常结果。'
+                return format_bookkeeping_result(result)
+            except Exception as exc:
+                logger.exception('Copilot 记账工具执行失败')
+                return f'记账失败: {exc}'
 
         return f'未知工具: {name}'
 

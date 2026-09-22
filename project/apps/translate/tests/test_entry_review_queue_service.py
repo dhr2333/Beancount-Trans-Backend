@@ -7,6 +7,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 
+from project.apps.translate.services.copilot_bookkeeping_service import (
+    CopilotBookkeepingService,
+)
 from project.apps.translate.services.entry_review_queue_service import (
     EntryReviewQueueService,
 )
@@ -275,3 +278,260 @@ class TestEntryReviewQueueService:
         EntryReviewQueueService.deactivate_if_empty(queue_user)
         task.refresh_from_db()
         assert task.status == 'pending'
+
+
+def _seed_copilot_staging(user_id, uuids=('c1',), review_expires_at=None):
+    """向 Copilot 暂存区写入指定 uuid 的条目，制造有效引用。"""
+    data = {
+        'formatted_data': [
+            {
+                'uuid': u,
+                'formatted': (
+                    f'2025-01-20 * "Copilot" "{u}"\n'
+                    '    Expenses:Test  10.00 CNY\n'
+                    '    Assets:Test  -10.00 CNY\n'
+                ),
+                'edited_formatted': (
+                    f'2025-01-20 * "Copilot" "{u}"\n'
+                    '    Expenses:Test  10.00 CNY\n'
+                    '    Assets:Test  -10.00 CNY\n'
+                ),
+                'original_row': {'date': '2025-01-20', 'amount': 10.00},
+            }
+            for u in uuids
+        ],
+        'created_at': time.time(),
+    }
+    if review_expires_at is not None:
+        data['review_expires_at'] = review_expires_at
+    assert ParseReviewService.save_parse_result(
+        CopilotBookkeepingService.staging_key(user_id), data
+    ) is True
+
+
+@pytest.mark.django_db
+class TestEntryReviewQueueServiceSources:
+    """统一审核队列两类来源（file / copilot）行为测试"""
+
+    def setup_method(self):
+        """每个用例前清空内存缓存，避免相互污染"""
+        cache.clear()
+
+    # ------------------------------------------------------------------
+    # 来源解析
+    # ------------------------------------------------------------------
+    def test_ref_source_defaults_to_file(self):
+        """历史引用缺少 source 时按账单文件处理"""
+        assert EntryReviewQueueService.ref_source({'file_id': 1, 'uuid': 'u1'}) == 'file'
+        assert EntryReviewQueueService.ref_source(
+            {'source': 'copilot', 'file_id': None, 'uuid': 'x'}
+        ) == 'copilot'
+        assert EntryReviewQueueService.ref_source({}) == 'file'
+
+    # ------------------------------------------------------------------
+    # 入队
+    # ------------------------------------------------------------------
+    def test_enqueue_mixed_sources_order_and_dedup(self, parse_file_factory):
+        """两类来源按入队顺序保存，去重键为 (source, file_id, uuid)"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1'])
+        _seed_copilot_staging(0, ['c1'])
+
+        added = EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+        assert added == 2
+        assert EntryReviewQueueService._get_refs(0) == [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ]
+
+        # 重复入队（含显式 file 来源）不新增
+        assert EntryReviewQueueService.enqueue(0, [
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+            {'source': 'file', 'file_id': fid, 'uuid': 'u1'},
+        ]) == 0
+
+    def test_enqueue_skips_file_ref_without_file_id(self):
+        """账单来源缺少 file_id 时跳过；copilot 来源允许 file_id 为 None"""
+        assert EntryReviewQueueService.enqueue(0, [
+            {'file_id': None, 'uuid': 'x'},
+            {'source': 'file', 'file_id': None, 'uuid': 'y'},
+        ]) == 0
+        assert EntryReviewQueueService._get_refs(0) == []
+
+        _seed_copilot_staging(0, ['c1'])
+        assert EntryReviewQueueService.enqueue(0, [
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ]) == 1
+
+    # ------------------------------------------------------------------
+    # 列出引用 / 条目
+    # ------------------------------------------------------------------
+    def test_list_refs_prunes_stale_file_but_keeps_copilot(self, parse_file_factory):
+        """账单缓存失效只剔除该文件引用，copilot 引用保留"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1'])
+        _seed_copilot_staging(0, ['c1'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+
+        ParseReviewService.delete_parse_result(fid)
+
+        refs = EntryReviewQueueService.list_refs(0)
+        assert refs == [{'source': 'copilot', 'file_id': None, 'uuid': 'c1'}]
+        # 已回写剔除后的引用
+        assert EntryReviewQueueService._get_refs(0) == refs
+        assert CopilotBookkeepingService.has_staging(0) is True
+
+    def test_list_refs_removes_copilot_ref_when_staging_gone(self, parse_file_factory):
+        """暂存区失效时剔除 copilot 引用，账单引用不受影响"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1'])
+        _seed_copilot_staging(0, ['c1'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+
+        CopilotBookkeepingService.clear(0)
+
+        assert EntryReviewQueueService.list_refs(0) == [{'file_id': fid, 'uuid': 'u1'}]
+
+    def test_list_entries_mixed_sources(self, parse_file_factory):
+        """list_entries 按队列顺序返回两类条目并补充来源字段"""
+        fid = parse_file_factory(name='混合账.csv')
+        _seed_parse_result(fid, ['u1'])
+        _seed_copilot_staging(0, ['c1', 'c2'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c2'},
+        ])
+
+        entries = EntryReviewQueueService.list_entries(0)
+        assert [e['uuid'] for e in entries] == ['u1', 'c2']
+
+        file_entry = entries[0]
+        assert file_entry['source'] == 'file'
+        assert file_entry['file_id'] == fid
+        assert file_entry['file_name'] == '混合账.csv'
+
+        copilot_entry = entries[1]
+        assert copilot_entry['source'] == 'copilot'
+        assert copilot_entry['file_id'] is None
+        assert copilot_entry['file_name'] == CopilotBookkeepingService.SOURCE_LABEL
+
+    # ------------------------------------------------------------------
+    # 最早截止时间
+    # ------------------------------------------------------------------
+    def test_earliest_expires_at_considers_both_sources(self, parse_file_factory):
+        """最早截止时间同时覆盖两类来源"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1'], review_expires_at=5000.0)
+        _seed_copilot_staging(0, ['c1'], review_expires_at=2000.0)
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+        assert EntryReviewQueueService.earliest_expires_at(0) == 2000.0
+
+        # 账单更早时返回账单截止时间
+        _seed_parse_result(fid, ['u1'], review_expires_at=1000.0)
+        assert EntryReviewQueueService.earliest_expires_at(0) == 1000.0
+
+    def test_earliest_expires_at_none_when_no_refs(self):
+        assert EntryReviewQueueService.earliest_expires_at(4242) is None
+
+    # ------------------------------------------------------------------
+    # 移除引用
+    # ------------------------------------------------------------------
+    def test_remove_file_keeps_copilot_refs(self, parse_file_factory):
+        """remove_file 只移除账单来源引用"""
+        fid1 = parse_file_factory()
+        fid2 = parse_file_factory()
+        _seed_parse_result(fid1, ['u1'])
+        _seed_parse_result(fid2, ['u1'])
+        _seed_copilot_staging(0, ['c1'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid1, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+            {'file_id': fid2, 'uuid': 'u1'},
+        ])
+
+        EntryReviewQueueService.remove_file(0, fid1)
+
+        assert EntryReviewQueueService._get_refs(0) == [
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+            {'file_id': fid2, 'uuid': 'u1'},
+        ]
+
+    def test_remove_entries_matches_source(self, parse_file_factory):
+        """remove_entries 按 (source, file_id, uuid) 精确移除；无 source 按 file 处理"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1'])
+        _seed_copilot_staging(0, ['c1', 'c2'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c2'},
+        ])
+
+        # 无 source 的 ref 被视作 file 来源，不会误删 copilot 引用
+        EntryReviewQueueService.remove_entries(0, [{'file_id': None, 'uuid': 'c1'}])
+        assert [r.get('uuid') for r in EntryReviewQueueService._get_refs(0)] == [
+            'u1', 'c1', 'c2'
+        ]
+
+        EntryReviewQueueService.remove_entries(0, [
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+        assert EntryReviewQueueService._get_refs(0) == [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c2'},
+        ]
+
+    def test_remove_entries_by_file_and_uuid(self, parse_file_factory):
+        """账单来源 remove_entries 仍按 (file_id, uuid) 精确移除"""
+        fid = parse_file_factory()
+        _seed_parse_result(fid, ['u1', 'u2'])
+        EntryReviewQueueService.enqueue(0, [
+            {'file_id': fid, 'uuid': 'u1'},
+            {'file_id': fid, 'uuid': 'u2'},
+        ])
+        EntryReviewQueueService.remove_entries(0, [{'source': 'file', 'file_id': fid, 'uuid': 'u2'}])
+        assert EntryReviewQueueService._get_refs(0) == [{'file_id': fid, 'uuid': 'u1'}]
+
+    # ------------------------------------------------------------------
+    # 历史引用与空判断
+    # ------------------------------------------------------------------
+    def test_legacy_refs_without_source_treated_as_file(self, parse_file_factory):
+        """历史缓存中缺 source 的引用按 file 处理，且与显式 file 引用同键"""
+        fid = parse_file_factory(name='历史账.csv')
+        _seed_parse_result(fid, ['u1'])
+        EntryReviewQueueService._save_refs(0, [{'file_id': fid, 'uuid': 'u1'}])
+
+        refs = EntryReviewQueueService.list_refs(0)
+        assert refs == [{'file_id': fid, 'uuid': 'u1'}]
+        assert EntryReviewQueueService.ref_source(refs[0]) == 'file'
+
+        entries = EntryReviewQueueService.list_entries(0)
+        assert entries[0]['source'] == 'file'
+        assert entries[0]['file_id'] == fid
+        assert entries[0]['file_name'] == '历史账.csv'
+
+        assert EntryReviewQueueService.enqueue(0, [
+            {'source': 'file', 'file_id': fid, 'uuid': 'u1'},
+        ]) == 0
+
+    def test_is_empty_and_clear_with_copilot_only(self):
+        _seed_copilot_staging(0, ['c1'])
+        EntryReviewQueueService.enqueue(0, [
+            {'source': 'copilot', 'file_id': None, 'uuid': 'c1'},
+        ])
+        assert EntryReviewQueueService.is_empty(0) is False
+
+        EntryReviewQueueService.clear(0)
+        assert EntryReviewQueueService.is_empty(0) is True

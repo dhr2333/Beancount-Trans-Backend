@@ -284,14 +284,25 @@ def auto_confirm_expired_entry_reviews():
     """定时任务：到期自动确认写入
 
     每小时执行一次，扫描所有待执行的条目审核待办，逐个处理该用户统一
-    审核队列中审核截止时间已过的文件，自动确认写入并从队列移除引用；
+    审核队列中审核截止时间已过的条目，自动确认写入并从队列移除引用；
     队列为空时把待办标记为已完成。
+
+    队列引用按来源（``ref['source']``，历史引用缺失时按账单文件处理）分派：
+
+    - ``file``（账单文件来源）：按各文件缓存 ``review_expires_at`` 判断到期，
+      校验通过后覆盖写入 ``trans/{账单名}.bean``，并把 ``ParseFile`` 置为
+      ``parsed``；
+    - ``copilot``（Copilot 记账来源）：按用户级暂存区截止时间判断到期，校验
+      通过后追加写入 ``trans/collect.bean``（不覆盖已有内容），随后删除暂存区。
+
+    单个用户或来源处理异常只记录日志并继续处理其他队列，不中断整个任务。
     """
     from django.contrib.auth import get_user_model
     from project.apps.reconciliation.models import ScheduledTask
     from django.contrib.contenttypes.models import ContentType
     from project.apps.translate.services.parse_review_service import ParseReviewService
     from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+    from project.apps.translate.services.copilot_bookkeeping_service import CopilotBookkeepingService
     from project.apps.translate.utils.beancount_validator import BeancountValidator
     from project.utils.file import BeanFileManager
     
@@ -314,18 +325,75 @@ def auto_confirm_expired_entry_reviews():
         if user is None:
             continue
 
-        # 该用户统一审核队列中的文件（按队列顺序去重）
-        file_ids = []
-        seen_file_ids = set()
+        # 按 (source, file_id) 分组，保持队列中首次出现的顺序
+        groups = {}
         for ref in EntryReviewQueueService.list_refs(user.id):
-            file_id = ref.get('file_id')
-            if file_id is None or file_id in seen_file_ids:
-                continue
-            seen_file_ids.add(file_id)
-            file_ids.append(file_id)
+            source = EntryReviewQueueService.ref_source(ref)
+            groups.setdefault((source, ref.get('file_id')), []).append(ref)
 
-        for file_id in file_ids:
+        user_entries_written = 0
+
+        for (source, file_id), group_refs in groups.items():
             try:
+                if source == EntryReviewQueueService.SOURCE_COPILOT:
+                    # ---- Copilot 记账来源：暂存区到期后追加写入 collect.bean ----
+                    staging_key = CopilotBookkeepingService.staging_key(user.id)
+                    cached_data = ParseReviewService.get_parse_result(staging_key)
+                    if not cached_data:
+                        logger.warning(f"Copilot 暂存区不存在或已过期，移除引用: user_id={user.id}")
+                        EntryReviewQueueService.remove_entries(user.id, group_refs)
+                        continue
+
+                    if not ParseReviewService.is_review_expired(cached_data, None, now=now):
+                        continue
+
+                    final_entries = ParseReviewService.get_final_result(staging_key)
+                    if not final_entries:
+                        logger.warning(f"Copilot 暂存区无有效条目，移除引用: user_id={user.id}")
+                        EntryReviewQueueService.remove_entries(user.id, group_refs)
+                        continue
+
+                    # 合并所有条目
+                    formatted_text = '\n\n'.join([
+                        entry['formatted'].rstrip() for entry in final_entries
+                    ])
+
+                    # 进行 Beancount 语法校验
+                    is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+                    if not is_valid:
+                        # 逐条校验以定位具体错误条目并记录日志
+                        entries_list = [e['formatted'].rstrip() for e in final_entries]
+                        _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+                        error_details = [
+                            f"index={idx} uuid={final_entries[idx].get('uuid', '?')}: {msg}"
+                            for idx, msg in error_entries_indices
+                        ]
+                        logger.error(
+                            "Beancount 语法错误，跳过 Copilot 自动写入: user_id=%s, error=%s, 错误条目: %s",
+                            user.id,
+                            error_message,
+                            "; ".join(error_details),
+                        )
+                        error_count += 1
+                        continue
+
+                    # 追加写入 trans/collect.bean（不覆盖已有内容）
+                    BeanFileManager.append_to_collect_bean(
+                        user, [entry['formatted'] for entry in final_entries]
+                    )
+                    # 删除暂存区并从队列移除该组引用
+                    CopilotBookkeepingService.clear(user.id)
+                    EntryReviewQueueService.remove_entries(user.id, group_refs)
+
+                    confirmed_count += 1
+                    user_entries_written += len(final_entries)
+                    logger.info(
+                        "Copilot 自动确认写入成功: user_id=%s, 条数=%s, task_id=%s",
+                        user.id, len(final_entries), task.id,
+                    )
+                    continue
+
+                # ---- 账单文件来源：保持原有覆盖写入逻辑 ----
                 cached_data = ParseReviewService.get_parse_result(file_id)
                 if not ParseReviewService.is_review_expired(cached_data, task, now=now):
                     continue
@@ -391,15 +459,25 @@ def auto_confirm_expired_entry_reviews():
                 EntryReviewQueueService.remove_file(user.id, file_id)
 
                 confirmed_count += 1
-                logger.info(f"自动确认写入成功: file_id={file_id}, task_id={task.id}")
+                user_entries_written += len(final_entries)
+                logger.info(
+                    "账单文件自动确认写入成功: source=file, file_id=%s, 条数=%s, task_id=%s",
+                    file_id, len(final_entries), task.id,
+                )
 
             except Exception as e:
                 logger.error(
-                    f"自动确认写入失败: file_id={file_id}, task_id={task.id}, error={str(e)}",
+                    f"自动确认写入失败: source={source}, file_id={file_id}, "
+                    f"user_id={user.id}, task_id={task.id}, error={str(e)}",
                     exc_info=True,
                 )
                 error_count += 1
                 continue
+
+        logger.info(
+            "用户到期自动写入处理完成: user_id=%s, 写入条数=%s",
+            user.id, user_entries_written,
+        )
 
         # 该用户队列已清空，完成待办；否则保持 pending
         if EntryReviewQueueService.is_empty(user.id):
