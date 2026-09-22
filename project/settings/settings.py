@@ -246,13 +246,17 @@ ACCOUNT_LOGIN_BY_CODE_ENABLED = True  # 允许用户通过输入代码（通常�
 
 # JWT 配置（根据环境变量配置）
 JWT_ACCESS_TOKEN_HOURS = int(os.environ.get('JWT_ACCESS_TOKEN_HOURS', '1' if not DEBUG else '72'))
+# refresh 有效期同时是「滑动续期窗口」：每次刷新都会重置为 N 天
+JWT_REFRESH_TOKEN_DAYS = int(os.environ.get('JWT_REFRESH_TOKEN_DAYS', '30'))
 
 # JWT 配置（使用 rest_framework_simplejwt）
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': datetime.timedelta(hours=JWT_ACCESS_TOKEN_HOURS),
-    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=3),
-    'ROTATE_REFRESH_TOKENS': False,
-    'BLACKLIST_AFTER_ROTATION': True,
+    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=JWT_REFRESH_TOKEN_DAYS),
+    # 滑动续期：刷新时签发新的 refresh（移动端会保存；Web 端不保存但旧 refresh 仍可用）
+    'ROTATE_REFRESH_TOKENS': True,
+    # 未启用 token_blacklist 应用，且 Web 端未保存新 refresh，关闭拉黑以免其被登出
+    'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
