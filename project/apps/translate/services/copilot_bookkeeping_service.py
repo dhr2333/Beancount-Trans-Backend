@@ -91,7 +91,8 @@ class CopilotBookkeepingService:
             item = dict(entry)
             item['source'] = cls.SOURCE
             item['file_id'] = None
-            item['file_name'] = cls.SOURCE_LABEL
+            # 上传账单解析写入的条目自带账单文件名，Copilot 自身条目用来源名兜底
+            item['file_name'] = item.get('file_name') or cls.SOURCE_LABEL
             entries.append(item)
         return entries
 
@@ -406,6 +407,25 @@ class CopilotBookkeepingService:
             data,
             timeout=ParseReviewService.DEFAULT_CACHE_TIMEOUT,
         )
+
+    @classmethod
+    def append_bill_entries(cls, user, entries: List[Dict[str, Any]]) -> int:
+        """把账单解析得到的条目并入暂存区与统一审核队列，返回入队条数。
+
+        条目自带 ``file_name``（上传账单名），审核页与移动端据此分组展示；
+        不写任何账本文件，写入交由审核确认 / 到期自动写入链路。
+        调用方需自行持有条目审核队列锁。
+        """
+        staged = [entry for entry in entries if entry.get('uuid')]
+        if not staged:
+            return 0
+
+        cls._append_to_staging(user.id, staged)
+        EntryReviewQueueService.enqueue(
+            user.id, [cls.source_ref(entry['uuid']) for entry in staged]
+        )
+        EntryReviewQueueService.activate_task(user)
+        return len(staged)
 
     @classmethod
     def _created_payload(cls, meta: Dict[str, Any]) -> Dict[str, Any]:

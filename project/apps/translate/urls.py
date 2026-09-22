@@ -9,6 +9,7 @@ urlpatterns = [
     # path('trans', views.BillAnalyzeView.as_view(), name='trans'),
     path('trans', views.SingleBillAnalyzeView.as_view(), name='trans'),
     path('multi', views.MultiBillAnalyzeView.as_view(), name='multi'),
+    path('upload-parse', views.UploadParseReviewView.as_view(), name='upload_parse'),
     path('task_group_status', views.TaskGroupStatusView.as_view(), name='task_group_status'),
     path('parse-task-status', views.ParseTaskStatusView.as_view(), name='parse_task_status'),
     path('reparse', views.ReparseEntryView.as_view(), name='reparse'),

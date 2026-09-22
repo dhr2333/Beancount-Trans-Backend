@@ -410,6 +410,139 @@ class MultiBillAnalyzeView(APIView):
         return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 
+class UploadParseReviewView(APIView):
+    """上传账单直接解析并生成解析审核待办
+
+    与 Web 解析首页（`/translate/trans`）一样同步解析、不落文件管理：
+    不创建 File / ParseFile，不生成 ``.bean``，也不改动 main.bean 的 include。
+
+    解析结果写入 Copilot 用户级暂存区（后端唯一的「无账单文件」审核来源），
+    并入用户级统一审核队列并激活 entry_review 待办；确认写入或到期自动写入时
+    追加到 ``trans/collect.bean``。
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """上传解析并入队
+
+        POST /api/translate/upload-parse（multipart，文件字段 ``trans``）
+        """
+        from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
+        from project.apps.translate.services.entry_dedup_service import EntryDedupService
+        from project.apps.translate.services.copilot_bookkeeping_service import CopilotBookkeepingService
+
+        serializer = AnalyzeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        uploaded_file = request.FILES.get('trans', None)
+        if not uploaded_file:
+            return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        config = get_user_config(user)
+        # 审核模式：只解析入队，不写任何账本文件
+        args = {**serializer.validated_data, 'write': False}
+
+        try:
+            context = AnalyzeService(user=user, config=config).analyze_single_file(
+                uploaded_file, args
+            )
+            formatted_data = context.get('formatted_data') or []
+            entries = self._build_review_entries(formatted_data, uploaded_file.name)
+            if not entries:
+                return Response(
+                    {'error': '未解析到有效交易记录'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            kept, duplicates = entries, []
+            acquired = EntryReviewQueueService.acquire_lock(user.id)
+            try:
+                if acquired:
+                    existing_entries = EntryReviewQueueService.list_entries(user.id)
+                    kept, duplicates = EntryDedupService.dedup_new_entries(
+                        user, entries, existing_entries
+                    )
+                else:
+                    # 未拿到锁：跳过去重，全部入队，避免条目丢失
+                    logger.warning(
+                        '未获取到条目审核队列锁，跳过去重: user_id=%s', user.id
+                    )
+
+                if kept:
+                    CopilotBookkeepingService.append_bill_entries(user, kept)
+            finally:
+                if acquired:
+                    EntryReviewQueueService.release_lock(user.id)
+
+            task = EntryReviewQueueService.get_or_create_task(user)
+            return Response({
+                'status': 'success',
+                'file_name': uploaded_file.name,
+                'entry_count': len(kept),
+                'duplicate_count': len(duplicates),
+                'pending_total': len(EntryReviewQueueService.list_entries(user.id)),
+                'entry_review_task_id': task.id,
+            }, status=status.HTTP_200_OK)
+        except DecryptionError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except UnsupportedFileTypeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception(e)
+            return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @staticmethod
+    def _build_review_entries(formatted_data, file_name):
+        """把解析管道的格式化结果转成审核条目（uuid 取逐条 cache_key）。
+
+        与 ``tasks.parse_single_file_task`` 审核模式的构造保持一致，
+        并额外写入 ``file_name``，供审核页与移动端按上传账单名分组展示。
+        """
+        from project.apps.translate.services.parse_review_service import ParseReviewService
+
+        entries = []
+        for entry in formatted_data:
+            if not isinstance(entry, dict):
+                continue
+            # FormatStep 输出的 id 即 CacheStep 写入的 cache_key
+            cache_key = entry.get('id') or entry.get('uuid')
+            if not cache_key:
+                continue
+
+            cache_entry_data = cache.get(cache_key)
+            cached_parsed = {}
+            cached_original_row = None
+            if isinstance(cache_entry_data, dict):
+                cached_original_row = cache_entry_data.get('original_row')
+                cached_parsed = cache_entry_data.get('parsed_entry') or {}
+
+            formatted_text = entry.get('formatted') or ''
+            entries.append({
+                'uuid': cache_key,
+                'formatted': formatted_text,
+                'edited_formatted': formatted_text,
+                'selected_expense_key': entry.get('selected_expense_key', ''),
+                'expense_candidates_with_score': entry.get('expense_candidates_with_score', []),
+                'original_row': cached_original_row or entry.get('original_row') or {},
+                'tag_details': cached_parsed.get('tag_details') or entry.get('tag_details') or [],
+                'tag_overrides': ParseReviewService.default_tag_overrides(),
+                'installment_role': (
+                    entry.get('installment_role') or cached_parsed.get('installment_role')
+                ),
+                'installment_period': (
+                    entry.get('installment_period')
+                    if entry.get('installment_period') is not None
+                    else cached_parsed.get('installment_period')
+                ),
+                'file_name': file_name,
+            })
+        return entries
+
+
 class TaskGroupStatusView(APIView):
     """任务组状态查询接口
     """
