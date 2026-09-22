@@ -140,7 +140,7 @@ class TestCopilotBookkeepingService:
         # 元数据与账单解析条目一致
         assert '    time: "' in formatted
         assert f'    uuid: "{entry["uuid"]}"' in formatted
-        assert '    status: "已记录"' in formatted
+        assert '    status: "Copilot - 已记录"' in formatted
         assert entry['edited_formatted'] == formatted
         assert BeancountValidator.validate_single_entry(formatted)[0] is True
 

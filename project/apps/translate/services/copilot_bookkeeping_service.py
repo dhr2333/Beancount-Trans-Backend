@@ -299,7 +299,7 @@ class CopilotBookkeepingService:
 
         entry_uuid = uuid_lib.uuid4().hex
         entry_time = timezone.localtime().strftime('%H:%M:%S')
-        status = '已记录'
+        status = 'Copilot - 已记录'
         tag_text = ' '.join(f'#{path}' for path in paths) or None
         safe_payee = cls._escape_text(payee)
         safe_narration = cls._escape_text(narration)
