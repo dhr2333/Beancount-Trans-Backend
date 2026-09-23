@@ -258,11 +258,6 @@ class CopilotBookkeepingService:
             if not account.startswith('Expenses:'):
                 return None, 'account 必须是 Expenses:* 账户'
             if not (
-                payment_account.startswith('Assets:')
-                or payment_account.startswith('Liabilities:')
-            ):
-                return None, 'payment_account 必须是 Assets:* 或 Liabilities:* 账户'
-            if not (
                 cls._account_exists(user, account)
                 and cls._account_exists(user, payment_account)
             ):
@@ -270,11 +265,6 @@ class CopilotBookkeepingService:
         elif entry_type == 'income':
             if not account.startswith('Income:'):
                 return None, 'account 必须是 Income:* 账户'
-            if not (
-                payment_account.startswith('Assets:')
-                or payment_account.startswith('Liabilities:')
-            ):
-                return None, 'payment_account 必须是 Assets:* 或 Liabilities:* 账户'
             if not (
                 cls._account_exists(user, account)
                 and cls._account_exists(user, payment_account)

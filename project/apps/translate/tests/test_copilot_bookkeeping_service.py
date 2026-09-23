@@ -329,7 +329,7 @@ class TestCopilotBookkeepingService:
             _entry(narration='   '),                             # 5 narration 为空
             _entry(account='Expenses:NotExist'),                 # 6 账户不存在
             _entry(account=INCOME_ACCOUNT),                      # 7 账户类型不匹配
-            _entry(payment_account=EXPENSE_ACCOUNT),             # 8 资金账户前缀非法
+            _entry(payment_account='Assets:NotExist'),           # 8 资金账户不存在
             _entry(currency='USD'),                              # 9 非默认币种
             _entry(tags=['#NotExist']),                          # 10 标签不存在
         ]
@@ -346,7 +346,7 @@ class TestCopilotBookkeepingService:
         assert errors[5] == 'narration 不能为空'
         assert errors[6] == _ACCOUNT_MISSING_MESSAGE
         assert errors[7] == 'account 必须是 Expenses:* 账户'
-        assert errors[8] == 'payment_account 必须是 Assets:* 或 Liabilities:* 账户'
+        assert errors[8] == _ACCOUNT_MISSING_MESSAGE
         assert errors[9] == '暂不支持非默认币种，当前仅支持 CNY'
         assert errors[10] == '标签不存在于用户标签目录: NotExist'
 
@@ -377,14 +377,14 @@ class TestCopilotBookkeepingService:
         assert errors[1] == 'transfer 的 from_account / to_account 必须是 Assets:* 账户'
         assert errors[2] == _ACCOUNT_MISSING_MESSAGE
 
-    def test_income_requires_income_account_and_valid_payment_account(self, accounts):
+    def test_income_requires_income_account_and_existing_payment_account(self, accounts):
         result = CopilotBookkeepingService.create_entries(accounts, [
             _entry(type='income', account=EXPENSE_ACCOUNT),
-            _entry(type='income', payment_account=INCOME_ACCOUNT),
+            _entry(type='income', payment_account='Income:NotExist'),
         ])
         errors = {e['index']: e['error'] for e in result['errors']}
         assert errors[1] == 'account 必须是 Income:* 账户'
-        assert errors[2] == 'payment_account 必须是 Assets:* 或 Liabilities:* 账户'
+        assert errors[2] == _ACCOUNT_MISSING_MESSAGE
 
     def test_disabled_account_not_accepted(self, accounts):
         Account.objects.create(account='Expenses:Old', owner=accounts, enable=False)
@@ -400,6 +400,14 @@ class TestCopilotBookkeepingService:
         assert result['ok'] is True
         entry = CopilotBookkeepingService.list_entries(accounts.id)[0]
         assert f'    {LIABILITY_ACCOUNT} -35.00 CNY' in entry['formatted']
+
+    def test_non_asset_payment_account_accepted(self, accounts):
+        result = CopilotBookkeepingService.create_entries(accounts, [
+            _entry(payment_account=EXPENSE_ACCOUNT),
+        ])
+        assert result['ok'] is True
+        entry = CopilotBookkeepingService.list_entries(accounts.id)[0]
+        assert f'    {EXPENSE_ACCOUNT} -35.00 CNY' in entry['formatted']
 
     # ------------------------------------------------------------------
     # 条数上限与空入参

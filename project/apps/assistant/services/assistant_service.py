@@ -207,10 +207,7 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
                                     },
                                     'payment_account': {
                                         'type': 'string',
-                                        'description': (
-                                            'expense/income：支付或收款账户'
-                                            '（Assets:/Liabilities:）'
-                                        ),
+                                        'description': 'expense/income：支付或收款账户',
                                     },
                                     'from_account': {
                                         'type': 'string',
