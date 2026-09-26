@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.13.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.12.1...5.13.0) (2026-09-26)
+
+### Features
+
+* **copilot-bookkeeping:** 实现Copilot自然语言记账全链路功能 ([36d63c0](https://github.com/dhr2333/Beancount-Trans-Backend/commit/36d63c0977fe39652594cf304ea963e9c7a13a83))
+* **file-manager:** 新增 collect 系统账本功能与存量用户迁移工具 ([7e77921](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7e779219af2902ba0af6695d9c5457067cd38cae))
+* **translate:** 新增 write-collect 解析条目写入接口 ([b98f55e](https://github.com/dhr2333/Beancount-Trans-Backend/commit/b98f55e3644c1ba0e36bd2b069dd8770f6d874e1))
+* **translate:** 新增上传账单直接解析并加入审核队列的接口 ([6c0b4f3](https://github.com/dhr2333/Beancount-Trans-Backend/commit/6c0b4f3ad99449f2fb06653e4fb9de149c067179))
+
+### Bug Fixes
+
+* **authentication:** 配置JWT滑动续期并添加刷新测试用例 ([df788f3](https://github.com/dhr2333/Beancount-Trans-Backend/commit/df788f318ba43b3736f9b6846c8428deb0102f35))
+* **Copilot:** 调整支付账户校验逻辑，仅校验账户是否存在 ([74fe96f](https://github.com/dhr2333/Beancount-Trans-Backend/commit/74fe96fbdd2ba4534068600c87f307dac3a5e348))
+* **file utils:** 修正 Beancount 收集文件的条目分隔格式 ([2e89060](https://github.com/dhr2333/Beancount-Trans-Backend/commit/2e890604ef44515d3404e4f0a683d8d3fafb135c))
+* **translate/copilot:** 为Copilot记账条目状态添加前缀 ([7256b24](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7256b241b9df5a6099866fab9ce782937b69a936))
+* **upload_parse_review:** 调整上传解析接口为固定审核模式，不受配置影响 ([07cf622](https://github.com/dhr2333/Beancount-Trans-Backend/commit/07cf62247498ca10fe6334240c5f018d0cd5641d))
+
 ## [5.12.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.12.0...5.12.1) (2026-09-16)
 
 ### Bug Fixes
