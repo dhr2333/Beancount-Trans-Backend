@@ -38,7 +38,11 @@ def build_ledger_options(shared_ledgers: list[dict] | None) -> list[dict]:
     return options
 
 
-def build_shared_ledger_prompt_block(options: list[dict] | None) -> str:
+def build_shared_ledger_prompt_block(
+    options: list[dict] | None,
+    *,
+    self_ledger_available: bool = True,
+) -> str:
     """生成共享账本说明块；无共享账本时返回空串（保证提示词不变）。"""
     if not options:
         return ''
@@ -54,6 +58,13 @@ def build_shared_ledger_prompt_block(options: list[dict] | None) -> str:
     shared_labels = '」「'.join(
         str(o.get('label') or o.get('key')) for o in shared
     )
+    if self_ledger_available:
+        rule_1 = '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
+    else:
+        rule_1 = (
+            '1. 「我的账本」当前尚未创建，无法查询；调用 get_ledger_context / run_bql '
+            '时必须显式传入 ledger（某个共享账本的可用标识），不要依赖默认的 self。\n'
+        )
     return (
         '共享账本说明：\n'
         f'当前可访问的账本：\n{ledger_list}\n'
@@ -62,7 +73,7 @@ def build_shared_ledger_prompt_block(options: list[dict] | None) -> str:
         '这些账本应视为同一批可用数据来源：需要综合、合计、对比或交叉印证时，'
         '分别对相关账本查询后把结果统一呈现。\n'
         '规则：\n'
-        '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
+        f'{rule_1}'
         '2. 结论中必须标注每项数字来自哪个账本'
         f'（如「我的账本」「{shared_labels}」）。\n'
         '3. 允许跨账本合计：合计时必须说明合计口径，'

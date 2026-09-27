@@ -95,6 +95,7 @@ class AssistantStatusSerializer(serializers.Serializer):
     deep_think_supported = serializers.BooleanField()
     ledger_exists = serializers.BooleanField()
     ledger_path = serializers.CharField(allow_blank=True)
+    has_usable_shared_ledger = serializers.BooleanField(required=False, default=False)
     reference_date = serializers.DateField(help_text='助手使用的基准日期（今天）')
 
 

@@ -52,6 +52,7 @@ from .services.shared_ledger import (
     TokenInvalidError,
     bind_by_token,
     bindings_with_usability,
+    has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
 )
@@ -122,6 +123,7 @@ class AssistantStatusView(APIView):
             'deep_think_supported': provider.supports_thinking_param,
             'ledger_exists': ledger_service.ledger_exists(),
             'ledger_path': ledger_service.ledger_path if ledger_service.ledger_exists() else '',
+            'has_usable_shared_ledger': has_usable_shared_ledger(request.user),
             'reference_date': get_reference_date(),
         }
         serializer = AssistantStatusSerializer(data)

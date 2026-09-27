@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from project.apps.assistant.models import SharedLedgerBinding
@@ -54,10 +55,71 @@ class TestAssistantAPI:
 
         assert response.status_code == 200
         assert response.data['ledger_exists'] is True
+        assert response.data['has_usable_shared_ledger'] is False
         assert response.data['api_key_configured'] is True
         assert response.data['assistant_model'] == DEFAULT_ASSISTANT_MODEL
         assert response.data['deep_think_supported'] is True
         assert 'reference_date' in response.data
+
+    def test_status_has_usable_shared_ledger_false_without_binding(
+        self, api_client, user, tmp_path, settings, monkeypatch,
+    ):
+        monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
+
+        with override_settings(
+            ASSISTANT_DEEPSEEK_API_KEY='platform-sk',
+            ASSISTANT_MODEL=DEFAULT_ASSISTANT_MODEL,
+        ):
+            response = api_client.get(reverse('assistant-status'))
+
+        assert response.status_code == 200
+        assert response.data['ledger_exists'] is False
+        assert response.data['has_usable_shared_ledger'] is False
+
+    def test_status_has_usable_shared_ledger_true_without_own_ledger(
+        self, api_client, user, owner_user, tmp_path, settings, monkeypatch,
+    ):
+        monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
+        _token, raw_token = PersonalAccessToken.issue(owner_user, '分享账本')
+        created = api_client.post(
+            reverse('assistant-shared-ledger-list'),
+            {'token': raw_token},
+            format='json',
+        )
+        assert created.status_code == 201
+
+        with override_settings(
+            ASSISTANT_DEEPSEEK_API_KEY='platform-sk',
+            ASSISTANT_MODEL=DEFAULT_ASSISTANT_MODEL,
+        ):
+            response = api_client.get(reverse('assistant-status'))
+
+        assert response.status_code == 200
+        # ledger_exists 仍只反映本人账本
+        assert response.data['ledger_exists'] is False
+        assert response.data['has_usable_shared_ledger'] is True
+
+    def test_status_has_usable_shared_ledger_false_when_token_revoked(
+        self, api_client, user, owner_user, tmp_path, settings, monkeypatch,
+    ):
+        monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path)
+        token, raw_token = PersonalAccessToken.issue(owner_user, '分享账本')
+        api_client.post(
+            reverse('assistant-shared-ledger-list'),
+            {'token': raw_token},
+            format='json',
+        )
+        token.revoked_at = timezone.now()
+        token.save(update_fields=['revoked_at'])
+
+        with override_settings(
+            ASSISTANT_DEEPSEEK_API_KEY='platform-sk',
+            ASSISTANT_MODEL=DEFAULT_ASSISTANT_MODEL,
+        ):
+            response = api_client.get(reverse('assistant-status'))
+
+        assert response.status_code == 200
+        assert response.data['has_usable_shared_ledger'] is False
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     def test_chat_without_key_returns_400(self, api_client, user, bean_file):

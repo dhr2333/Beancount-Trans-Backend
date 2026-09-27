@@ -931,3 +931,114 @@ class TestSharedLedgerAssistantService:
         assert '老婆的账本、老婆' in block
         assert owner.username in block
 
+    def test_build_tools_shared_default_self_wording(self):
+        options = [
+            {'key': 'self', 'label': '我的账本'},
+            {'key': '老婆的账本', 'keys': ['老婆的账本', '老婆'], 'label': '老婆的账本（wife）'},
+        ]
+
+        tools = build_tools(ledger_options=options, self_ledger_available=True)
+        get_ctx = next(t for t in tools if t['function']['name'] == 'get_ledger_context')
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+
+        get_desc = get_ctx['function']['parameters']['properties']['ledger']['description']
+        run_desc = run_bql['function']['parameters']['properties']['ledger']['description']
+        assert '缺省 self' in get_desc
+        assert '老婆的账本' in get_desc
+        assert '可选值' in get_desc
+        assert run_desc == get_desc
+
+    def test_build_tools_missing_self_ledger_wording(self):
+        options = [
+            {'key': 'self', 'label': '我的账本'},
+            {'key': '老婆的账本', 'keys': ['老婆的账本', '老婆'], 'label': '老婆的账本（wife）'},
+        ]
+
+        tools = build_tools(ledger_options=options, self_ledger_available=False)
+        get_ctx = next(t for t in tools if t['function']['name'] == 'get_ledger_context')
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+
+        get_desc = get_ctx['function']['parameters']['properties']['ledger']['description']
+        run_desc = run_bql['function']['parameters']['properties']['ledger']['description']
+        assert '尚未创建' in get_desc
+        assert '必须显式指定' in get_desc
+        assert '缺省 self' not in get_desc
+        assert '老婆的账本' in get_desc
+        assert run_desc == get_desc
+        # run_bql 的多账本聚合说明在两种情况下都保留
+        assert '重复计入' in run_bql['function']['description']
+
+    @pytest.mark.parametrize('self_ledger_available', [True, False])
+    def test_build_tools_no_shared_ledger_has_no_ledger_property(self, self_ledger_available):
+        tools = build_tools(
+            ledger_options=[{'key': 'self', 'label': '我的账本'}],
+            self_ledger_available=self_ledger_available,
+        )
+        get_ctx = next(t for t in tools if t['function']['name'] == 'get_ledger_context')
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+
+        assert 'ledger' not in get_ctx['function']['parameters']['properties']
+        assert 'ledger' not in run_bql['function']['parameters']['properties']
+
+    def test_dispatch_run_bql_without_own_ledger_returns_readable_message(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(
+            monkeypatch,
+            exists_map={user.username: False, owner.username: True},
+            default_exists=False,
+        )
+        service = AssistantService(
+            user,
+            shared_ledgers=[{'aliases': ['老婆的账本', '老婆'], 'owner': owner}],
+        )
+        queries: list = []
+
+        message = service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        assert '本人账本尚未创建' in message
+        assert '老婆的账本、老婆' in message
+        assert queries == []
+        assert '/main.bean' not in message
+
+    def test_dispatch_get_ledger_context_without_own_ledger_returns_readable_message(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(
+            monkeypatch,
+            exists_map={user.username: False, owner.username: True},
+            default_exists=False,
+        )
+        service = AssistantService(
+            user,
+            shared_ledgers=[{'aliases': ['老婆的账本', '老婆'], 'owner': owner}],
+        )
+        queries: list = []
+
+        message = service._dispatch_tool('get_ledger_context', {}, queries)
+
+        assert '本人账本尚未创建' in message
+        assert '老婆的账本、老婆' in message
+        assert queries == []
+        assert '/main.bean' not in message
+
+    def test_dispatch_get_ledger_context_defaults_to_self_when_own_ledger_exists(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user, shared_ledgers=[{'aliases': ['老婆的账本'], 'owner': owner}]
+        )
+
+        with patch(
+            'project.apps.assistant.services.assistant_service.get_ledger_context'
+        ) as mock_ctx:
+            mock_ctx.return_value = 'self-context'
+            result = service._dispatch_tool('get_ledger_context', {}, [])
+
+        assert result == 'self-context'
+        assert mock_ctx.call_args[0][0] == user
+

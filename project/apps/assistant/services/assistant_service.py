@@ -109,6 +109,7 @@ def build_tools(
     *,
     insight_mode: bool = False,
     ledger_options: list[dict] | None = None,
+    self_ledger_available: bool = True,
 ) -> list[dict[str, Any]]:
     has_shared = bool([o for o in (ledger_options or []) if o.get('key') != 'self'])
     run_bql_description = (
@@ -136,12 +137,19 @@ def build_tools(
                 continue
             ledger_keys.extend(entry.get('keys') or [entry.get('key')])
         ledger_keys_str = '、'.join(str(key) for key in ledger_keys)
-        ledger_property = {
-            'type': 'string',
-            'description': (
+        if self_ledger_available:
+            ledger_description = (
                 '账本标识：self=我的账本，其他值为共享账本的可用标识（别名或来源用户名）；'
                 f'缺省 self。可选值：{ledger_keys_str}'
-            ),
+            )
+        else:
+            ledger_description = (
+                '账本标识：本人账本尚未创建；必须显式指定下面的共享账本标识。'
+                f'可选值：{ledger_keys_str}'
+            )
+        ledger_property = {
+            'type': 'string',
+            'description': ledger_description,
         }
         run_bql_description += (
             ' 多个账本是同一批数据来源：需要综合、合计或对比时，'
@@ -449,6 +457,18 @@ class AssistantService:
             timeout=httpx.Timeout(10.0, read=120.0),
         )
 
+    def _self_ledger_missing_message(self, ledger: str) -> str | None:
+        """选中 self 但本人账本不存在、且存在其他可选账本时，返回可读提示。"""
+        if ledger != 'self' or self.ledger_query.ledger_exists():
+            return None
+        other_keys = [key for key in self.ledger_queries if key != 'self']
+        if not other_keys:
+            return None
+        return (
+            '本人账本尚未创建，无法查询「我的账本」；'
+            f'请用 ledger 指定共享账本：{"、".join(other_keys)}'
+        )
+
     def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
         if name == 'get_ledger_context':
             ledger = arguments.get('ledger') or 'self'
@@ -458,6 +478,9 @@ class AssistantService:
                     f'账本标识无效: {ledger}；'
                     f'可用账本: {", ".join(self.ledger_queries)}'
                 )
+            guard_message = self._self_ledger_missing_message(ledger)
+            if guard_message is not None:
+                return guard_message
             return get_ledger_context(service.user, reference_date=self.reference_date)
 
         if name == 'run_bql':
@@ -468,6 +491,9 @@ class AssistantService:
                     f'账本标识无效: {ledger}；'
                     f'可用账本: {", ".join(self.ledger_queries)}'
                 )
+            guard_message = self._self_ledger_missing_message(ledger)
+            if guard_message is not None:
+                return guard_message
             if len(queries) >= self.max_bql_runs:
                 return (
                     f'已达本问题 BQL 查询上限（{self.max_bql_runs} 次），请根据已有结果作答。'
@@ -817,14 +843,22 @@ class AssistantService:
         queries: list[QueryRecord] = []
         last_user_message = get_last_user_message(messages)
         insight_mode = detect_insight_mode(last_user_message)
-        tools = build_tools(insight_mode=insight_mode, ledger_options=self.ledger_options)
+        self_ledger_available = self.ledger_query.ledger_exists()
+        tools = build_tools(
+            insight_mode=insight_mode,
+            ledger_options=self.ledger_options,
+            self_ledger_available=self_ledger_available,
+        )
         llm_messages: list[dict[str, Any]] = [
             {
                 'role': 'system',
                 'content': build_system_prompt(
                     self.reference_date,
                     insight_mode=insight_mode,
-                    shared_ledger_block=build_shared_ledger_prompt_block(self.ledger_options),
+                    shared_ledger_block=build_shared_ledger_prompt_block(
+                        self.ledger_options,
+                        self_ledger_available=self_ledger_available,
+                    ),
                 ),
             },
             *messages,

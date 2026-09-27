@@ -290,3 +290,40 @@ class TestBuildSharedLedgerPromptBlock:
         assert '同一批可用数据来源' in block
         assert '重复计入' in block
         assert 'record_transaction' in block
+
+    def test_empty_variants_blank_regardless_of_flag(self):
+        for flag in (True, False):
+            assert build_shared_ledger_prompt_block(
+                None, self_ledger_available=flag
+            ) == ''
+            assert build_shared_ledger_prompt_block(
+                [], self_ledger_available=flag
+            ) == ''
+            assert build_shared_ledger_prompt_block(
+                [{'key': 'self', 'label': '我的账本'}],
+                self_ledger_available=flag,
+            ) == ''
+
+    def test_self_ledger_available_true_matches_default_output(self):
+        options = build_ledger_options([
+            {'aliases': ['老婆的账本', '老婆'], 'owner': User(username='wife')},
+        ])
+
+        assert build_shared_ledger_prompt_block(
+            options, self_ledger_available=True
+        ) == build_shared_ledger_prompt_block(options)
+
+    def test_missing_self_ledger_replaces_default_self_rule(self):
+        options = build_ledger_options([
+            {'aliases': ['老婆的账本', '老婆'], 'owner': User(username='wife')},
+        ])
+
+        block = build_shared_ledger_prompt_block(options, self_ledger_available=False)
+
+        assert '尚未创建' in block
+        assert '必须显式传入 ledger' in block
+        assert '缺省 self' not in block
+        # 其他规则与账本列表保持不变
+        assert '- 老婆的账本（wife）：可用标识 老婆的账本、老婆' in block
+        assert 'record_transaction' in block
+        assert '重复计入' in block

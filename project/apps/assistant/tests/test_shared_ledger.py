@@ -12,6 +12,7 @@ from project.apps.assistant.services.shared_ledger import (
     bind_by_token,
     bindings_with_usability,
     build_ledger_options,
+    has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
 )
@@ -266,6 +267,57 @@ class TestBindingsWithUsability:
 
         assert [row['id'] for row in rows] == [binding.id]
         assert rows[0]['usable'] is False
+
+
+@pytest.mark.django_db
+class TestHasUsableSharedLedger:
+    def test_true_with_usable_binding(self, user, owner):
+        _token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['家庭账本'])
+
+        assert has_usable_shared_ledger(user) is True
+
+    def test_false_without_binding(self, user):
+        assert has_usable_shared_ledger(user) is False
+
+    @pytest.mark.parametrize('mutate', ['revoked', 'expired'])
+    def test_false_when_only_token_unusable(self, user, owner, mutate):
+        token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['家庭账本'])
+        if mutate == 'revoked':
+            token.revoked_at = timezone.now()
+            token.save(update_fields=['revoked_at'])
+        else:
+            token.expires_at = timezone.now() - timedelta(days=1)
+            token.save(update_fields=['expires_at'])
+
+        assert has_usable_shared_ledger(user) is False
+
+    def test_false_when_owner_inactive(self, user, owner):
+        _token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['家庭账本'])
+        owner.is_active = False
+        owner.save(update_fields=['is_active'])
+
+        assert has_usable_shared_ledger(user) is False
+
+    def test_does_not_touch_last_used_at(self, user, owner):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
+        assert binding.last_used_at is None
+
+        has_usable_shared_ledger(user)
+
+        binding.refresh_from_db()
+        assert binding.last_used_at is None
+
+        old_used = timezone.now() - timedelta(seconds=120)
+        SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=old_used)
+
+        has_usable_shared_ledger(user)
+
+        binding.refresh_from_db()
+        assert binding.last_used_at == old_used
 
 
 @pytest.mark.django_db

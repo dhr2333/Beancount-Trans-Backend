@@ -123,6 +123,11 @@ def list_bindings(recipient: User) -> QuerySet:
     )
 
 
+def has_usable_shared_ledger(recipient: User) -> bool:
+    """recipient 是否存在可用的共享账本绑定（只读检查，不更新 last_used_at）。"""
+    return any(binding.is_usable() for binding in list_bindings(recipient))
+
+
 def bindings_with_usability(recipient: User) -> list[dict]:
     """序列化绑定列表，附带可用性判定所需的字段。"""
     rows = []
