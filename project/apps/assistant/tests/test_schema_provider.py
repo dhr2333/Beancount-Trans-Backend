@@ -1,14 +1,18 @@
 from datetime import date
 
 import pytest
+from django.contrib.auth.models import User
 
 from project.apps.assistant.services.assistant_service import build_system_prompt
 from project.apps.assistant.services.bql_reference import build_bql_capability_reference
 from project.apps.assistant.services.schema_provider import (
     build_bql_examples,
     build_insight_bql_examples,
+    build_ledger_options,
+    build_shared_ledger_prompt_block,
     build_user_specific_bql_examples,
     get_ledger_context,
+    ledger_keys_for,
 )
 
 
@@ -220,3 +224,68 @@ class TestGetLedgerContext:
         assert '账本相关 BQL 示例' in context
         assert "^Assets:Cash'" in context
         assert '本月餐饮花了多少' in context
+
+
+class TestLedgerKeysFor:
+    def test_aliases_used_when_present(self):
+        owner = User(username='wife')
+        item = {'aliases': ['老婆的账本', '老婆'], 'owner': owner}
+        assert ledger_keys_for(item) == ['老婆的账本', '老婆']
+
+    def test_falls_back_to_owner_username_when_empty(self):
+        owner = User(username='wife')
+        assert ledger_keys_for({'aliases': [], 'owner': owner}) == ['wife']
+
+    def test_falls_back_to_owner_username_when_missing(self):
+        owner = User(username='wife')
+        assert ledger_keys_for({'owner': owner}) == ['wife']
+
+
+class TestBuildLedgerOptions:
+    def test_self_entry_is_exact(self):
+        assert build_ledger_options(None) == [{'key': 'self', 'label': '我的账本'}]
+        assert build_ledger_options([]) == [{'key': 'self', 'label': '我的账本'}]
+
+    def test_shared_entry_with_aliases(self):
+        owner = User(username='wife')
+        options = build_ledger_options([
+            {'aliases': ['老婆的账本', '老婆'], 'owner': owner},
+        ])
+
+        assert options[0] == {'key': 'self', 'label': '我的账本'}
+        assert options[1] == {
+            'key': '老婆的账本',
+            'label': '老婆的账本（wife）',
+            'keys': ['老婆的账本', '老婆'],
+        }
+        assert options[1]['key'] == options[1]['keys'][0]
+
+    def test_shared_entry_without_aliases_uses_owner_username(self):
+        owner = User(username='wife')
+        options = build_ledger_options([{'aliases': [], 'owner': owner}])
+
+        assert options[1] == {'key': 'wife', 'label': 'wife 的账本', 'keys': ['wife']}
+
+
+class TestBuildSharedLedgerPromptBlock:
+    def test_empty_variants_return_blank(self):
+        assert build_shared_ledger_prompt_block(None) == ''
+        assert build_shared_ledger_prompt_block([]) == ''
+        assert build_shared_ledger_prompt_block(
+            [{'key': 'self', 'label': '我的账本'}]
+        ) == ''
+
+    def test_lists_every_identifier_and_rules(self):
+        options = build_ledger_options([
+            {'aliases': ['老婆的账本', '老婆'], 'owner': User(username='wife')},
+            {'aliases': [], 'owner': User(username='kid')},
+        ])
+
+        block = build_shared_ledger_prompt_block(options)
+
+        assert '- 老婆的账本（wife）：可用标识 老婆的账本、老婆' in block
+        assert '- kid 的账本：可用标识 kid' in block
+        assert '任意' in block
+        assert '缺省 self' in block
+        assert '禁止把不同账本的金额相加或混算' in block
+        assert 'record_transaction' in block

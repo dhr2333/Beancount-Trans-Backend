@@ -192,12 +192,16 @@ class TestSharedLedgerAPI:
     list_url = 'assistant-shared-ledger-list'
     detail_url = 'assistant-shared-ledger-detail'
 
-    def _post_binding(self, client, owner, label=''):
+    def _post_binding(self, client, owner, aliases=None):
         _token, raw_token = PersonalAccessToken.issue(owner, '分享账本')
         payload = {'token': raw_token}
-        if label:
-            payload['label'] = label
-        return client.post(reverse(self.list_url), payload, format='json')
+        if aliases is not None:
+            payload['aliases'] = aliases
+        return client.post(
+            reverse(self.list_url),
+            payload,
+            format='json',
+        )
 
     def test_list_returns_only_current_user_bindings(
         self, api_client, owner_user, api_client_owner,
@@ -217,11 +221,11 @@ class TestSharedLedgerAPI:
         assert other.data == []
 
     def test_create_with_valid_token(self, api_client, owner_user):
-        response = self._post_binding(api_client, owner_user, label='家庭')
+        response = self._post_binding(api_client, owner_user, aliases=['家庭'])
 
         assert response.status_code == 201
         assert response.data['owner_username'] == owner_user.username
-        assert response.data['label'] == '家庭'
+        assert response.data['aliases'] == ['家庭']
         assert response.data['usable'] is True
 
         listing = api_client.get(reverse(self.list_url))
@@ -229,7 +233,9 @@ class TestSharedLedgerAPI:
 
     def test_create_with_invalid_token_returns_400(self, api_client):
         response = api_client.post(
-            reverse(self.list_url), {'token': 'not-a-token'}, format='json'
+            reverse(self.list_url),
+            {'token': 'not-a-token', 'aliases': ['家庭账本']},
+            format='json',
         )
 
         assert response.status_code == 400
@@ -239,7 +245,9 @@ class TestSharedLedgerAPI:
         _token, raw_token = PersonalAccessToken.issue(user, '自己的令牌')
 
         response = api_client.post(
-            reverse(self.list_url), {'token': raw_token}, format='json'
+            reverse(self.list_url),
+            {'token': raw_token, 'aliases': ['家庭账本']},
+            format='json',
         )
 
         assert response.status_code == 400
@@ -251,7 +259,9 @@ class TestSharedLedgerAPI:
         )
 
         response = api_client.post(
-            reverse(self.list_url), {'token': raw_token}, format='json'
+            reverse(self.list_url),
+            {'token': raw_token, 'aliases': ['家庭账本']},
+            format='json',
         )
 
         assert response.status_code == 400
@@ -403,3 +413,68 @@ class TestSharedLedgerAPI:
         )
         assert no_binding.status_code == 404
         assert '尚未创建任何可访问的账本' in no_binding.data['detail']
+
+    def test_create_without_aliases_succeeds(self, api_client, owner_user):
+        _token, raw_token = PersonalAccessToken.issue(owner_user, '分享账本')
+
+        response = api_client.post(
+            reverse(self.list_url),
+            {'token': raw_token},
+            format='json',
+        )
+
+        assert response.status_code == 201
+        assert response.data['aliases'] == []
+
+    def test_create_with_blank_aliases_stores_empty(self, api_client, owner_user):
+        _token, raw_token = PersonalAccessToken.issue(owner_user, '分享账本')
+
+        response = api_client.post(
+            reverse(self.list_url),
+            {'token': raw_token, 'aliases': ['', '   ']},
+            format='json',
+        )
+
+        assert response.status_code == 201
+        assert response.data['aliases'] == []
+
+    def test_create_with_reserved_alias_returns_400(self, api_client, owner_user):
+        response = self._post_binding(api_client, owner_user, aliases=['self'])
+
+        assert response.status_code == 400
+        assert '别名不能使用保留值 self' in response.data['detail']
+
+    def test_create_with_overlong_alias_returns_400(self, api_client, owner_user):
+        response = self._post_binding(api_client, owner_user, aliases=['账本' * 40])
+
+        assert response.status_code == 400
+        assert 'aliases' in response.data
+
+    def test_create_duplicate_alias_for_other_owner_returns_400(
+        self, api_client, owner_user,
+    ):
+        first = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+        assert first.status_code == 201
+
+        other = User.objects.create_user(username='otheruser', password='x')
+        second = self._post_binding(api_client, other, aliases=['家庭账本'])
+
+        assert second.status_code == 400
+        assert '已被其他共享账本使用' in second.data['detail']
+
+    def test_list_exposes_aliases_without_label(self, api_client, owner_user):
+        created = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+        assert created.status_code == 201
+
+        listing = api_client.get(reverse(self.list_url))
+
+        assert listing.status_code == 200
+        assert listing.data[0]['aliases'] == ['家庭账本']
+        assert 'label' not in listing.data[0]
+
+    def test_create_echoes_aliases_without_label(self, api_client, owner_user):
+        response = self._post_binding(api_client, owner_user, aliases=['老婆的账本', '老婆'])
+
+        assert response.status_code == 201
+        assert response.data['aliases'] == ['老婆的账本', '老婆']
+        assert 'label' not in response.data

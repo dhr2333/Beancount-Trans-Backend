@@ -31,6 +31,7 @@ from .schema_provider import (
     build_ledger_options,
     build_shared_ledger_prompt_block,
     get_ledger_context,
+    ledger_keys_for,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,12 +130,17 @@ def build_tools(
         )
     ledger_property: dict[str, Any] | None = None
     if has_shared:
-        ledger_keys = '、'.join(str(o.get('key')) for o in (ledger_options or []))
+        ledger_keys: list[str] = []
+        for entry in (ledger_options or []):
+            if entry.get('key') == 'self':
+                continue
+            ledger_keys.extend(entry.get('keys') or [entry.get('key')])
+        ledger_keys_str = '、'.join(str(key) for key in ledger_keys)
         ledger_property = {
             'type': 'string',
             'description': (
-                '账本标识：self=我的账本，<owner_username>=共享账本；'
-                f'缺省 self。可选值：{ledger_keys}'
+                '账本标识：self=我的账本，其他值为共享账本的可用标识（别名或来源用户名）；'
+                f'缺省 self。可选值：{ledger_keys_str}'
             ),
         }
         run_bql_description += (
@@ -411,15 +417,17 @@ class AssistantService:
         reference_date: date | None = None,
         *,
         deep_think: bool = False,
-        shared_owners: list[User] | None = None,
+        shared_ledgers: list[dict] | None = None,
     ):
         self.user = user
         self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
-        self.ledger_options = build_ledger_options(shared_owners or [])
+        self.ledger_options = build_ledger_options(shared_ledgers or [])
         self.ledger_queries: dict[str, LedgerQueryService] = {'self': self.ledger_query}
-        for owner in (shared_owners or []):
-            self.ledger_queries[owner.username] = LedgerQueryService(owner)
+        for item in (shared_ledgers or []):
+            shared_service = LedgerQueryService(item['owner'])
+            for key in ledger_keys_for(item):
+                self.ledger_queries.setdefault(key, shared_service)
         self.has_any_ledger = any(
             svc.ledger_exists() for svc in self.ledger_queries.values()
         )

@@ -134,7 +134,12 @@ class SharedLedgerBinding(BaseModel):
         related_name='ledger_bindings',
         verbose_name='访问令牌',
     )
-    label = models.CharField(max_length=64, blank=True, default='', verbose_name='备注')
+    aliases = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='别名',
+        help_text='Copilot 可用其中任意一个别名识别这个共享账本；可为空，为空时用来源用户名',
+    )
     last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最后使用时间')
 
     class Meta:
@@ -152,7 +157,7 @@ class SharedLedgerBinding(BaseModel):
         ]
 
     def __str__(self) -> str:
-        return f'{self.recipient_id} -> {self.token_id}'
+        return f'{self.recipient_id} -> {self.token_id} ({self.aliases})'
 
     @property
     def owner(self):

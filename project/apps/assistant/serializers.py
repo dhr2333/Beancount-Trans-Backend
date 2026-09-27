@@ -177,13 +177,18 @@ class ChatSessionUpdateSerializer(serializers.ModelSerializer):
 
 class BindSharedLedgerSerializer(serializers.Serializer):
     token = serializers.CharField(write_only=True, trim_whitespace=True)
-    label = serializers.CharField(max_length=64, required=False, allow_blank=True, default='')
+    aliases = serializers.ListField(
+        child=serializers.CharField(max_length=64, allow_blank=True),
+        required=False,
+        default=list,
+        help_text='Copilot 可用其中任意一个别名识别这个共享账本',
+    )
 
 
 class SharedLedgerBindingSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     owner_username = serializers.CharField()
-    label = serializers.CharField(allow_blank=True, default='')
+    aliases = serializers.ListField(child=serializers.CharField(), required=False, default=list)
     usable = serializers.BooleanField()
     expires_at = serializers.DateTimeField(allow_null=True, required=False)
     last_used_at = serializers.DateTimeField(allow_null=True, required=False)

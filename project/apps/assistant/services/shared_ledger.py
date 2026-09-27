@@ -9,11 +9,13 @@ from django.utils import timezone
 from project.apps.assistant.models import SharedLedgerBinding
 from project.apps.authentication.models import PersonalAccessToken
 
-from .fava_url import read_ledger_title
+from .schema_provider import ledger_keys_for
 
 REQUIRED_SCOPE = 'ledger:read'
 DEFAULT_MAX_SHARED_LEDGERS = 3
 LAST_USED_THROTTLE_SECONDS = 60
+MAX_ALIAS_LENGTH = 64
+RESERVED_ALIAS = 'self'
 
 
 class TokenInvalidError(ValueError):
@@ -25,10 +27,40 @@ def get_max_shared_ledgers() -> int:
     return int(getattr(settings, 'ASSISTANT_MAX_SHARED_LEDGERS', DEFAULT_MAX_SHARED_LEDGERS))
 
 
-def bind_by_token(recipient: User, raw_token: str, label: str = '') -> SharedLedgerBinding:
+def normalize_aliases(aliases) -> list[str]:
+    """规整别名列表：去空白、丢弃空项、忽略大小写去重（保留首次出现的大小写）。
+
+    空列表合法（表示不带别名，改用来源用户名标识）。超长或保留值会抛错。
+    """
+    if not aliases:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in aliases:
+        alias = str(raw).strip()
+        if not alias:
+            continue
+        lowered = alias.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        normalized.append(alias)
+    for alias in normalized:
+        if len(alias) > MAX_ALIAS_LENGTH:
+            raise TokenInvalidError(f'别名最长为 {MAX_ALIAS_LENGTH} 个字符')
+        if alias.lower() == RESERVED_ALIAS:
+            raise TokenInvalidError(f'别名不能使用保留值 {RESERVED_ALIAS}')
+    return normalized
+
+
+def bind_by_token(
+    recipient: User,
+    raw_token: str,
+    aliases=None,
+) -> SharedLedgerBinding:
     """用对方的个人访问令牌为 recipient 建立共享账本绑定。
 
-    明文令牌仅用于校验，绝不写库或落日志。
+    明文令牌仅用于校验，绝不写库或落日志。别名可选、可多个。
     """
     token = PersonalAccessToken.authenticate(raw_token)
     if token is None:
@@ -36,6 +68,8 @@ def bind_by_token(recipient: User, raw_token: str, label: str = '') -> SharedLed
 
     if REQUIRED_SCOPE not in token.scope_list:
         raise TokenInvalidError('该令牌不具备账本只读权限')
+
+    alias_list = normalize_aliases(aliases)
 
     if token.user_id == recipient.id:
         raise TokenInvalidError('不能绑定自己的账本')
@@ -49,14 +83,28 @@ def bind_by_token(recipient: User, raw_token: str, label: str = '') -> SharedLed
         if binding.token_id != token.id and binding.is_usable():
             raise TokenInvalidError('已绑定该用户的账本，无需重复添加')
 
+    if alias_list:
+        other_bindings = (
+            SharedLedgerBinding.objects
+            .filter(recipient=recipient)
+            .exclude(token=token)
+        )
+        for binding in other_bindings:
+            existing_aliases = {str(a).lower() for a in (binding.aliases or [])}
+            for alias in alias_list:
+                if alias.lower() in existing_aliases:
+                    raise TokenInvalidError(
+                        f'别名「{alias}」已被其他共享账本使用，请换一个'
+                    )
+
     binding, created = SharedLedgerBinding.objects.get_or_create(
         recipient=recipient,
         token=token,
-        defaults={'label': label},
+        defaults={'aliases': alias_list},
     )
-    if not created and label:
-        binding.label = label
-        binding.save(update_fields=['label'])
+    if not created:
+        binding.aliases = alias_list
+        binding.save(update_fields=['aliases'])
     return binding
 
 
@@ -82,7 +130,7 @@ def bindings_with_usability(recipient: User) -> list[dict]:
         rows.append({
             'id': binding.id,
             'owner_username': binding.token.user.username,
-            'label': binding.label or '',
+            'aliases': list(binding.aliases or []),
             'usable': binding.is_usable(),
             'expires_at': binding.token.expires_at,
             'last_used_at': binding.last_used_at,
@@ -91,14 +139,14 @@ def bindings_with_usability(recipient: User) -> list[dict]:
     return rows
 
 
-def resolve_shared_owners(recipient: User, binding_ids) -> list[User]:
-    """把绑定的 id 列表解析成可用令牌所属用户（去重保序，忽略非法 id）。"""
+def resolve_shared_ledgers(recipient: User, binding_ids) -> list[dict]:
+    """把绑定的 id 列表解析成可用的共享账本（去重保序，忽略非法 id）。"""
     bindings = _usable_bindings(recipient, binding_ids)
     if not bindings:
         return []
 
     now = timezone.now()
-    owners: list[User] = []
+    ledgers: list[dict] = []
     seen: set[int] = set()
     for binding in bindings:
         _touch_last_used(binding, now)
@@ -106,24 +154,28 @@ def resolve_shared_owners(recipient: User, binding_ids) -> list[User]:
         if owner.id in seen:
             continue
         seen.add(owner.id)
-        owners.append(owner)
-    return owners
+        ledgers.append({
+            'binding_id': binding.id,
+            'aliases': list(binding.aliases or []),
+            'owner': owner,
+        })
+    return ledgers
 
 
 def build_ledger_options(recipient: User, binding_ids) -> list[dict]:
-    """构建账本选项：首项恒为 self，其后为可用的共享账本。"""
-    options = [{'key': 'self', 'label': '我的账本'}]
-    seen: set[int] = set()
-    for binding in _usable_bindings(recipient, binding_ids):
-        owner = binding.token.user
-        if owner.id in seen:
-            continue
-        seen.add(owner.id)
-        label = binding.label or read_ledger_title(owner) or f'{owner.username} 的账本'
+    """构建账本选项：首项恒为 self，其后为可用的共享账本（key 取首个可用标识）。"""
+    options: list[dict] = [{'key': 'self', 'label': '我的账本'}]
+    for item in resolve_shared_ledgers(recipient, binding_ids):
+        keys = ledger_keys_for(item)
+        if item.get('aliases'):
+            label = f'{keys[0]}（{item["owner"].username}）'
+        else:
+            label = f'{item["owner"].username} 的账本'
         options.append({
-            'key': owner.username,
+            'key': keys[0],
+            'keys': keys,
             'label': label,
-            'binding_id': binding.id,
+            'binding_id': item['binding_id'],
         })
     return options
 

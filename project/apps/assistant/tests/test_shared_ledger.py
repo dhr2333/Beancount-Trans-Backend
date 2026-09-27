@@ -1,5 +1,6 @@
 """共享账本绑定服务层测试：令牌校验、绑定增删、可用性解析与账本选项。"""
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -11,7 +12,7 @@ from project.apps.assistant.services.shared_ledger import (
     bind_by_token,
     bindings_with_usability,
     build_ledger_options,
-    resolve_shared_owners,
+    resolve_shared_ledgers,
     unbind,
 )
 from project.apps.authentication.models import PersonalAccessToken
@@ -44,26 +45,33 @@ class TestBindByToken:
     def test_bind_success(self, user, owner):
         token, raw_token = _issue(owner, '分享给 B')
 
-        binding = bind_by_token(user, raw_token, label='家庭账本')
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
         assert binding.recipient_id == user.id
         assert binding.token_id == token.id
         assert binding.owner == owner
         assert binding.is_usable() is True
-        assert binding.label == '家庭账本'
+        assert binding.aliases == ['家庭账本']
         assert SharedLedgerBinding.objects.filter(recipient=user).count() == 1
+
+    def test_bind_multiple_aliases(self, user, owner):
+        _token, raw_token = _issue(owner)
+
+        binding = bind_by_token(user, raw_token, ['老婆的账本', '老婆'])
+
+        assert binding.aliases == ['老婆的账本', '老婆']
 
     @pytest.mark.parametrize('raw_token', ['not-a-token', ''])
     def test_bind_invalid_raw_token(self, user, raw_token):
         with pytest.raises(TokenInvalidError):
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
     def test_bind_deleted_token_record(self, user, owner):
         token, raw_token = _issue(owner)
         token.delete()
 
         with pytest.raises(TokenInvalidError):
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
     def test_bind_revoked_token(self, user, owner):
         token, raw_token = _issue(owner)
@@ -71,7 +79,7 @@ class TestBindByToken:
         token.save(update_fields=['revoked_at'])
 
         with pytest.raises(TokenInvalidError):
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
     def test_bind_expired_token(self, user, owner):
         token, raw_token = _issue(
@@ -79,13 +87,13 @@ class TestBindByToken:
         )
 
         with pytest.raises(TokenInvalidError):
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
     def test_bind_token_without_required_scope(self, user, owner):
         _token, raw_token = _issue(owner, scopes='other')
 
         with pytest.raises(TokenInvalidError) as exc_info:
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
         assert '权限' in str(exc_info.value)
 
@@ -95,43 +103,126 @@ class TestBindByToken:
         owner.save(update_fields=['is_active'])
 
         with pytest.raises(TokenInvalidError):
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
     def test_bind_own_token(self, user):
         _token, raw_token = _issue(user, '自己的令牌')
 
         with pytest.raises(TokenInvalidError) as exc_info:
-            bind_by_token(user, raw_token)
+            bind_by_token(user, raw_token, ['别名'])
 
         assert '自己' in str(exc_info.value)
 
     def test_bind_duplicate_owner_rejected(self, user, owner):
         _token1, raw1 = _issue(owner, '第一枚')
-        bind_by_token(user, raw1)
+        bind_by_token(user, raw1, ['账本一'])
         _token2, raw2 = _issue(owner, '第二枚')
 
         with pytest.raises(TokenInvalidError) as exc_info:
-            bind_by_token(user, raw2)
+            bind_by_token(user, raw2, ['账本二'])
 
         assert '重复' in str(exc_info.value)
         assert SharedLedgerBinding.objects.filter(recipient=user).count() == 1
 
-    def test_rebind_same_token_updates_label(self, user, owner):
+    def test_rebind_same_token_replaces_alias_list(self, user, owner):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token, label='旧备注')
+        binding = bind_by_token(user, raw_token, ['旧别名'])
 
-        updated = bind_by_token(user, raw_token, label='新备注')
+        updated = bind_by_token(user, raw_token, ['新别名', '新别名2'])
 
         assert updated.id == binding.id
-        assert updated.label == '新备注'
+        assert updated.aliases == ['新别名', '新别名2']
         assert SharedLedgerBinding.objects.filter(recipient=user).count() == 1
+
+    @pytest.mark.parametrize('aliases', [None, [], ['', '   ']])
+    def test_bind_without_or_blank_aliases_allowed(self, user, owner, aliases):
+        _token, raw_token = _issue(owner)
+
+        binding = bind_by_token(user, raw_token, aliases)
+
+        assert binding.aliases == []
+
+    def test_bind_overlong_alias_rejected(self, user, owner):
+        _token, raw_token = _issue(owner)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw_token, ['账本' * 40])
+
+        assert '别名最长为 64 个字符' in str(exc_info.value)
+
+    @pytest.mark.parametrize('reserved', ['self', 'SELF', ' self '])
+    def test_bind_reserved_alias_rejected(self, user, owner, reserved):
+        _token, raw_token = _issue(owner)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw_token, [reserved])
+
+        assert '别名不能使用保留值 self' in str(exc_info.value)
+
+    def test_bind_aliases_stored_stripped_and_deduped(self, user, owner):
+        _token, raw_token = _issue(owner)
+
+        binding = bind_by_token(
+            user, raw_token, ['  老婆的账本  ', '老婆的账本', 'FAMILY', 'family']
+        )
+
+        assert binding.aliases == ['老婆的账本', 'FAMILY']
+
+    def test_bind_duplicate_alias_for_other_owner_rejected(self, user, owner):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        bind_by_token(user, raw1, ['家庭账本'])
+        _token2, raw2 = _issue(other)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw2, ['家庭账本'])
+
+        assert '已被其他共享账本使用' in str(exc_info.value)
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 1
+
+    def test_bind_alias_conflict_is_case_insensitive(self, user, owner):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        bind_by_token(user, raw1, ['Family'])
+        _token2, raw2 = _issue(other)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw2, ['family'])
+
+        assert '已被其他共享账本使用' in str(exc_info.value)
+
+    def test_same_alias_allowed_for_different_recipients(self, user, owner):
+        other_recipient = User.objects.create_user(username='recipient2', password='x')
+        _token, raw_token = _issue(owner)
+
+        first = bind_by_token(user, raw_token, ['家庭账本'])
+        second = bind_by_token(other_recipient, raw_token, ['家庭账本'])
+
+        assert first.aliases == ['家庭账本']
+        assert second.aliases == ['家庭账本']
+        assert first.recipient_id != second.recipient_id
+
+    def test_rebind_alias_collision_with_other_binding_rejected(self, user, owner):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        bind_by_token(user, raw1, ['账本一'])
+        _token2, raw2 = _issue(other)
+        bind_by_token(user, raw2, ['账本二'])
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw1, ['账本二'])
+
+        assert '已被其他共享账本使用' in str(exc_info.value)
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 2
+        binding = SharedLedgerBinding.objects.get(recipient=user, token__user=owner)
+        assert binding.aliases == ['账本一']
 
 
 @pytest.mark.django_db
 class TestUnbind:
     def test_unbind_own_binding(self, user, owner):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
         unbind(user, binding.id)
 
@@ -153,7 +244,7 @@ class TestUnbind:
 class TestBindingsWithUsability:
     def test_row_contains_expected_fields(self, user, owner):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token, label='共享')
+        binding = bind_by_token(user, raw_token, ['共享'])
 
         rows = bindings_with_usability(user)
 
@@ -161,7 +252,7 @@ class TestBindingsWithUsability:
         row = rows[0]
         assert row['id'] == binding.id
         assert row['owner_username'] == owner.username
-        assert row['label'] == '共享'
+        assert row['aliases'] == ['共享']
         assert row['usable'] is True
         assert row['expires_at'] is None
 
@@ -178,32 +269,36 @@ class TestBindingsWithUsability:
 
 
 @pytest.mark.django_db
-class TestResolveSharedOwners:
-    def test_returns_owner_for_usable_binding(self, user, owner):
+class TestResolveSharedLedgers:
+    def test_returns_ledger_for_usable_binding(self, user, owner):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
-        assert resolve_shared_owners(user, [binding.id]) == [owner]
+        ledgers = resolve_shared_ledgers(user, [binding.id])
+
+        assert [item['owner'] for item in ledgers] == [owner]
+        assert ledgers[0]['aliases'] == ['家庭账本']
+        assert ledgers[0]['binding_id'] == binding.id
 
     @pytest.mark.parametrize('binding_ids', [[], None])
     def test_empty_ids_returns_empty_list(self, user, binding_ids):
-        assert resolve_shared_owners(user, binding_ids) == []
+        assert resolve_shared_ledgers(user, binding_ids) == []
 
     def test_other_recipient_binding_ignored(self, user, owner):
         token, _raw = _issue(user, '令牌')
         other_binding = SharedLedgerBinding.objects.create(
-            recipient=owner, token=token
+            recipient=owner, token=token, aliases=['别人的账本']
         )
 
-        assert resolve_shared_owners(user, [other_binding.id]) == []
+        assert resolve_shared_ledgers(user, [other_binding.id]) == []
 
     def test_nonexistent_id_ignored(self, user):
-        assert resolve_shared_owners(user, [999999]) == []
+        assert resolve_shared_ledgers(user, [999999]) == []
 
     @pytest.mark.parametrize('mutate', ['revoked', 'expired'])
     def test_unusable_token_excluded(self, user, owner, mutate):
         token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
         if mutate == 'revoked':
             token.revoked_at = timezone.now()
             token.save(update_fields=['revoked_at'])
@@ -211,38 +306,61 @@ class TestResolveSharedOwners:
             token.expires_at = timezone.now() - timedelta(days=1)
             token.save(update_fields=['expires_at'])
 
-        assert resolve_shared_owners(user, [binding.id]) == []
+        assert resolve_shared_ledgers(user, [binding.id]) == []
 
     def test_duplicate_owners_deduplicated(self, user, owner):
         token1, _raw1 = _issue(owner, '令牌一')
         token2, _raw2 = _issue(owner, '令牌二')
-        binding1 = SharedLedgerBinding.objects.create(recipient=user, token=token1)
-        binding2 = SharedLedgerBinding.objects.create(recipient=user, token=token2)
+        binding1 = SharedLedgerBinding.objects.create(
+            recipient=user, token=token1, aliases=['账本一']
+        )
+        binding2 = SharedLedgerBinding.objects.create(
+            recipient=user, token=token2, aliases=['账本二']
+        )
 
-        owners = resolve_shared_owners(user, [binding1.id, binding2.id])
+        ledgers = resolve_shared_ledgers(user, [binding1.id, binding2.id])
 
-        assert owners == [owner]
+        assert [item['owner'] for item in ledgers] == [owner]
+        assert len(ledgers) == 1
+        assert ledgers[0]['aliases'] in (['账本一'], ['账本二'])
 
     def test_last_used_at_updated_with_throttle(self, user, owner):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
-        resolve_shared_owners(user, [binding.id])
+        resolve_shared_ledgers(user, [binding.id])
         binding.refresh_from_db()
         first_used = binding.last_used_at
         assert first_used is not None
 
         # 60 秒内的第二次解析不应刷新
-        resolve_shared_owners(user, [binding.id])
+        resolve_shared_ledgers(user, [binding.id])
         binding.refresh_from_db()
         assert binding.last_used_at == first_used
 
         # 人为把 last_used_at 调到 60 秒前，应再次刷新
         old_used = timezone.now() - timedelta(seconds=120)
         SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=old_used)
-        resolve_shared_owners(user, [binding.id])
+        resolve_shared_ledgers(user, [binding.id])
         binding.refresh_from_db()
         assert binding.last_used_at > old_used
+
+    def test_item_exposes_aliases_binding_id_and_owner(self, user, owner):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        _token2, raw2 = _issue(other)
+        binding1 = bind_by_token(user, raw1, ['老婆的账本'])
+        binding2 = bind_by_token(user, raw2, ['孩子的账本'])
+
+        ledgers = resolve_shared_ledgers(user, [binding1.id, binding2.id])
+
+        by_owner = {item['owner']: item for item in ledgers}
+        assert set(by_owner) == {owner, other}
+        assert all(set(item) == {'binding_id', 'aliases', 'owner'} for item in ledgers)
+        assert by_owner[owner]['binding_id'] == binding1.id
+        assert by_owner[owner]['aliases'] == ['老婆的账本']
+        assert by_owner[other]['binding_id'] == binding2.id
+        assert by_owner[other]['aliases'] == ['孩子的账本']
 
 
 @pytest.mark.django_db
@@ -252,53 +370,78 @@ class TestBuildLedgerOptions:
             {'key': 'self', 'label': '我的账本'},
         ]
 
-    def test_shared_entry_uses_binding_label(self, user, owner, assets_dir):
+    def test_shared_entry_uses_binding_aliases(self, user, owner, assets_dir):
         _token, raw_token = _issue(owner)
-        binding = bind_by_token(user, raw_token, label='家庭账本')
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
         options = build_ledger_options(user, [binding.id])
 
         assert options[0] == {'key': 'self', 'label': '我的账本'}
         assert options[1] == {
-            'key': owner.username,
-            'label': '家庭账本',
+            'key': '家庭账本',
+            'keys': ['家庭账本'],
+            'label': f'家庭账本（{owner.username}）',
             'binding_id': binding.id,
         }
 
-    def test_shared_entry_falls_back_to_ledger_title(self, user, owner, assets_dir):
-        owner_dir = assets_dir / owner.username
-        owner_dir.mkdir(parents=True)
-        (owner_dir / 'main.bean').write_text(
-            'option "title" "家庭账本"\n', encoding='utf-8'
-        )
-        token, _raw = _issue(owner)
-        binding = SharedLedgerBinding.objects.create(recipient=user, token=token)
+    def test_shared_entry_key_is_first_alias(self, user, owner, assets_dir):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['老婆的账本', '老婆'])
 
         options = build_ledger_options(user, [binding.id])
 
-        assert options[1]['label'] == '家庭账本'
-        assert options[1]['key'] == owner.username
+        assert options[1]['key'] == '老婆的账本'
+        assert options[1]['keys'] == ['老婆的账本', '老婆']
         assert options[1]['binding_id'] == binding.id
 
-    def test_shared_entry_falls_back_to_default_label(self, user, owner, assets_dir):
-        token, _raw = _issue(owner)
-        binding = SharedLedgerBinding.objects.create(recipient=user, token=token)
+    def test_shared_entry_label_includes_owner_username(self, user, owner, assets_dir):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
 
         options = build_ledger_options(user, [binding.id])
 
-        assert options[1]['label'] == f'{owner.username}的账本'
+        assert options[1]['label'] == f'家庭账本（{owner.username}）'
 
-    def test_shared_entry_falls_back_to_username_label(
-        self, user, owner, monkeypatch,
-    ):
-        # read_ledger_title 恒返回非空串，仅在返回空串时才会走到 username 兜底分支
-        monkeypatch.setattr(
-            'project.apps.assistant.services.shared_ledger.read_ledger_title',
-            lambda _user: '',
-        )
-        token, _raw = _issue(owner)
-        binding = SharedLedgerBinding.objects.create(recipient=user, token=token)
+    def test_shared_entry_without_aliases_uses_owner_username(self, user, owner, assets_dir):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, [])
 
         options = build_ledger_options(user, [binding.id])
 
+        assert options[1]['key'] == owner.username
+        assert options[1]['keys'] == [owner.username]
         assert options[1]['label'] == f'{owner.username} 的账本'
+        assert options[1]['binding_id'] == binding.id
+
+    def test_multiple_shared_entries_use_their_aliases(self, user, owner, assets_dir):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        _token2, raw2 = _issue(other)
+        binding1 = bind_by_token(user, raw1, ['家庭账本'])
+        binding2 = bind_by_token(user, raw2, ['备用账本'])
+
+        options = build_ledger_options(user, [binding1.id, binding2.id])
+
+        assert options[0] == {'key': 'self', 'label': '我的账本'}
+        assert {o['key'] for o in options[1:]} == {'家庭账本', '备用账本'}
+        assert any(
+            o['label'] == f'家庭账本（{owner.username}）' for o in options
+        )
+        assert any(
+            o['label'] == f'备用账本（{other.username}）' for o in options
+        )
+
+    def test_touches_each_binding_once(self, user, owner, assets_dir):
+        other = User.objects.create_user(username='otheruser', password='x')
+        _token1, raw1 = _issue(owner)
+        _token2, raw2 = _issue(other)
+        binding1 = bind_by_token(user, raw1, ['家庭账本'])
+        binding2 = bind_by_token(user, raw2, ['备用账本'])
+
+        with patch(
+            'project.apps.assistant.services.shared_ledger._touch_last_used'
+        ) as spy:
+            options = build_ledger_options(user, [binding1.id, binding2.id])
+
+        assert len(options) == 3
+        assert spy.call_count == 2

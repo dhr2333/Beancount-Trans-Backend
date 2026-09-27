@@ -6,7 +6,6 @@ from django.contrib.auth.models import User
 from project.apps.translate.models import FormatConfig
 
 from .bql_reference import build_bql_capability_reference
-from .fava_url import read_ledger_title
 from .ledger_query import LedgerQueryService
 from .metadata_catalog import format_catalog_for_llm, load_account_catalog, load_tag_catalog
 from .reference_date import build_reference_date_context, get_reference_date
@@ -17,12 +16,25 @@ BQL 速查：默认查询 postings；不要写 FROM / HAVING；账户用 account
 """
 
 
-def build_ledger_options(owner_users) -> list[dict]:
-    """构建账本选项列表：首项恒为 self，其后为共享账本所有者。"""
+def ledger_keys_for(item: dict) -> list[str]:
+    """共享账本可被 Copilot 接受的 ledger 标识：其别名，或来源用户名。"""
+    return list(item.get('aliases') or []) or [item['owner'].username]
+
+
+def build_ledger_options(shared_ledgers: list[dict] | None) -> list[dict]:
+    """构建账本选项列表：首项恒为 self，其后为共享账本（key 取首个可用标识）。"""
     options = [{'key': 'self', 'label': '我的账本'}]
-    for user in owner_users:
-        label = read_ledger_title(user) or f'{user.username} 的账本'
-        options.append({'key': user.username, 'label': label})
+    for item in (shared_ledgers or []):
+        keys = ledger_keys_for(item)
+        if item.get('aliases'):
+            label = f'{keys[0]}（{item["owner"].username}）'
+        else:
+            label = f'{item["owner"].username} 的账本'
+        options.append({
+            'key': keys[0],
+            'keys': keys,
+            'label': label,
+        })
     return options
 
 
@@ -33,15 +45,20 @@ def build_shared_ledger_prompt_block(options: list[dict] | None) -> str:
     shared = [o for o in options if o.get('key') != 'self']
     if not shared:
         return ''
-    ledger_list = '、'.join(
-        f'「{o.get("label") or o.get("key")}」（ledger={o.get("key")}）' for o in options
-    )
+    ledger_lines = []
+    for option in options:
+        keys = list(option.get('keys') or [option.get('key')])
+        label = option.get('label') or option.get('key')
+        ledger_lines.append(f'- {label}：可用标识 {"、".join(str(k) for k in keys)}')
+    ledger_list = '\n'.join(ledger_lines)
     shared_labels = '」「'.join(
         str(o.get('label') or o.get('key')) for o in shared
     )
     return (
         '共享账本说明：\n'
-        f'当前可访问的账本：{ledger_list}。\n'
+        f'当前可访问的账本：\n{ledger_list}\n'
+        '每个共享账本可用其「可用标识」（别名）中的任意一个作为 ledger 参数值；'
+        '没有别名的共享账本以其来源用户名作为标识。\n'
         '规则：\n'
         '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
         '2. 需要对比多个账本时，必须分别对每个账本查询，'
