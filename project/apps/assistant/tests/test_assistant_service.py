@@ -2,8 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from datetime import date
+from types import SimpleNamespace
+
+from django.contrib.auth import get_user_model
 from django.test import override_settings
 
+from project.apps.assistant.models import ChatMessage, ChatSession
 from project.apps.assistant.services.api_key_resolver import DEFAULT_ASSISTANT_MODEL
 from project.apps.assistant.services.assistant_service import (
     AssistantService,
@@ -13,8 +17,13 @@ from project.apps.assistant.services.assistant_service import (
     build_tools,
     get_max_bql_runs,
     get_max_tool_rounds,
+    query_record_to_dict,
+    query_records_from_dicts,
 )
+from project.apps.assistant.tasks import run_assistant_chat
 from project.apps.translate.models import FormatConfig
+
+User = get_user_model()
 
 
 def _make_stream_chunk(*, content=None, reasoning_content=None, tool_call=None, finish_reason=None):
@@ -110,6 +119,29 @@ _EMPTY_MONTH_FOOD_BQL = (
 
 def _make_dsml_content_stream(dsml_text: str):
     return iter([_make_stream_chunk(content=dsml_text)])
+
+
+def _install_fake_ledger_query(monkeypatch, exists_map=None, default_exists=True):
+    """用可控假实现替换 LedgerQueryService，返回按构造顺序记录的用户列表。"""
+    exists = exists_map or {}
+    constructed: list = []
+
+    class FakeLedgerQueryService:
+        def __init__(self, user):
+            self.user = user
+            constructed.append(user)
+
+        def ledger_exists(self):
+            return exists.get(self.user.username, default_exists)
+
+        def execute(self, query):
+            return SimpleNamespace(bql=query, result_text=f'结果:{query}')
+
+    monkeypatch.setattr(
+        'project.apps.assistant.services.assistant_service.LedgerQueryService',
+        FakeLedgerQueryService,
+    )
+    return constructed
 
 
 @pytest.mark.django_db
@@ -552,3 +584,208 @@ class TestAssistantService:
         assert first_kwargs['model'] == DEFAULT_ASSISTANT_MODEL
         assert first_kwargs.get('temperature') == 0.1
         assert 'extra_body' not in first_kwargs
+
+
+@pytest.mark.django_db
+class TestSharedLedgerAssistantService:
+    def test_build_tools_without_ledger_options_has_no_ledger_property(self):
+        tools = build_tools()
+        get_ctx = next(
+            t for t in tools if t['function']['name'] == 'get_ledger_context'
+        )
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+
+        assert 'ledger' not in get_ctx['function']['parameters']['properties']
+        assert 'ledger' not in run_bql['function']['parameters']['properties']
+        assert get_ctx['function']['parameters']['required'] == []
+        assert run_bql['function']['parameters']['required'] == ['query']
+
+    def test_build_tools_with_ledger_options_exposes_ledger_property(self):
+        tools = build_tools(ledger_options=[
+            {'key': 'self', 'label': '我的账本'},
+            {'key': 'wife', 'label': '家庭账本'},
+        ])
+        get_ctx = next(
+            t for t in tools if t['function']['name'] == 'get_ledger_context'
+        )
+        run_bql = next(t for t in tools if t['function']['name'] == 'run_bql')
+
+        get_prop = get_ctx['function']['parameters']['properties']['ledger']
+        run_prop = run_bql['function']['parameters']['properties']['ledger']
+        assert 'self' in get_prop['description']
+        assert 'wife' in get_prop['description']
+        assert '可选值' in get_prop['description']
+        assert run_prop == get_prop
+
+        run_desc = run_bql['function']['description']
+        assert '分账本' in run_desc
+        assert '禁止跨账本相加' in run_desc
+        assert run_bql['function']['parameters']['required'] == ['query']
+
+    def test_build_system_prompt_shared_block_regression(self):
+        ref = date(2026, 6, 16)
+        base = build_system_prompt(ref)
+
+        assert build_system_prompt(ref, shared_ledger_block='') == base
+
+        block = '共享账本说明：测试块'
+        prompt = build_system_prompt(ref, shared_ledger_block=block)
+        assert prompt == f'{base}\n\n{block}'
+
+    def test_query_record_ledger_roundtrip(self):
+        assert 'ledger' not in query_record_to_dict(
+            QueryRecord(bql='SELECT 1', result_preview='x')
+        )
+        assert query_record_to_dict(
+            QueryRecord(bql='SELECT 1', result_preview='x', ledger='wife')
+        )['ledger'] == 'wife'
+
+        records = query_records_from_dicts([
+            {'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': 'wife'},
+            {'bql': 'SELECT 2', 'result_preview': 'y'},
+            {'bql': 'SELECT 3', 'result_preview': 'z', 'ledger': ''},
+        ])
+
+        assert [record.ledger for record in records] == ['wife', '', '']
+
+    def test_ledger_queries_include_shared_owner(self, monkeypatch, user, bean_file):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+
+        service = AssistantService(user, shared_owners=[owner])
+
+        assert set(service.ledger_queries.keys()) == {'self', owner.username}
+
+    def test_dispatch_run_bql_uses_shared_ledger_service(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        constructed = _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(user, shared_owners=[owner])
+        queries: list = []
+
+        result = service._dispatch_tool(
+            'run_bql', {'query': 'SELECT 1', 'ledger': owner.username}, queries
+        )
+
+        assert result == '结果:SELECT 1'
+        assert len(queries) == 1
+        assert queries[0].ledger == owner.username
+        assert queries[0].fava_path == ''
+        assert queries[0].report is None
+        assert service.ledger_queries[owner.username].user == owner
+        assert owner in constructed
+
+    def test_dispatch_run_bql_invalid_ledger_returns_error(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(user, shared_owners=[owner])
+        queries: list = []
+
+        message = service._dispatch_tool(
+            'run_bql', {'query': 'SELECT 1', 'ledger': 'nope'}, queries
+        )
+
+        assert '账本标识无效' in message
+        assert 'self' in message
+        assert owner.username in message
+        assert queries == []
+
+    def test_dispatch_run_bql_defaults_to_self(self, monkeypatch, user, bean_file):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(user, shared_owners=[owner])
+        queries: list = []
+
+        service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        assert len(queries) == 1
+        assert queries[0].ledger == 'self'
+
+    def test_dispatch_get_ledger_context_uses_shared_owner(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(user, shared_owners=[owner])
+
+        with patch(
+            'project.apps.assistant.services.assistant_service.get_ledger_context'
+        ) as mock_ctx:
+            mock_ctx.return_value = 'owner-context'
+            result = service._dispatch_tool(
+                'get_ledger_context', {'ledger': owner.username}, []
+            )
+
+        assert result == 'owner-context'
+        assert mock_ctx.call_args[0][0] == owner
+
+    def test_no_shared_owners_regression(self, monkeypatch, user, bean_file):
+        _install_fake_ledger_query(monkeypatch)
+
+        service = AssistantService(user)
+
+        assert service.ledger_options == [{'key': 'self', 'label': '我的账本'}]
+        assert set(service.ledger_queries.keys()) == {'self'}
+        assert service.has_any_ledger is True
+
+    def test_has_any_ledger_true_when_only_shared_exists(self, monkeypatch, user):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(
+            monkeypatch,
+            exists_map={user.username: False, owner.username: True},
+            default_exists=False,
+        )
+
+        service = AssistantService(user, shared_owners=[owner])
+
+        assert service.has_any_ledger is True
+
+    def test_has_any_ledger_false_when_none_exists(self, monkeypatch, user):
+        _install_fake_ledger_query(monkeypatch, default_exists=False)
+
+        service = AssistantService(user)
+
+        assert service.has_any_ledger is False
+
+    def test_run_assistant_chat_passes_shared_owners(self, user):
+        owner = User.objects.create_user(username='wife', password='x')
+        session = ChatSession.objects.create(user=user, title='测试会话')
+        user_message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_USER,
+            content='你好',
+            position=1,
+        )
+        assistant_message = ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content='',
+            position=2,
+            generation_status=ChatMessage.STATUS_GENERATING,
+        )
+        owners = [owner]
+
+        with patch(
+            'project.apps.assistant.tasks.resolve_shared_owners'
+        ) as mock_resolve, patch(
+            'project.apps.assistant.tasks.AssistantService'
+        ) as mock_service_cls:
+            mock_resolve.return_value = owners
+            mock_service_cls.return_value._iter_chat_events.return_value = iter([])
+
+            run_assistant_chat(
+                user.id,
+                str(session.id),
+                str(assistant_message.id),
+                str(user_message.id),
+                False,
+                False,
+                [7, 8],
+            )
+
+            mock_resolve.assert_called_once_with(user, [7, 8])
+            _args, kwargs = mock_service_cls.call_args
+            assert kwargs['shared_owners'] == owners

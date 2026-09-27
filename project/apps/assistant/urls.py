@@ -10,10 +10,16 @@ from .views import (
     AssistantMessageStopView,
     AssistantStatusView,
     ChatSessionViewSet,
+    SharedLedgerBindingViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'sessions', ChatSessionViewSet, basename='assistant-session')
+router.register(
+    r'shared-ledgers',
+    SharedLedgerBindingViewSet,
+    basename='assistant-shared-ledger',
+)
 
 urlpatterns = [
     path('chat/', AssistantChatView.as_view(), name='assistant-chat'),

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import ChatMessage, ChatSession
+from .services.shared_ledger import get_max_shared_ledgers
 
 
 class ChatMessageSerializer(serializers.Serializer):
@@ -15,12 +16,24 @@ class AssistantChatRequestSerializer(serializers.Serializer):
     edit_message_id = serializers.UUIDField(required=False, allow_null=True)
     show_bql = serializers.BooleanField(default=False, required=False)
     deep_think = serializers.BooleanField(default=False, required=False)
+    shared_binding_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
 
     def validate(self, attrs):
         messages = attrs.get('messages')
         session_id = attrs.get('session_id')
         content = attrs.get('content')
         edit_message_id = attrs.get('edit_message_id')
+
+        binding_ids = attrs.get('shared_binding_ids') or []
+        max_n = get_max_shared_ledgers()
+        if len(binding_ids) > max_n:
+            raise serializers.ValidationError({
+                'shared_binding_ids': f'一次最多纳入 {max_n} 个共享账本',
+            })
 
         if edit_message_id is not None and session_id is None:
             raise serializers.ValidationError({'edit_message_id': '编辑消息需要提供 session_id'})
@@ -47,6 +60,7 @@ class QueryReportLinkSerializer(serializers.Serializer):
 class QueryRecordSerializer(serializers.Serializer):
     bql = serializers.CharField()
     result_preview = serializers.CharField()
+    ledger = serializers.CharField(required=False, allow_blank=True, default='')
     fava_path = serializers.CharField(required=False, allow_blank=True, default='')
     report = QueryReportLinkSerializer(required=False, allow_null=True)
 
@@ -159,3 +173,18 @@ class ChatSessionUpdateSerializer(serializers.ModelSerializer):
         if not title:
             raise serializers.ValidationError('标题不能为空')
         return title[:120]
+
+
+class BindSharedLedgerSerializer(serializers.Serializer):
+    token = serializers.CharField(write_only=True, trim_whitespace=True)
+    label = serializers.CharField(max_length=64, required=False, allow_blank=True, default='')
+
+
+class SharedLedgerBindingSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    owner_username = serializers.CharField()
+    label = serializers.CharField(allow_blank=True, default='')
+    usable = serializers.BooleanField()
+    expires_at = serializers.DateTimeField(allow_null=True, required=False)
+    last_used_at = serializers.DateTimeField(allow_null=True, required=False)
+    created = serializers.DateTimeField()

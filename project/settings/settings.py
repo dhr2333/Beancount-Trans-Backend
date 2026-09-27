@@ -652,6 +652,7 @@ ASSISTANT_MODEL = os.environ.get('ASSISTANT_MODEL', 'deepseek-v4-flash')
 ASSISTANT_MAX_BQL_ROWS = int(os.environ.get('ASSISTANT_MAX_BQL_ROWS', '100'))
 ASSISTANT_MAX_BQL_RUNS = int(os.environ.get('ASSISTANT_MAX_BQL_RUNS', '5'))
 ASSISTANT_MAX_TOOL_ROUNDS = int(os.environ.get('ASSISTANT_MAX_TOOL_ROUNDS', '8'))
+ASSISTANT_MAX_SHARED_LEDGERS = int(os.environ.get('ASSISTANT_MAX_SHARED_LEDGERS', '3'))
 
 # 条目审核去重
 ENTRY_REVIEW_DEDUP_ENABLED = os.environ.get('ENTRY_REVIEW_DEDUP_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on')

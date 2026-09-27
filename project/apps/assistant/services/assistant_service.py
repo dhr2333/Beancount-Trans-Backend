@@ -25,7 +25,13 @@ from .reply_number_guard import (
 )
 from .insight_mode import INSIGHT_MODE_BLOCK, detect_insight_mode, get_last_user_message
 from .fava_url import query_record_fava_fields
-from .schema_provider import build_bql_examples, build_insight_bql_examples, get_ledger_context
+from .schema_provider import (
+    build_bql_examples,
+    build_insight_bql_examples,
+    build_ledger_options,
+    build_shared_ledger_prompt_block,
+    get_ledger_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +85,7 @@ def build_system_prompt(
     reference_date: date | None = None,
     *,
     insight_mode: bool = False,
+    shared_ledger_block: str = '',
 ) -> str:
     ref = reference_date or get_reference_date()
     bql_examples = build_bql_examples(ref)
@@ -92,10 +99,17 @@ def build_system_prompt(
     )
     if insight_mode:
         prompt = f'{prompt}\n\n{INSIGHT_MODE_BLOCK}'
+    if shared_ledger_block:
+        prompt = f'{prompt}\n\n{shared_ledger_block}'
     return prompt
 
 
-def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
+def build_tools(
+    *,
+    insight_mode: bool = False,
+    ledger_options: list[dict] | None = None,
+) -> list[dict[str, Any]]:
+    has_shared = bool([o for o in (ledger_options or []) if o.get('key') != 'self'])
     run_bql_description = (
         '执行只读 BQL 查询并返回表格结果。必须 SELECT 开头；'
         '分析/余额/合计/对比类问题必须用 sum(units(position)) 与 GROUP BY 聚合，禁止拉明细后心算；'
@@ -112,6 +126,20 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
             '允许 FROM entries 查 meta/Balance/Pad；'
             'links/tags 用 IN 语法；'
             '发现异常线索后必须追溯历史（同 payee 跨月、同 link、同 tag 等）。'
+        )
+    ledger_property: dict[str, Any] | None = None
+    if has_shared:
+        ledger_keys = '、'.join(str(o.get('key')) for o in (ledger_options or []))
+        ledger_property = {
+            'type': 'string',
+            'description': (
+                '账本标识：self=我的账本，<owner_username>=共享账本；'
+                f'缺省 self。可选值：{ledger_keys}'
+            ),
+        }
+        run_bql_description += (
+            ' 需要对比多个账本时必须分别对每个账本查询并分账本标注来源，'
+            '禁止跨账本相加；共享账本只读。'
         )
     max_bookkeeping_entries = int(
         getattr(settings, 'COPILOT_BOOKKEEPING_MAX_ENTRIES', 10)
@@ -138,7 +166,13 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
                     '获取用户账本上下文：平台账户/标签目录（含描述）、'
                     '账本实际账户、默认货币、BQL 语法说明与查询示例'
                 ),
-                'parameters': {'type': 'object', 'properties': {}, 'required': []},
+                'parameters': {
+                    'type': 'object',
+                    'properties': (
+                        {'ledger': ledger_property} if ledger_property else {}
+                    ),
+                    'required': [],
+                },
             },
         },
         {
@@ -152,7 +186,8 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
                         'query': {
                             'type': 'string',
                             'description': 'BQL SELECT 查询语句，参考示例写法',
-                        }
+                        },
+                        **({'ledger': ledger_property} if ledger_property else {}),
                     },
                     'required': ['query'],
                 },
@@ -240,8 +275,6 @@ def build_tools(*, insight_mode: bool = False) -> list[dict[str, Any]]:
     ]
 
 
-TOOLS = build_tools()
-
 _BOOKKEEPING_TYPE_LABELS = {'expense': '支出', 'income': '收入', 'transfer': '转账'}
 
 
@@ -309,6 +342,7 @@ class QueryRecord:
     result_preview: str
     fava_path: str = ''
     report: dict[str, Any] | None = None
+    ledger: str = ''
 
 
 def query_record_to_dict(record: QueryRecord) -> dict[str, Any]:
@@ -320,6 +354,8 @@ def query_record_to_dict(record: QueryRecord) -> dict[str, Any]:
         payload['fava_path'] = record.fava_path
     if record.report:
         payload['report'] = record.report
+    if record.ledger:
+        payload['ledger'] = record.ledger
     return payload
 
 
@@ -333,6 +369,7 @@ def query_records_from_dicts(records: list[dict[str, Any]]) -> list[QueryRecord]
             result_preview=record['result_preview'],
             fava_path=record.get('fava_path') or '',
             report=record.get('report'),
+            ledger=record.get('ledger') or '',
         ))
     return result
 
@@ -374,10 +411,18 @@ class AssistantService:
         reference_date: date | None = None,
         *,
         deep_think: bool = False,
+        shared_owners: list[User] | None = None,
     ):
         self.user = user
         self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
+        self.ledger_options = build_ledger_options(shared_owners or [])
+        self.ledger_queries: dict[str, LedgerQueryService] = {'self': self.ledger_query}
+        for owner in (shared_owners or []):
+            self.ledger_queries[owner.username] = LedgerQueryService(owner)
+        self.has_any_ledger = any(
+            svc.ledger_exists() for svc in self.ledger_queries.values()
+        )
         self.deep_think = deep_think
         self.provider = resolve_llm_provider(user)
         self.model = self.provider.model
@@ -396,23 +441,45 @@ class AssistantService:
 
     def _dispatch_tool(self, name: str, arguments: dict[str, Any], queries: list[QueryRecord]) -> str:
         if name == 'get_ledger_context':
-            return get_ledger_context(self.user, reference_date=self.reference_date)
+            ledger = arguments.get('ledger') or 'self'
+            service = self.ledger_queries.get(ledger)
+            if service is None:
+                return (
+                    f'账本标识无效: {ledger}；'
+                    f'可用账本: {", ".join(self.ledger_queries)}'
+                )
+            return get_ledger_context(service.user, reference_date=self.reference_date)
 
         if name == 'run_bql':
+            ledger = arguments.get('ledger') or 'self'
+            service = self.ledger_queries.get(ledger)
+            if service is None:
+                return (
+                    f'账本标识无效: {ledger}；'
+                    f'可用账本: {", ".join(self.ledger_queries)}'
+                )
             if len(queries) >= self.max_bql_runs:
                 return (
                     f'已达本问题 BQL 查询上限（{self.max_bql_runs} 次），请根据已有结果作答。'
                 )
             query = arguments.get('query', '')
             try:
-                result = self.ledger_query.execute(query)
-                fava_fields = query_record_fava_fields(self.user, result.bql)
-                queries.append(QueryRecord(
-                    bql=result.bql,
-                    result_preview=result.result_text,
-                    fava_path=fava_fields.get('fava_path', ''),
-                    report=fava_fields.get('report'),
-                ))
+                result = service.execute(query)
+                if ledger == 'self':
+                    fava_fields = query_record_fava_fields(self.user, result.bql)
+                    queries.append(QueryRecord(
+                        bql=result.bql,
+                        result_preview=result.result_text,
+                        fava_path=fava_fields.get('fava_path', ''),
+                        report=fava_fields.get('report'),
+                        ledger='self',
+                    ))
+                else:
+                    queries.append(QueryRecord(
+                        bql=result.bql,
+                        result_preview=result.result_text,
+                        ledger=ledger,
+                    ))
                 return result.result_text
             except BQLValidationError as exc:
                 return str(exc)
@@ -434,7 +501,11 @@ class AssistantService:
                 result = CopilotBookkeepingService.create_entries(self.user, entries)
                 if not isinstance(result, dict):
                     return '记账失败: 记账服务返回了异常结果。'
-                return format_bookkeeping_result(result)
+                text = format_bookkeeping_result(result)
+                requested_ledger = arguments.get('ledger')
+                if requested_ledger not in (None, '', 'self'):
+                    text += '\n（注意：记账仅支持写入本人账本，已忽略 ledger 参数。）'
+                return text
             except Exception as exc:
                 logger.exception('Copilot 记账工具执行失败')
                 return f'记账失败: {exc}'
@@ -726,8 +797,8 @@ class AssistantService:
         if not provider.configured:
             raise ValueError(PROVIDER_NOT_CONFIGURED_MESSAGE)
 
-        if not self.ledger_query.ledger_exists():
-            raise LedgerNotFoundError('账本文件尚未创建，请先上传并解析账单。')
+        if not self.has_any_ledger:
+            raise LedgerNotFoundError('尚未创建任何可访问的账本，请先上传并解析账单。')
 
         if len(messages) > self.MAX_MESSAGES:
             messages = messages[-self.MAX_MESSAGES:]
@@ -736,11 +807,15 @@ class AssistantService:
         queries: list[QueryRecord] = []
         last_user_message = get_last_user_message(messages)
         insight_mode = detect_insight_mode(last_user_message)
-        tools = build_tools(insight_mode=insight_mode)
+        tools = build_tools(insight_mode=insight_mode, ledger_options=self.ledger_options)
         llm_messages: list[dict[str, Any]] = [
             {
                 'role': 'system',
-                'content': build_system_prompt(self.reference_date, insight_mode=insight_mode),
+                'content': build_system_prompt(
+                    self.reference_date,
+                    insight_mode=insight_mode,
+                    shared_ledger_block=build_shared_ledger_prompt_block(self.ledger_options),
+                ),
             },
             *messages,
         ]

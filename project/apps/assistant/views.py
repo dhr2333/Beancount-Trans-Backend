@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import AssistantFeedback, ChatMessage, ChatSession
+from .models import AssistantFeedback, ChatMessage, ChatSession, SharedLedgerBinding
 from .serializers import (
     AssistantChatRequestSerializer,
     AssistantChatResponseSerializer,
@@ -21,9 +21,11 @@ from .serializers import (
     AssistantKeyTestRequestSerializer,
     AssistantKeyTestResponseSerializer,
     AssistantStatusSerializer,
+    BindSharedLedgerSerializer,
     ChatSessionDetailSerializer,
     ChatSessionListSerializer,
     ChatSessionUpdateSerializer,
+    SharedLedgerBindingSerializer,
 )
 from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService, format_sse
@@ -45,6 +47,13 @@ from .services.session_service import (
     list_user_sessions,
     set_message_celery_task_id,
     update_session_title,
+)
+from .services.shared_ledger import (
+    TokenInvalidError,
+    bind_by_token,
+    bindings_with_usability,
+    resolve_shared_owners,
+    unbind,
 )
 from .tasks import run_assistant_chat
 from .throttles import AssistantChatThrottle
@@ -176,6 +185,75 @@ class ChatSessionViewSet(
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class SharedLedgerBindingViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return (
+            SharedLedgerBinding.objects
+            .filter(recipient=self.request.user)
+            .select_related('token', 'token__user')
+        )
+
+    @extend_schema(
+        responses={200: SharedLedgerBindingSerializer(many=True)},
+        summary='列出共享账本绑定',
+    )
+    def list(self, request, *args, **kwargs):
+        rows = bindings_with_usability(request.user)
+        serializer = SharedLedgerBindingSerializer(rows, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        request=BindSharedLedgerSerializer,
+        responses={201: SharedLedgerBindingSerializer},
+        summary='绑定共享账本',
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = BindSharedLedgerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            binding = bind_by_token(
+                request.user,
+                serializer.validated_data['token'],
+                serializer.validated_data.get('label', ''),
+            )
+        except TokenInvalidError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = {
+            'id': binding.id,
+            'owner_username': binding.token.user.username,
+            'label': binding.label or '',
+            'usable': binding.is_usable(),
+            'expires_at': binding.token.expires_at,
+            'last_used_at': binding.last_used_at,
+            'created': binding.created,
+        }
+        return Response(
+            SharedLedgerBindingSerializer(data).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @extend_schema(
+        responses={204: OpenApiResponse(description='已解除绑定')},
+        summary='解除共享账本绑定',
+    )
+    def destroy(self, request, *args, **kwargs):
+        try:
+            unbind(request.user, kwargs.get('pk'))
+        except SharedLedgerBinding.DoesNotExist:
+            return Response({'detail': '共享账本绑定不存在'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class AssistantChatView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
@@ -196,9 +274,15 @@ class AssistantChatView(APIView):
         ]
         show_bql = serializer.validated_data.get('show_bql', False)
         deep_think = serializer.validated_data.get('deep_think', False)
+        requested_binding_ids = serializer.validated_data.get('shared_binding_ids') or []
+        owners = resolve_shared_owners(request.user, requested_binding_ids)
 
         try:
-            service = AssistantService(request.user, deep_think=deep_think)
+            service = AssistantService(
+                request.user,
+                deep_think=deep_think,
+                shared_owners=owners,
+            )
             result = service.chat(messages, show_bql=show_bql)
         except LedgerNotFoundError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_404_NOT_FOUND)
@@ -214,7 +298,7 @@ class AssistantChatView(APIView):
         response_data = {
             'reply': result.reply,
             'queries': [
-                {'bql': q.bql, 'result_preview': q.result_preview}
+                {'bql': q.bql, 'result_preview': q.result_preview, 'ledger': q.ledger}
                 for q in result.queries
             ],
             'thinking': result.thinking,
@@ -253,6 +337,7 @@ class AssistantChatStreamView(APIView):
         session_id = validated.get('session_id')
         content = validated.get('content')
         legacy_messages = validated.get('messages')
+        requested_binding_ids = validated.get('shared_binding_ids') or []
 
         provider = resolve_llm_provider(request.user)
         if not provider.configured:
@@ -260,10 +345,11 @@ class AssistantChatStreamView(APIView):
                 {'detail': '尚未配置助手模型，请在「输出配置」的账本助手中填写接口与密钥（Ollama 可省略密钥）。'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        precheck_owners = resolve_shared_owners(request.user, requested_binding_ids)
         ledger_service = LedgerQueryService(request.user)
-        if not ledger_service.ledger_exists():
+        if not ledger_service.ledger_exists() and not precheck_owners:
             return Response(
-                {'detail': '账本文件尚未创建，请先上传并解析账单。'},
+                {'detail': '尚未创建任何可访问的账本，请先上传并解析账单。'},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -305,6 +391,16 @@ class AssistantChatStreamView(APIView):
                 for msg in legacy_messages or []
             ]
 
+        binding_ids: list[int] = []
+        owners = precheck_owners
+        if persist_session is not None:
+            stored_ids = list(persist_session.shared_binding_ids or [])
+            binding_ids = list(requested_binding_ids) or stored_ids
+            persist_session.shared_binding_ids = list(binding_ids)
+            persist_session.save(update_fields=['shared_binding_ids', 'modified'])
+            if binding_ids != requested_binding_ids:
+                owners = resolve_shared_owners(request.user, binding_ids)
+
         if persist_session is not None and user_message is not None and assistant_message is not None:
             def persistent_event_stream() -> Iterator[str]:
                 yield format_sse('session', {
@@ -321,6 +417,7 @@ class AssistantChatStreamView(APIView):
                     str(user_message.id),
                     show_bql,
                     deep_think,
+                    list(binding_ids),
                 )
                 set_message_celery_task_id(assistant_message, task.id)
 
@@ -335,7 +432,11 @@ class AssistantChatStreamView(APIView):
             return response
 
         def legacy_event_stream() -> Iterator[str]:
-            stream_service = AssistantService(request.user, deep_think=deep_think)
+            stream_service = AssistantService(
+                request.user,
+                deep_think=deep_think,
+                shared_owners=owners,
+            )
             accumulator = StreamAccumulator()
             done_payload = None
             emitted_error = False

@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from project.apps.translate.models import FormatConfig
 
 from .bql_reference import build_bql_capability_reference
+from .fava_url import read_ledger_title
 from .ledger_query import LedgerQueryService
 from .metadata_catalog import format_catalog_for_llm, load_account_catalog, load_tag_catalog
 from .reference_date import build_reference_date_context, get_reference_date
@@ -14,6 +15,40 @@ BQL_SCHEMA_HINT = """
 BQL 速查：默认查询 postings；不要写 FROM / HAVING；账户用 account ~ 正则；
 金额汇总用 sum(units(position))；详见下方「BQL 能力说明」。
 """
+
+
+def build_ledger_options(owner_users) -> list[dict]:
+    """构建账本选项列表：首项恒为 self，其后为共享账本所有者。"""
+    options = [{'key': 'self', 'label': '我的账本'}]
+    for user in owner_users:
+        label = read_ledger_title(user) or f'{user.username} 的账本'
+        options.append({'key': user.username, 'label': label})
+    return options
+
+
+def build_shared_ledger_prompt_block(options: list[dict] | None) -> str:
+    """生成共享账本说明块；无共享账本时返回空串（保证提示词不变）。"""
+    if not options:
+        return ''
+    shared = [o for o in options if o.get('key') != 'self']
+    if not shared:
+        return ''
+    ledger_list = '、'.join(
+        f'「{o.get("label") or o.get("key")}」（ledger={o.get("key")}）' for o in options
+    )
+    shared_labels = '」「'.join(
+        str(o.get('label') or o.get('key')) for o in shared
+    )
+    return (
+        '共享账本说明：\n'
+        f'当前可访问的账本：{ledger_list}。\n'
+        '规则：\n'
+        '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
+        '2. 需要对比多个账本时，必须分别对每个账本查询，'
+        f'并在结论中分账本标注来源（如「我的账本」「{shared_labels}」）。\n'
+        '3. 除用户明确要求合并外，禁止把不同账本的金额相加或混算。\n'
+        '4. 共享账本为只读；record_transaction 只能写入我的账本（self）。'
+    )
 
 
 def _last_month(reference_date: date) -> tuple[int, int]:

@@ -19,6 +19,7 @@ from project.apps.assistant.services.session_service import (
     collect_prior_query_records,
     update_assistant_message,
 )
+from project.apps.assistant.services.shared_ledger import resolve_shared_owners
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ def run_assistant_chat(
     user_message_id: str,
     show_bql: bool = False,
     deep_think: bool = False,
+    shared_binding_ids: list[int] | None = None,
 ) -> None:
     User = get_user_model()
     message_uuid = UUID(assistant_message_id)
@@ -135,7 +137,8 @@ def run_assistant_chat(
 
     llm_messages = build_llm_messages(session)
     prior_queries = collect_prior_query_records(session)
-    service = AssistantService(user, deep_think=deep_think)
+    owners = resolve_shared_owners(user, shared_binding_ids or [])
+    service = AssistantService(user, deep_think=deep_think, shared_owners=owners)
     accumulator = StreamAccumulator()
     last_persist = 0.0
 

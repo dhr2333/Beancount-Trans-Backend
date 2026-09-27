@@ -15,6 +15,11 @@ class ChatSession(BaseModel):
     )
     title = models.CharField(max_length=120, blank=True, default='')
     title_locked = models.BooleanField(default=False)
+    shared_binding_ids = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='会话纳入的共享账本绑定',
+    )
 
     class Meta:
         verbose_name = '助手会话'
@@ -114,3 +119,44 @@ class AssistantFeedback(BaseModel):
 
     def __str__(self) -> str:
         return f'{self.user_id} {self.rating} {self.message_id}'
+
+
+class SharedLedgerBinding(BaseModel):
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='shared_ledger_bindings',
+        verbose_name='接收方',
+    )
+    token = models.ForeignKey(
+        'authentication.PersonalAccessToken',
+        on_delete=models.CASCADE,
+        related_name='ledger_bindings',
+        verbose_name='访问令牌',
+    )
+    label = models.CharField(max_length=64, blank=True, default='', verbose_name='备注')
+    last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='最后使用时间')
+
+    class Meta:
+        verbose_name = '共享账本绑定'
+        verbose_name_plural = verbose_name
+        ordering = ['-created']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['recipient', 'token'],
+                name='shared_ledger_binding_recipient_token_unique',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['recipient']),
+        ]
+
+    def __str__(self) -> str:
+        return f'{self.recipient_id} -> {self.token_id}'
+
+    @property
+    def owner(self):
+        return self.token.user
+
+    def is_usable(self) -> bool:
+        return self.token.is_usable() and self.token.user.is_active
