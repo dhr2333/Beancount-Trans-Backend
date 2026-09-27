@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.14.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.13.0...5.14.0) (2026-09-27)
+
+### Features
+
+* **assistant:** 优化共享账本处理逻辑、提示文案与参数校验 ([21411eb](https://github.com/dhr2333/Beancount-Trans-Backend/commit/21411eb0f11d3e980a43133cd3b4c239d2206978))
+* **assistant:** 实现共享账本绑定与跨账本查询支持 ([c4fe172](https://github.com/dhr2333/Beancount-Trans-Backend/commit/c4fe17276239a352a16b2a4f97cb1f66d53a4d0f))
+* **shared-ledger:** 新增共享账本可用性检查并优化提示词与错误处理 ([cea1a8d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/cea1a8de5c7fb51aa48977811acb1e813bc79736))
+* **共享账本绑定:** 支持共享账本绑定使用多个别名 ([7015a50](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7015a50b4eb27d85e8597c4cb51649dd6ad057a5))
+
 ## [5.13.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.12.1...5.13.0) (2026-09-26)
 
 ### Features
