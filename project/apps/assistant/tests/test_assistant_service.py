@@ -619,8 +619,8 @@ class TestSharedLedgerAssistantService:
         assert run_prop == get_prop
 
         run_desc = run_bql['function']['description']
-        assert '分账本' in run_desc
-        assert '禁止跨账本相加' in run_desc
+        assert '来源账本' in run_desc
+        assert '重复计入' in run_desc
         assert run_bql['function']['parameters']['required'] == ['query']
 
     def test_build_system_prompt_shared_block_regression(self):

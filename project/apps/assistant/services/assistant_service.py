@@ -144,8 +144,10 @@ def build_tools(
             ),
         }
         run_bql_description += (
-            ' 需要对比多个账本时必须分别对每个账本查询并分账本标注来源，'
-            '禁止跨账本相加；共享账本只读。'
+            ' 多个账本是同一批数据来源：需要综合、合计或对比时，'
+            '分别对相关账本查询并统一呈现，结论须标注每项数字的来源账本；'
+            '跨账本合计时说明合计口径，并提示两账本间往来/转账可能被重复计入；'
+            '共享账本只读。'
         )
     max_bookkeeping_entries = int(
         getattr(settings, 'COPILOT_BOOKKEEPING_MAX_ENTRIES', 10)
