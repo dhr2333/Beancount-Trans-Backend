@@ -19,7 +19,8 @@ class AssistantChatRequestSerializer(serializers.Serializer):
     shared_binding_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
-        default=list,
+        default=None,
+        allow_null=True,
     )
 
     def validate(self, attrs):
@@ -28,12 +29,13 @@ class AssistantChatRequestSerializer(serializers.Serializer):
         content = attrs.get('content')
         edit_message_id = attrs.get('edit_message_id')
 
-        binding_ids = attrs.get('shared_binding_ids') or []
-        max_n = get_max_shared_ledgers()
-        if len(binding_ids) > max_n:
-            raise serializers.ValidationError({
-                'shared_binding_ids': f'一次最多纳入 {max_n} 个共享账本',
-            })
+        binding_ids = attrs.get('shared_binding_ids')
+        if binding_ids is not None:
+            max_n = get_max_shared_ledgers()
+            if len(binding_ids) > max_n:
+                raise serializers.ValidationError({
+                    'shared_binding_ids': f'一次最多纳入 {max_n} 个共享账本',
+                })
 
         if edit_message_id is not None and session_id is None:
             raise serializers.ValidationError({'edit_message_id': '编辑消息需要提供 session_id'})

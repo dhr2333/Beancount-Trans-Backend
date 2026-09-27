@@ -152,10 +152,10 @@ def build_tools(
             'description': ledger_description,
         }
         run_bql_description += (
-            ' 多个账本是同一批数据来源：需要综合、合计或对比时，'
-            '分别对相关账本查询并统一呈现，结论须标注每项数字的来源账本；'
-            '跨账本合计时说明合计口径，并提示两账本间往来/转账可能被重复计入；'
-            '共享账本只读。'
+            ' 查询顺序：默认先查 self；仅当本人账本不存在、或对 self 的查询返回空结果/无相关记录时，'
+            '才改用相关的共享账本再查一次（用户点名可用标识、或要求跨账本对比/合计时可直接查共享账本）。'
+            '跨账本合计仅在用户明确要求时进行，需说明合计口径、标注每项数字的来源账本，'
+            '并提示两账本间往来/转账可能被重复计入；共享账本只读。'
         )
     max_bookkeeping_entries = int(
         getattr(settings, 'COPILOT_BOOKKEEPING_MAX_ENTRIES', 10)
@@ -510,6 +510,11 @@ class AssistantService:
                         report=fava_fields.get('report'),
                         ledger='self',
                     ))
+                    if result.row_count == 0 and len(self.ledger_queries) > 1:
+                        return (
+                            result.result_text
+                            + '\n（本人账本无结果；如需，可用 ledger=<共享账本可用标识> 再查一次）'
+                        )
                 else:
                     queries.append(QueryRecord(
                         bql=result.bql,

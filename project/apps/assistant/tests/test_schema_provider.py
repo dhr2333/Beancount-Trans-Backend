@@ -287,7 +287,10 @@ class TestBuildSharedLedgerPromptBlock:
         assert '- kid 的账本：可用标识 kid' in block
         assert '任意' in block
         assert '缺省 self' in block
-        assert '同一批可用数据来源' in block
+        assert '默认先查 self' in block
+        assert '没有返回任何结果' in block
+        assert '点名' in block
+        assert '仅在用户明确要求' in block
         assert '重复计入' in block
         assert 'record_transaction' in block
 

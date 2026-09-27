@@ -2,12 +2,13 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from project.apps.assistant.models import SharedLedgerBinding
+from project.apps.assistant.models import ChatSession, SharedLedgerBinding
 from project.apps.assistant.services.api_key_resolver import DEFAULT_ASSISTANT_MODEL
 from project.apps.assistant.tests.conftest import SAMPLE_BEAN
 from project.apps.assistant.tests.test_assistant_service import (
@@ -26,6 +27,14 @@ def api_client(user):
     client = APIClient()
     client.force_authenticate(user=user)
     return client
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_cache():
+    """避免用例间共享 assistant_chat 限流计数（20/hour）导致误报 429。"""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture
@@ -540,3 +549,91 @@ class TestSharedLedgerAPI:
         assert response.status_code == 201
         assert response.data['aliases'] == ['老婆的账本', '老婆']
         assert 'label' not in response.data
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.tasks.AssistantService._iter_chat_events')
+    def test_stream_without_binding_ids_records_all_usable_newest_first(
+        self, mock_iter, api_client, user, bean_file, owner_user,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        mock_iter.return_value = iter([])
+
+        first = self._post_binding(api_client, owner_user)
+        other = User.objects.create_user(username='streamother1', password='x')
+        second = self._post_binding(api_client, other)
+        assert first.status_code == 201
+        assert second.status_code == 201
+        first_id = first.data['id']
+        second_id = second.data['id']
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {'content': '你好'},
+            format='json',
+            HTTP_ACCEPT='text/event-stream',
+        )
+
+        # 缺省即全部可用：不因未传字段而 404
+        assert response.status_code != 404
+        b''.join(response.streaming_content)
+        session = ChatSession.objects.get(user=user)
+        assert session.shared_binding_ids == [second_id, first_id]
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.tasks.AssistantService._iter_chat_events')
+    def test_stream_empty_ids_overrides_stored_session_ids(
+        self, mock_iter, api_client, user, bean_file, owner_user,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        mock_iter.return_value = iter([])
+
+        created = self._post_binding(api_client, owner_user)
+        binding_id = created.data['id']
+        session = ChatSession.objects.create(
+            user=user, title='旧会话', shared_binding_ids=[binding_id],
+        )
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {
+                'session_id': str(session.id),
+                'content': '你好',
+                'shared_binding_ids': [],
+            },
+            format='json',
+            HTTP_ACCEPT='text/event-stream',
+        )
+
+        assert response.status_code == 200
+        b''.join(response.streaming_content)
+        session.refresh_from_db()
+        # 显式 [] 表示仅本人账本，不得回退到会话旧值
+        assert session.shared_binding_ids == []
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.tasks.AssistantService._iter_chat_events')
+    def test_stream_subset_ids_records_subset(
+        self, mock_iter, api_client, user, bean_file, owner_user,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        mock_iter.return_value = iter([])
+
+        first = self._post_binding(api_client, owner_user)
+        other = User.objects.create_user(username='streamother2', password='x')
+        self._post_binding(api_client, other)
+        first_id = first.data['id']
+
+        response = api_client.post(
+            reverse('assistant-chat-stream'),
+            {'content': '你好', 'shared_binding_ids': [first_id]},
+            format='json',
+            HTTP_ACCEPT='text/event-stream',
+        )
+
+        assert response.status_code != 404
+        b''.join(response.streaming_content)
+        session = ChatSession.objects.get(user=user)
+        assert session.shared_binding_ids == [first_id]

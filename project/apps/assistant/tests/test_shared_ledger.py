@@ -1,9 +1,11 @@
 """共享账本绑定服务层测试：令牌校验、绑定增删、可用性解析与账本选项。"""
+import logging
 from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.utils import timezone
 
 from project.apps.assistant.models import SharedLedgerBinding
@@ -12,9 +14,11 @@ from project.apps.assistant.services.shared_ledger import (
     bind_by_token,
     bindings_with_usability,
     build_ledger_options,
+    effective_binding_ids,
     has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
+    usable_binding_ids,
 )
 from project.apps.authentication.models import PersonalAccessToken
 
@@ -220,6 +224,78 @@ class TestBindByToken:
 
 
 @pytest.mark.django_db
+class TestBindByTokenCap:
+    def _bind_owner(self, user, username, alias=''):
+        owner = User.objects.create_user(username=username, password='x')
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, [alias] if alias else [])
+        return owner, binding
+
+    def test_three_distinct_owners_allowed(self, user):
+        for i in range(3):
+            self._bind_owner(user, f'capowner{i}')
+
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 3
+
+    def test_fourth_distinct_owner_rejected(self, user):
+        for i in range(3):
+            self._bind_owner(user, f'capowner{i}')
+        fourth = User.objects.create_user(username='capowner3', password='x')
+        _token, raw_token = _issue(fourth)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw_token, [])
+
+        assert str(exc_info.value) == '最多绑定 3 个共享账本，请先解除一个'
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 3
+
+    @override_settings(ASSISTANT_MAX_SHARED_LEDGERS=1)
+    def test_custom_max_rejects_second_owner(self, user):
+        self._bind_owner(user, 'capowner0')
+        second = User.objects.create_user(username='capowner1', password='x')
+        _token, raw_token = _issue(second)
+
+        with pytest.raises(TokenInvalidError) as exc_info:
+            bind_by_token(user, raw_token, [])
+
+        assert str(exc_info.value) == '最多绑定 1 个共享账本，请先解除一个'
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 1
+
+    def test_same_owner_rebind_allowed_at_cap_when_previous_unusable(self, user):
+        owners = []
+        for i in range(3):
+            owner, _binding = self._bind_owner(user, f'capowner{i}')
+            owners.append(owner)
+        # 撤销第 3 个 owner 的令牌，使其绑定不可用
+        revoked = SharedLedgerBinding.objects.get(
+            recipient=user, token__user=owners[2]
+        )
+        revoked.token.revoked_at = timezone.now()
+        revoked.token.save(update_fields=['revoked_at'])
+        # 新的第 4 个 owner 绑定，重新达到可用上限
+        self._bind_owner(user, 'capowner_extra')
+        # 已被撤销的第 3 个 owner 换新令牌重绑：不受上限限制
+        _new_token, raw_new = _issue(owners[2])
+
+        rebinding = bind_by_token(user, raw_new, ['第三个账本'])
+
+        assert rebinding.owner == owners[2]
+
+    def test_same_token_repaste_new_alias_allowed_at_cap(self, user):
+        raws = []
+        for i in range(3):
+            owner = User.objects.create_user(username=f'capowner{i}', password='x')
+            _token, raw_token = _issue(owner)
+            bind_by_token(user, raw_token, [f'账本{i}'])
+            raws.append(raw_token)
+
+        rebinding = bind_by_token(user, raws[0], ['新别名'])
+
+        assert rebinding.aliases == ['新别名']
+        assert SharedLedgerBinding.objects.filter(recipient=user).count() == 3
+
+
+@pytest.mark.django_db
 class TestUnbind:
     def test_unbind_own_binding(self, user, owner):
         _token, raw_token = _issue(owner)
@@ -318,6 +394,78 @@ class TestHasUsableSharedLedger:
 
         binding.refresh_from_db()
         assert binding.last_used_at == old_used
+
+
+@pytest.mark.django_db
+class TestUsableBindingIds:
+    def test_returns_usable_ids_newest_first_skipping_unusable(self, user):
+        older_owner = User.objects.create_user(username='olderowner', password='x')
+        newer_owner = User.objects.create_user(username='newerowner', password='x')
+        revoked_owner = User.objects.create_user(username='revokedowner', password='x')
+        _t1, raw1 = _issue(older_owner)
+        _t2, raw2 = _issue(newer_owner)
+        revoked_token, raw3 = _issue(revoked_owner)
+        older = bind_by_token(user, raw1, ['旧'])
+        newer = bind_by_token(user, raw2, ['新'])
+        bind_by_token(user, raw3, ['撤销'])
+        revoked_token.revoked_at = timezone.now()
+        revoked_token.save(update_fields=['revoked_at'])
+
+        # Meta.ordering = ['-created']：最新绑定的 id 在前，不可用绑定被跳过
+        assert usable_binding_ids(user) == [newer.id, older.id]
+
+    def test_does_not_touch_last_used_at(self, user, owner):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
+        assert binding.last_used_at is None
+
+        usable_binding_ids(user)
+
+        binding.refresh_from_db()
+        assert binding.last_used_at is None
+
+
+@pytest.mark.django_db
+class TestEffectiveBindingIds:
+    def test_none_returns_all_usable_newest_first(self, user):
+        first_owner = User.objects.create_user(username='effowner1', password='x')
+        second_owner = User.objects.create_user(username='effowner2', password='x')
+        _t1, raw1 = _issue(first_owner)
+        _t2, raw2 = _issue(second_owner)
+        first = bind_by_token(user, raw1, ['一'])
+        second = bind_by_token(user, raw2, ['二'])
+
+        assert effective_binding_ids(user, None) == [second.id, first.id]
+
+    def test_none_truncated_to_max_with_warning(self, user, caplog):
+        first_owner = User.objects.create_user(username='effowner1', password='x')
+        second_owner = User.objects.create_user(username='effowner2', password='x')
+        _t1, raw1 = _issue(first_owner)
+        _t2, raw2 = _issue(second_owner)
+        bind_by_token(user, raw1, ['一'])
+        second = bind_by_token(user, raw2, ['二'])
+
+        with override_settings(ASSISTANT_MAX_SHARED_LEDGERS=1):
+            with caplog.at_level(
+                logging.WARNING,
+                logger='project.apps.assistant.services.shared_ledger',
+            ):
+                result = effective_binding_ids(user, None)
+
+        assert result == [second.id]
+        assert '超过上限' in caplog.text
+
+    def test_empty_list_returns_empty(self, user, owner):
+        _token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['家庭账本'])
+
+        assert effective_binding_ids(user, []) == []
+
+    def test_explicit_list_coerced_to_ints(self, user, owner):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
+
+        assert effective_binding_ids(user, [str(binding.id), 8]) == [binding.id, 8]
 
 
 @pytest.mark.django_db

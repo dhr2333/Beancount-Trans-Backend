@@ -52,6 +52,7 @@ from .services.shared_ledger import (
     TokenInvalidError,
     bind_by_token,
     bindings_with_usability,
+    effective_binding_ids,
     has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
@@ -276,8 +277,9 @@ class AssistantChatView(APIView):
         ]
         show_bql = serializer.validated_data.get('show_bql', False)
         deep_think = serializer.validated_data.get('deep_think', False)
-        requested_binding_ids = serializer.validated_data.get('shared_binding_ids') or []
-        shared_ledgers = resolve_shared_ledgers(request.user, requested_binding_ids)
+        requested_binding_ids = serializer.validated_data.get('shared_binding_ids')
+        binding_ids = effective_binding_ids(request.user, requested_binding_ids)
+        shared_ledgers = resolve_shared_ledgers(request.user, binding_ids)
 
         try:
             service = AssistantService(
@@ -339,7 +341,7 @@ class AssistantChatStreamView(APIView):
         session_id = validated.get('session_id')
         content = validated.get('content')
         legacy_messages = validated.get('messages')
-        requested_binding_ids = validated.get('shared_binding_ids') or []
+        requested_binding_ids = validated.get('shared_binding_ids')
 
         provider = resolve_llm_provider(request.user)
         if not provider.configured:
@@ -347,9 +349,10 @@ class AssistantChatStreamView(APIView):
                 {'detail': '尚未配置助手模型，请在「输出配置」的账本助手中填写接口与密钥（Ollama 可省略密钥）。'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        precheck_ledgers = resolve_shared_ledgers(request.user, requested_binding_ids)
+        binding_ids = effective_binding_ids(request.user, requested_binding_ids)
+        shared_ledgers = resolve_shared_ledgers(request.user, binding_ids)
         ledger_service = LedgerQueryService(request.user)
-        if not ledger_service.ledger_exists() and not precheck_ledgers:
+        if not ledger_service.ledger_exists() and not shared_ledgers:
             return Response(
                 {'detail': '尚未创建任何可访问的账本，请先上传并解析账单。'},
                 status=status.HTTP_404_NOT_FOUND,
@@ -393,15 +396,9 @@ class AssistantChatStreamView(APIView):
                 for msg in legacy_messages or []
             ]
 
-        binding_ids: list[int] = []
-        shared_ledgers = precheck_ledgers
         if persist_session is not None:
-            stored_ids = list(persist_session.shared_binding_ids or [])
-            binding_ids = list(requested_binding_ids) or stored_ids
             persist_session.shared_binding_ids = list(binding_ids)
             persist_session.save(update_fields=['shared_binding_ids', 'modified'])
-            if binding_ids != requested_binding_ids:
-                shared_ledgers = resolve_shared_ledgers(request.user, binding_ids)
 
         if persist_session is not None and user_message is not None and assistant_message is not None:
             def persistent_event_stream() -> Iterator[str]:

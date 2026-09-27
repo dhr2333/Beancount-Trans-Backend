@@ -1,6 +1,8 @@
 """共享账本绑定：令牌校验、绑定增删、可用性解析与账本选项构建。"""
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db.models import QuerySet
@@ -10,6 +12,8 @@ from project.apps.assistant.models import SharedLedgerBinding
 from project.apps.authentication.models import PersonalAccessToken
 
 from .schema_provider import ledger_keys_for
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_SCOPE = 'ledger:read'
 DEFAULT_MAX_SHARED_LEDGERS = 3
@@ -83,6 +87,22 @@ def bind_by_token(
         if binding.token_id != token.id and binding.is_usable():
             raise TokenInvalidError('已绑定该用户的账本，无需重复添加')
 
+    existing_owner_ids = {
+        binding.token.user_id
+        for binding in SharedLedgerBinding.objects
+        .filter(recipient=recipient)
+        .select_related('token')
+    }
+    if token.user_id not in existing_owner_ids:
+        max_n = get_max_shared_ledgers()
+        usable_owners = {
+            binding.token.user_id
+            for binding in list_bindings(recipient)
+            if binding.is_usable()
+        }
+        if len(usable_owners) >= max_n:
+            raise TokenInvalidError(f'最多绑定 {max_n} 个共享账本，请先解除一个')
+
     if alias_list:
         other_bindings = (
             SharedLedgerBinding.objects
@@ -126,6 +146,34 @@ def list_bindings(recipient: User) -> QuerySet:
 def has_usable_shared_ledger(recipient: User) -> bool:
     """recipient 是否存在可用的共享账本绑定（只读检查，不更新 last_used_at）。"""
     return any(binding.is_usable() for binding in list_bindings(recipient))
+
+
+def usable_binding_ids(recipient: User) -> list[int]:
+    """该接收方全部可用绑定的 id（只读，不更新 last_used_at）。
+
+    顺序沿用 SharedLedgerBinding.Meta.ordering（['-created']，最新在前）。
+    """
+    return [binding.id for binding in list_bindings(recipient) if binding.is_usable()]
+
+
+def effective_binding_ids(recipient: User, requested: list[int] | None) -> list[int]:
+    """把请求参数归一化为实际纳入的绑定 id 列表。
+
+    requested=None → 全部可用（超出上限只取前 N，默认永不报错）；
+    requested=[] → 空（仅本人账本）；否则按传入列表（一律转为 int）。
+    """
+    if requested is None:
+        max_n = get_max_shared_ledgers()
+        ids = usable_binding_ids(recipient)
+        if len(ids) > max_n:
+            logger.warning(
+                '可用共享账本绑定数 %d 超过上限 %d，仅取前 %d 个',
+                len(ids),
+                max_n,
+                max_n,
+            )
+        return ids[:max_n]
+    return [int(i) for i in requested]
 
 
 def bindings_with_usability(recipient: User) -> list[dict]:

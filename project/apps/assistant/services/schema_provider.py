@@ -59,26 +59,33 @@ def build_shared_ledger_prompt_block(
         str(o.get('label') or o.get('key')) for o in shared
     )
     if self_ledger_available:
-        rule_1 = '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
+        prefix_rules = (
+            '1. get_ledger_context / run_bql 通过参数 ledger 指定目标账本，缺省 self（我的账本）。\n'
+            '2. 默认先查 self；只有在「我的账本不存在」或「对 self 的查询没有返回任何结果/无相关记录」时，'
+            '才改用相关的共享账本再查一次。\n'
+        )
     else:
-        rule_1 = (
+        prefix_rules = (
             '1. 「我的账本」当前尚未创建，无法查询；调用 get_ledger_context / run_bql '
             '时必须显式传入 ledger（某个共享账本的可用标识），不要依赖默认的 self。\n'
         )
+    rules = prefix_rules + (
+        '3. 例外：用户在提问中明确点名了某个可用标识/来源用户（如「老婆的账本里…」），'
+        '或明确要求跨账本对比、合计时，直接按需查询对应共享账本，不必先查 self。\n'
+        '4. 结论中必须标注每项数字来自哪个账本'
+        f'（如「我的账本」「{shared_labels}」）。\n'
+        '5. 跨账本合计仅在用户明确要求（如「一共/总共」）时进行；'
+        '合计必须说明合计口径，并提示两账本之间的往来/转账可能被重复计入（不要擅自剔除）。\n'
+        '6. 共享账本为只读；record_transaction 只能写入我的账本（self）。'
+    )
     return (
         '共享账本说明：\n'
         f'当前可访问的账本：\n{ledger_list}\n'
         '每个共享账本可用其「可用标识」（别名）中的任意一个作为 ledger 参数值；'
         '没有别名的共享账本以其来源用户名作为标识。\n'
-        '这些账本应视为同一批可用数据来源：需要综合、合计、对比或交叉印证时，'
-        '分别对相关账本查询后把结果统一呈现。\n'
+        '共享账本用于补充本人账本：默认以本人账本为主，只有在下方规则所述的情况下才改用共享账本。\n'
         '规则：\n'
-        f'{rule_1}'
-        '2. 结论中必须标注每项数字来自哪个账本'
-        f'（如「我的账本」「{shared_labels}」）。\n'
-        '3. 允许跨账本合计：合计时必须说明合计口径，'
-        '并提示两账本之间的往来/转账可能被重复计入（不要擅自剔除）。\n'
-        '4. 共享账本为只读；record_transaction 只能写入我的账本（self）。'
+        f'{rules}'
     )
 
 

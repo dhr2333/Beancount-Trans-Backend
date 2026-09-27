@@ -122,7 +122,9 @@ def _make_dsml_content_stream(dsml_text: str):
     return iter([_make_stream_chunk(content=dsml_text)])
 
 
-def _install_fake_ledger_query(monkeypatch, exists_map=None, default_exists=True):
+def _install_fake_ledger_query(
+    monkeypatch, exists_map=None, default_exists=True, row_count=1,
+):
     """用可控假实现替换 LedgerQueryService，返回按构造顺序记录的用户列表。"""
     exists = exists_map or {}
     constructed: list = []
@@ -136,7 +138,11 @@ def _install_fake_ledger_query(monkeypatch, exists_map=None, default_exists=True
             return exists.get(self.user.username, default_exists)
 
         def execute(self, query):
-            return SimpleNamespace(bql=query, result_text=f'结果:{query}')
+            return SimpleNamespace(
+                bql=query,
+                result_text=f'结果:{query}',
+                row_count=row_count,
+            )
 
     monkeypatch.setattr(
         'project.apps.assistant.services.assistant_service.LedgerQueryService',
@@ -621,6 +627,8 @@ class TestSharedLedgerAssistantService:
         run_desc = run_bql['function']['description']
         assert '来源账本' in run_desc
         assert '重复计入' in run_desc
+        assert '默认先查 self' in run_desc
+        assert '返回空结果' in run_desc
         assert run_bql['function']['parameters']['required'] == ['query']
 
     def test_build_system_prompt_shared_block_regression(self):
@@ -710,6 +718,52 @@ class TestSharedLedgerAssistantService:
 
         service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
 
+        assert len(queries) == 1
+        assert queries[0].ledger == 'self'
+
+    def test_dispatch_run_bql_self_zero_rows_with_shared_appends_hint(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch, row_count=0)
+        service = AssistantService(
+            user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
+        )
+        queries: list = []
+
+        result = service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        assert '本人账本无结果' in result
+        # 命中提示不新增查询记录，仍只有 self 一条
+        assert len(queries) == 1
+        assert queries[0].ledger == 'self'
+
+    def test_dispatch_run_bql_self_rows_present_has_no_hint(
+        self, monkeypatch, user, bean_file,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch, row_count=3)
+        service = AssistantService(
+            user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
+        )
+        queries: list = []
+
+        result = service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        assert '本人账本无结果' not in result
+        assert len(queries) == 1
+        assert queries[0].ledger == 'self'
+
+    def test_dispatch_run_bql_self_zero_rows_without_shared_has_no_hint(
+        self, monkeypatch, user, bean_file,
+    ):
+        _install_fake_ledger_query(monkeypatch, row_count=0)
+        service = AssistantService(user)
+        queries: list = []
+
+        result = service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        assert '本人账本无结果' not in result
         assert len(queries) == 1
         assert queries[0].ledger == 'self'
 
