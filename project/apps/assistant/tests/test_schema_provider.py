@@ -83,6 +83,13 @@ class TestBuildBqlExamples:
         assert "account ~ '^Income'" in text
         assert 'Income 的 sum 为负表示收入金额' in text
 
+    def test_balance_examples_bounded_by_today(self):
+        text = build_bql_examples(date(2026, 6, 16))
+        assert "account ~ '^Assets' AND date <= 2026-06-16" in text
+        assert "'^Liabilities' AND date <= 2026-06-16" in text
+        assert "^Assets:...' AND date <= 2026-06-16" in text
+        assert '余额/累计类查询须加 date <= 基准日期' in text
+
 
 class TestBuildInsightBqlExamples:
     def test_includes_cross_period_and_entries_patterns(self):
@@ -106,6 +113,7 @@ class TestBuildUserSpecificBqlExamples:
         )
         assert '账本相关 BQL 示例' in text
         assert "^Assets:Cash'" in text
+        assert 'date <= 2026-06-16' in text
         assert '现金余额是多少' in text
         assert "^Expenses:Food'" in text
         assert '本月餐饮花了多少' in text
@@ -170,6 +178,11 @@ class TestBqlCapabilityReference:
         assert 'IN links' in ref
         assert 'Balance / Pad' in ref
         assert 'postings.meta 不含 time' in ref
+
+    def test_balance_patterns_bounded_by_reference_date(self):
+        ref = build_bql_capability_reference(reference_date=date(2026, 6, 16))
+        assert "account ~ '^Assets' AND date <= 2026-06-16" in ref
+        assert "'^Liabilities' AND date <= 2026-06-16" in ref
 
 
 class TestBuildSystemPrompt:

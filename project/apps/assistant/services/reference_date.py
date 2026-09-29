@@ -28,4 +28,7 @@ def build_reference_date_context(reference_date: date | None = None) -> str:
         f'  - 「上月/上个月」→ year = {last_month_year} AND month = {last_month}',
         f'  - 「今年」→ year = {today.year}',
         f'  - 「最近 N 天」→ date >= {today.isoformat()} 往前推算（用 date 范围过滤）',
+        f'余额/累计口径默认上界: 查询资产/负债/应收/累计收支等无时间范围的余额或累计时，'
+        f'须加 date <= {today.isoformat()}（今天），排除日期在未来的预记账条目'
+        f'（如提前记录的到账工资）；仅当用户明确询问未来/计划条目时才查询未来日期。',
     ])

@@ -175,6 +175,7 @@ class TestAssistantService:
         assert '父账户行仅含直接 posting' in prompt
         assert '复式记账符号' in prompt
         assert 'Income 累计为负表示收入' in prompt
+        assert 'date <= 基准日期' in prompt
 
     def test_insight_mode_system_prompt(self):
         prompt = build_system_prompt(date(2026, 6, 16), insight_mode=True)

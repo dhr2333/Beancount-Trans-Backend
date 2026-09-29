@@ -1,10 +1,18 @@
 """经 beanquery 0.2.0 验证的 BQL 能力说明，供 LLM 参考。"""
+from datetime import date
+
+from .reference_date import get_reference_date
 
 BQL_DOCS_URL = 'https://beancount.github.io/docs/beancount_query_language/'
 
 
-def build_bql_capability_reference(*, insight_mode: bool = False) -> str:
+def build_bql_capability_reference(
+    *,
+    insight_mode: bool = False,
+    reference_date: date | None = None,
+) -> str:
     """返回精简、可执行的 BQL 能力文档。"""
+    today_iso = (reference_date or get_reference_date()).isoformat()
     from_clause_note = (
         '洞察模式下允许 FROM entries 查 meta/Balance/Pad（见下方「洞察分析」）；'
         '常规金额查询默认 postings 表，不写 FROM'
@@ -57,14 +65,14 @@ BQL 能力说明（beanquery 实际支持子集，生成查询时请严格遵守
 - GROUP BY 仅返回表头、无数据行 → 该时间范围内无匹配 posting，不是语法错误
 
 【余额与结构分析（应收/资产/负债/收入）】
-- 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）
+- 账户累计余额 = 该账户全部 postings 的 sum(units(position))（与 Fava 余额口径一致）；余额/累计口径默认加上界 date <= {today_iso}（今天），排除未来日期的预记账条目（用户明确询问未来条目时除外）
 - 子账户路径须先对照「平台账户目录」再写 account ~ 正则，勿臆造路径
 - 各子账户余额：
-  SELECT account, sum(units(position)) WHERE account ~ '^Assets' GROUP BY account
+  SELECT account, sum(units(position)) WHERE account ~ '^Assets' AND date <= {today_iso} GROUP BY account
 - 某类账户总额：
-  SELECT sum(units(position)) WHERE account ~ '^Assets:...'（... 替换为目录中的子路径）
+  SELECT sum(units(position)) WHERE account ~ '^Assets:...' AND date <= {today_iso}（... 替换为目录中的子路径）
 - 各负债账户欠款：
-  SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account
+  SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' AND date <= {today_iso} GROUP BY account
 - 按交易对方汇总（需先锁定具体 account 正则）：
   SELECT payee, sum(units(position)) WHERE account ~ '^Assets:...' GROUP BY payee
 - 禁止拉取大量明细行后在回复中手动求和；多账户合计必须用上述聚合查询

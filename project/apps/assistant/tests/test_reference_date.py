@@ -18,3 +18,8 @@ class TestReferenceDate:
         ctx = build_reference_date_context(date(2026, 1, 10))
         assert '上月: 2025 年 12 月' in ctx
         assert 'year = 2025 AND month = 12' in ctx
+
+    def test_includes_balance_upper_bound_guidance(self):
+        ctx = build_reference_date_context(date(2026, 6, 16))
+        assert '余额/累计口径默认上界' in ctx
+        assert 'date <= 2026-06-16' in ctx

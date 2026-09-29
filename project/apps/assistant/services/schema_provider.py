@@ -109,6 +109,7 @@ def build_bql_examples(reference_date: date | None = None) -> str:
     today = reference_date or get_reference_date()
     year, month = today.year, today.month
     last_year, last_month = _last_month(today)
+    today_iso = today.isoformat()
 
     examples = [
         (
@@ -176,15 +177,18 @@ def build_bql_examples(reference_date: date | None = None) -> str:
         ),
         (
             '各资产账户累计余额（postings 汇总）',
-            "SELECT account, sum(units(position)) WHERE account ~ '^Assets' GROUP BY account",
+            f"SELECT account, sum(units(position)) WHERE account ~ '^Assets' "
+            f"AND date <= {today_iso} GROUP BY account",
         ),
         (
             '各负债账户欠款多少？',
-            "SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' GROUP BY account",
+            f"SELECT account, sum(units(position)) WHERE account ~ '^Liabilities' "
+            f"AND date <= {today_iso} GROUP BY account",
         ),
         (
             '某资产子账户余额是多少？',
-            "SELECT sum(units(position)) WHERE account ~ '^Assets:...'",
+            f"SELECT sum(units(position)) WHERE account ~ '^Assets:...' "
+            f"AND date <= {today_iso}",
         ),
         (
             '某标签本月支出花了多少？',
@@ -209,6 +213,7 @@ def build_bql_examples(reference_date: date | None = None) -> str:
         '说明：余额查询若 sum 列为空白，表示余额为 0（与 Fava 一致）。'
         'GROUP BY 时父账户行仅含直接 posting，不是子树总额；无 posting 的账户不会出现。'
         'Income 的 sum 为负表示收入金额，向用户展示时取绝对值。'
+        '余额/累计类查询须加 date <= 基准日期（今天）上界，排除未来日期的预记账条目。'
     )
     return '\n'.join(lines).rstrip()
 
@@ -287,6 +292,7 @@ def build_user_specific_bql_examples(
     """基于用户账户/标签目录生成贴近语义的 BQL 示例（仅 get_ledger_context）。"""
     ref = reference_date or get_reference_date()
     year, month = ref.year, ref.month
+    ref_iso = ref.isoformat()
     ledger_set = set(ledger_accounts or [])
     examples: list[tuple[str, str]] = []
 
@@ -298,7 +304,8 @@ def build_user_specific_bql_examples(
             examples.append(
                 (
                     f'{label}余额是多少？',
-                    f"SELECT sum(units(position)) WHERE account ~ '^{entry.account}'",
+                    f"SELECT sum(units(position)) WHERE account ~ '^{entry.account}' "
+                    f"AND date <= {ref_iso}",
                 )
             )
             break
@@ -337,7 +344,7 @@ def build_user_specific_bql_examples(
             (
                 '各应收款账户余额是多少？',
                 f"SELECT account, sum(units(position)) WHERE account ~ '^{receivable_prefix}' "
-                f"GROUP BY account",
+                f"AND date <= {ref_iso} GROUP BY account",
             )
         )
 
@@ -379,7 +386,7 @@ def get_ledger_context(user: User, reference_date: date | None = None) -> str:
         f'默认货币: {currency}',
         f'账本文件存在: {"是" if query_service.ledger_exists() else "否"}',
         BQL_SCHEMA_HINT.strip(),
-        build_bql_capability_reference(),
+        build_bql_capability_reference(reference_date=ref),
         build_bql_examples(ref),
     ]
 

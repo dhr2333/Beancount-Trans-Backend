@@ -57,7 +57,7 @@ SYSTEM_PROMPT_TEMPLATE = """你是 Beancount-Trans 的个人账本助手。你�
 8. 展示结果时：有平台描述则写「描述（账户路径）」；无描述则用账户路径；表格汇总同样遵循。
 9. 生成 BQL 时严格遵守「BQL 能力说明」与下方示例；账户用 account ~ 正则；金额过滤用 number 列，禁止 units(position) > N。
 10. 结构/明细分析：先用聚合查询（GROUP BY account 或 payee）定位重点，发现重点后应做第二条追溯或明细查询；若结果提示「已截断」，必须改用 GROUP BY 聚合重查，禁止对截断样本求和。
-11. 涉及「本月」「上月」「最近」等时间时，以上述基准日期为准构造 BQL 日期条件。
+11. 涉及「本月」「上月」「最近」等时间时，以上述基准日期为准构造 BQL 日期条件；查询资产、负债、应收、累计收支等**无时间范围**的余额/累计口径时，必须加 date <= 基准日期（今天），排除日期在未来的预记账条目（如提前记录的到账工资）；仅当用户明确询问未来/计划条目时才查询未来日期。
 12. 用中文简洁回答，优先使用 Markdown 结构化展示，标明货币单位；若查无数据，明确说明。
 13. 余额查询若返回账户名但 sum 列为空白或 0.00，表示余额为 0，应直接告知用户，不要因「看不到数字」而反复换语法重查。
 14. 同一问题最多调用 run_bql {max_bql_runs} 次（系统硬限制）；若仍无满意结果，请根据已有查询结果作答，不要无限重试。
@@ -96,7 +96,9 @@ def build_system_prompt(
         bql_examples = f'{bql_examples}\n\n{build_insight_bql_examples(ref)}'
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
         reference_date_context=build_reference_date_context(ref),
-        bql_capability_reference=build_bql_capability_reference(insight_mode=insight_mode),
+        bql_capability_reference=build_bql_capability_reference(
+            insight_mode=insight_mode, reference_date=ref
+        ),
         bql_examples=bql_examples,
         max_bql_runs=get_max_bql_runs(),
     )
