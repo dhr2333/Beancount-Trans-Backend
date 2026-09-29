@@ -104,18 +104,7 @@ def bind_by_token(
             raise TokenInvalidError(f'最多绑定 {max_n} 个共享账本，请先解除一个')
 
     if alias_list:
-        other_bindings = (
-            SharedLedgerBinding.objects
-            .filter(recipient=recipient)
-            .exclude(token=token)
-        )
-        for binding in other_bindings:
-            existing_aliases = {str(a).lower() for a in (binding.aliases or [])}
-            for alias in alias_list:
-                if alias.lower() in existing_aliases:
-                    raise TokenInvalidError(
-                        f'别名「{alias}」已被其他共享账本使用，请换一个'
-                    )
+        _ensure_aliases_available(recipient, alias_list, exclude_token_id=token.id)
 
     binding, created = SharedLedgerBinding.objects.get_or_create(
         recipient=recipient,
@@ -128,10 +117,50 @@ def bind_by_token(
     return binding
 
 
+def _ensure_aliases_available(
+    recipient: User,
+    aliases: list[str],
+    exclude_token_id=None,
+) -> None:
+    """校验别名未被 recipient 的其他共享账本占用（大小写不敏感）。
+
+    [exclude_token_id] 用于跳过当前正在编辑的绑定对应的令牌。
+    """
+    if not aliases:
+        return
+    queryset = SharedLedgerBinding.objects.filter(recipient=recipient)
+    if exclude_token_id is not None:
+        queryset = queryset.exclude(token_id=exclude_token_id)
+    for binding in queryset:
+        existing_aliases = {str(a).lower() for a in (binding.aliases or [])}
+        for alias in aliases:
+            if alias.lower() in existing_aliases:
+                raise TokenInvalidError(
+                    f'别名「{alias}」已被其他共享账本使用，请换一个'
+                )
+
+
 def unbind(recipient: User, binding_id) -> None:
     """解除 recipient 自己的绑定；不属于 recipient 时抛 DoesNotExist。"""
     binding = SharedLedgerBinding.objects.get(id=binding_id, recipient=recipient)
     binding.delete()
+
+
+def update_aliases(recipient: User, binding_id, aliases) -> SharedLedgerBinding:
+    """整体覆盖 recipient 自己某个绑定的别名。
+
+    绑定不存在时抛 [SharedLedgerBinding.DoesNotExist]，别名非法时抛 [TokenInvalidError]。
+    """
+    binding = (
+        SharedLedgerBinding.objects
+        .select_related('token', 'token__user')
+        .get(id=binding_id, recipient=recipient)
+    )
+    alias_list = normalize_aliases(aliases)
+    _ensure_aliases_available(recipient, alias_list, exclude_token_id=binding.token_id)
+    binding.aliases = alias_list
+    binding.save(update_fields=['aliases'])
+    return binding
 
 
 def list_bindings(recipient: User) -> QuerySet:

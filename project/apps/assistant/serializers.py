@@ -188,6 +188,14 @@ class BindSharedLedgerSerializer(serializers.Serializer):
     )
 
 
+class UpdateSharedLedgerAliasesSerializer(serializers.Serializer):
+    aliases = serializers.ListField(
+        child=serializers.CharField(max_length=64, allow_blank=True),
+        required=True,
+        help_text='整体覆盖该共享账本的别名；传空列表表示清除别名',
+    )
+
+
 class SharedLedgerBindingSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     owner_username = serializers.CharField()

@@ -372,6 +372,88 @@ class TestSharedLedgerAPI:
         assert response.status_code == 404
         assert SharedLedgerBinding.objects.filter(id=binding.id).exists()
 
+    def test_patch_updates_aliases(self, api_client, owner_user):
+        created = self._post_binding(api_client, owner_user, aliases=['旧别名'])
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[created.data['id']]),
+            {'aliases': ['新别名', '别名二']},
+            format='json',
+        )
+
+        assert response.status_code == 200
+        assert response.data['aliases'] == ['新别名', '别名二']
+        assert api_client.get(reverse(self.list_url)).data[0]['aliases'] == ['新别名', '别名二']
+
+    def test_patch_can_clear_aliases(self, api_client, owner_user):
+        created = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[created.data['id']]),
+            {'aliases': []},
+            format='json',
+        )
+
+        assert response.status_code == 200
+        assert response.data['aliases'] == []
+
+    def test_patch_requires_aliases_field(self, api_client, owner_user):
+        created = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[created.data['id']]),
+            {},
+            format='json',
+        )
+
+        assert response.status_code == 400
+        assert 'aliases' in response.data
+
+    def test_patch_rejects_alias_used_by_other_binding(self, api_client, owner_user):
+        first = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+        other_owner = User.objects.create_user(
+            username='secondowner', password='testpass123'
+        )
+        second = self._post_binding(api_client, other_owner, aliases=['他账本'])
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[second.data['id']]),
+            {'aliases': ['家庭账本']},
+            format='json',
+        )
+
+        assert response.status_code == 400
+        assert '已被其他共享账本使用' in response.data['detail']
+        assert first.data['id'] != second.data['id']
+
+    def test_patch_rejects_reserved_alias(self, api_client, owner_user):
+        created = self._post_binding(api_client, owner_user, aliases=['家庭账本'])
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[created.data['id']]),
+            {'aliases': ['self']},
+            format='json',
+        )
+
+        assert response.status_code == 400
+        assert '保留值' in response.data['detail']
+
+    def test_patch_other_users_binding_returns_404(self, api_client, user, owner_user):
+        token, _raw_token = PersonalAccessToken.issue(user, '我的令牌')
+        binding = SharedLedgerBinding.objects.create(
+            recipient=owner_user, token=token, aliases=['家庭账本']
+        )
+
+        response = api_client.patch(
+            reverse(self.detail_url, args=[binding.id]),
+            {'aliases': ['新别名']},
+            format='json',
+        )
+
+        assert response.status_code == 404
+        binding.refresh_from_db()
+        assert binding.aliases == ['家庭账本']
+
     def test_unauthenticated_returns_401(self):
         client = APIClient()
 

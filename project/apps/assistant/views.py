@@ -26,6 +26,7 @@ from .serializers import (
     ChatSessionListSerializer,
     ChatSessionUpdateSerializer,
     SharedLedgerBindingSerializer,
+    UpdateSharedLedgerAliasesSerializer,
 )
 from .services.api_key_resolver import resolve_llm_provider
 from .services.assistant_service import AssistantService, format_sse
@@ -56,6 +57,7 @@ from .services.shared_ledger import (
     has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
+    update_aliases,
 )
 from .tasks import run_assistant_chat
 from .throttles import AssistantChatThrottle
@@ -188,6 +190,19 @@ class ChatSessionViewSet(
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _shared_binding_payload(binding: SharedLedgerBinding) -> dict:
+    """单个共享账本绑定的响应体（字段与列表接口保持一致）。"""
+    return {
+        'id': binding.id,
+        'owner_username': binding.token.user.username,
+        'aliases': binding.aliases,
+        'usable': binding.is_usable(),
+        'expires_at': binding.token.expires_at,
+        'last_used_at': binding.last_used_at,
+        'created': binding.created,
+    }
+
+
 class SharedLedgerBindingViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -196,7 +211,7 @@ class SharedLedgerBindingViewSet(
 ):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
-    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return (
@@ -231,19 +246,31 @@ class SharedLedgerBindingViewSet(
         except TokenInvalidError as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = {
-            'id': binding.id,
-            'owner_username': binding.token.user.username,
-            'aliases': binding.aliases,
-            'usable': binding.is_usable(),
-            'expires_at': binding.token.expires_at,
-            'last_used_at': binding.last_used_at,
-            'created': binding.created,
-        }
         return Response(
-            SharedLedgerBindingSerializer(data).data,
+            SharedLedgerBindingSerializer(_shared_binding_payload(binding)).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(
+        request=UpdateSharedLedgerAliasesSerializer,
+        responses={200: SharedLedgerBindingSerializer},
+        summary='更新共享账本别名',
+    )
+    def partial_update(self, request, *args, **kwargs):
+        serializer = UpdateSharedLedgerAliasesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            binding = update_aliases(
+                request.user,
+                kwargs.get('pk'),
+                serializer.validated_data['aliases'],
+            )
+        except SharedLedgerBinding.DoesNotExist:
+            return Response({'detail': '共享账本绑定不存在'}, status=status.HTTP_404_NOT_FOUND)
+        except TokenInvalidError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(SharedLedgerBindingSerializer(_shared_binding_payload(binding)).data)
 
     @extend_schema(
         responses={204: OpenApiResponse(description='已解除绑定')},
