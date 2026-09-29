@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.14.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.0...5.14.1) (2026-09-29)
+
+### Bug Fixes
+
+* **authentication/views:** 修改个人访问令牌的撤销逻辑为彻底删除 ([e3a3362](https://github.com/dhr2333/Beancount-Trans-Backend/commit/e3a33629cbbe509ab8aa5b2a55d5cc533b88c2bf))
+
+### Performance Improvements
+
+* **assistant:** 添加共享账本会话简明表达模式与账本记录字段 ([01dc1a8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/01dc1a81d8fc314572bb9fb6519ef7bc059876b4))
+* **assistant:** 补充余额查询需限制日期<=基准日期的规则 ([76e559d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/76e559d4ed467ec08055f5416325d8130633192a))
+
 ## [5.14.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.13.0...5.14.0) (2026-09-27)
 
 ### Features
