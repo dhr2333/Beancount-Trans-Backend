@@ -21,6 +21,7 @@ from project.apps.assistant.services.assistant_service import (
     query_records_from_dicts,
 )
 from project.apps.assistant.services.schema_provider import build_shared_ledger_prompt_block
+from project.apps.assistant.services.plain_language_mode import PLAIN_LANGUAGE_BLOCK
 from project.apps.assistant.tasks import run_assistant_chat
 from project.apps.translate.models import FormatConfig
 
@@ -640,6 +641,88 @@ class TestSharedLedgerAssistantService:
         block = '共享账本说明：测试块'
         prompt = build_system_prompt(ref, shared_ledger_block=block)
         assert prompt == f'{base}\n\n{block}'
+
+    def test_build_system_prompt_plain_language_mode_regression(self):
+        ref = date(2026, 6, 16)
+        base = build_system_prompt(ref)
+
+        assert build_system_prompt(ref, plain_language_mode=False) == base
+
+        prompt = build_system_prompt(ref, plain_language_mode=True)
+        assert prompt == f'{base}\n\n{PLAIN_LANGUAGE_BLOCK}'
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_iter_chat_events_plain_language_mode(
+        self, mock_openai_cls, monkeypatch, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+
+        def system_content_for(prior_queries):
+            mock_client = MagicMock()
+            mock_openai_cls.return_value = mock_client
+            mock_client.chat.completions.create.side_effect = [
+                _make_text_stream('好的。'),
+            ]
+            service = AssistantService(
+                user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
+            )
+            list(service._iter_chat_events(
+                [{'role': 'user', 'content': '上月餐厅花了多少'}],
+                prior_queries=prior_queries,
+            ))
+            return (
+                mock_client.chat.completions.create
+                .call_args_list[0].kwargs['messages'][0]['content']
+            )
+
+        shared_only = system_content_for(
+            [{'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': '家庭账本'}]
+        )
+        assert '【简明表达模式】' in shared_only
+
+        with_self = system_content_for(
+            [{'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': 'self'}]
+        )
+        assert '【简明表达模式】' not in with_self
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_plain_language_mode_hides_query_records(
+        self, mock_openai_cls, monkeypatch, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = _with_guard_retry(
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
+            _make_text_stream('本月餐饮支出 50 元。'),
+        )
+
+        service = AssistantService(
+            user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
+        )
+        events = list(service._iter_chat_events(
+            [{'role': 'user', 'content': '上月餐厅花了多少'}],
+            prior_queries=[
+                {'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': '家庭账本'}
+            ],
+        ))
+
+        tool_end = next(e for e in events if e.event == 'tool_end')
+        assert 'bql' not in tool_end.data
+        assert 'result_preview' not in tool_end.data
+
+        done = events[-1]
+        assert done.event == 'done'
+        assert done.data['queries'] == []
 
     def test_query_record_ledger_roundtrip(self):
         assert 'ledger' not in query_record_to_dict(

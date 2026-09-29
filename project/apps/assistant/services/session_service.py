@@ -120,7 +120,11 @@ def collect_prior_query_records(session: ChatSession) -> list[dict[str, Any]]:
             bql = query.get('bql')
             preview = query.get('result_preview')
             if bql and preview:
-                records.append({'bql': bql, 'result_preview': preview})
+                records.append({
+                    'bql': bql,
+                    'result_preview': preview,
+                    'ledger': query.get('ledger') or '',
+                })
     return records
 
 

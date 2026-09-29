@@ -123,6 +123,25 @@ class TestCollectPriorQueryRecords:
         records = collect_prior_query_records(session)
         assert len(records) == 1
         assert records[0]['bql'] == 'SELECT 1'
+        assert records[0]['ledger'] == ''
+
+    def test_preserves_ledger_field(self, user):
+        session = ChatSession.objects.create(user=user, title='续聊')
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.ROLE_ASSISTANT,
+            content='回答',
+            position=0,
+            queries=[{
+                'bql': 'SELECT 1',
+                'result_preview': 'sum | 10.00 CNY',
+                'ledger': 'wife',
+            }],
+        )
+
+        records = collect_prior_query_records(session)
+        assert len(records) == 1
+        assert records[0]['ledger'] == 'wife'
 
 
 class TestPriorQueryValidation:

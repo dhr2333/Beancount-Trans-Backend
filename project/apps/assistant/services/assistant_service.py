@@ -24,6 +24,7 @@ from .reply_number_guard import (
     validate_reply_numbers,
 )
 from .insight_mode import INSIGHT_MODE_BLOCK, detect_insight_mode, get_last_user_message
+from .plain_language_mode import PLAIN_LANGUAGE_BLOCK, detect_plain_language_mode
 from .fava_url import query_record_fava_fields
 from .schema_provider import (
     build_bql_examples,
@@ -87,6 +88,7 @@ def build_system_prompt(
     *,
     insight_mode: bool = False,
     shared_ledger_block: str = '',
+    plain_language_mode: bool = False,
 ) -> str:
     ref = reference_date or get_reference_date()
     bql_examples = build_bql_examples(ref)
@@ -102,6 +104,8 @@ def build_system_prompt(
         prompt = f'{prompt}\n\n{INSIGHT_MODE_BLOCK}'
     if shared_ledger_block:
         prompt = f'{prompt}\n\n{shared_ledger_block}'
+    if plain_language_mode:
+        prompt = f'{prompt}\n\n{PLAIN_LANGUAGE_BLOCK}'
     return prompt
 
 
@@ -447,6 +451,9 @@ class AssistantService:
         self.thinking_enabled = is_thinking_enabled(self.provider, deep_think=deep_think)
         self.max_bql_runs = get_max_bql_runs()
         self.max_tool_rounds = get_max_tool_rounds()
+        # 简明表达模式：会话只涉及共享账本时置真，由 _iter_chat_events 计算；
+        # 该模式下不下发 BQL 查询记录给客户端（界面不展示查询详情）。
+        self.plain_language_mode = False
 
     def _build_client(self, provider: LlmProvider) -> OpenAI:
         import httpx
@@ -597,7 +604,9 @@ class AssistantService:
     def _done_event_data(self, reply: AssistantReply) -> dict[str, Any]:
         return {
             'reply': reply.reply,
-            'queries': [query_record_to_dict(q) for q in reply.queries],
+            'queries': [] if self.plain_language_mode else [
+                query_record_to_dict(q) for q in reply.queries
+            ],
             'thinking': reply.thinking,
             'reasoning': reply.reasoning,
             'model': self.model,
@@ -849,6 +858,11 @@ class AssistantService:
         last_user_message = get_last_user_message(messages)
         insight_mode = detect_insight_mode(last_user_message)
         self_ledger_available = self.ledger_query.ledger_exists()
+        plain_language_mode = detect_plain_language_mode(
+            prior_queries,
+            self_ledger_available=self_ledger_available,
+        )
+        self.plain_language_mode = plain_language_mode
         tools = build_tools(
             insight_mode=insight_mode,
             ledger_options=self.ledger_options,
@@ -864,6 +878,7 @@ class AssistantService:
                         self.ledger_options,
                         self_ledger_available=self_ledger_available,
                     ),
+                    plain_language_mode=plain_language_mode,
                 ),
             },
             *messages,
@@ -943,7 +958,11 @@ class AssistantService:
                     tool_result = self._dispatch_tool(fn_name, fn_args, queries)
 
                     tool_end: dict[str, Any] = {'name': fn_name}
-                    if fn_name == 'run_bql' and len(queries) > queries_before:
+                    if (
+                        fn_name == 'run_bql'
+                        and len(queries) > queries_before
+                        and not self.plain_language_mode
+                    ):
                         record = queries[-1]
                         tool_end.update(query_record_to_dict(record))
                     yield StreamEvent('tool_end', tool_end)
