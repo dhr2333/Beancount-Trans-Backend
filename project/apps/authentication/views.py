@@ -1225,13 +1225,12 @@ class PersonalAccessTokenViewSet(viewsets.GenericViewSet):
         payload['token'] = raw_token
         return Response(payload, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['post'], url_path='revoke')
-    def revoke(self, request, pk=None):
+    def destroy(self, request, pk=None):
+        """删除访问令牌（硬删除；绑定的共享账本会随之一并失效）"""
         token = self.get_object()
-        if token.revoked_at is None:
-            token.revoked_at = timezone.now()
-            token.save(update_fields=['revoked_at', 'modified'])
-            logger.info(f"用户 {request.user.username} 撤销访问令牌 {token.prefix}…")
-        return Response(PersonalAccessTokenSerializer(token).data, status=status.HTTP_200_OK)
+        prefix = token.prefix
+        token.delete()
+        logger.info(f"用户 {request.user.username} 删除访问令牌 {prefix}…")
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
