@@ -728,6 +728,65 @@ class TestSharedLedgerAssistantService:
         assert done.data['queries'] == []
         assert 'plain' in done.data['modes']
 
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_plain_language_reply_skips_guard_disclaimer(
+        self, mock_openai_cls, monkeypatch, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        owner = User.objects.create_user(username='wife', password='x')
+        _install_fake_ledger_query(monkeypatch)
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        shared_args = '{"query": "SELECT 1", "ledger": "家庭账本"}'
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', shared_args),
+            _make_text_stream('上月餐饮支出 **50** 元。'),
+            _make_text_stream('另外还有 **88** 元。'),
+        ]
+
+        service = AssistantService(
+            user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
+        )
+        events = list(service._iter_chat_events(
+            [{'role': 'user', 'content': '家庭账本上月餐厅花了多少'}],
+        ))
+
+        done = events[-1]
+        assert done.event == 'done'
+        assert mock_client.chat.completions.create.call_count == 3
+        assert '88' in done.data['reply']
+        assert '部分金额可能未完全来自' not in done.data['reply']
+        assert '查询详情' not in done.data['reply']
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    @patch('project.apps.assistant.services.assistant_service.OpenAI')
+    def test_normal_reply_keeps_guard_disclaimer(
+        self, mock_openai_cls, monkeypatch, user, bean_file,
+    ):
+        config = FormatConfig.get_user_config(user)
+        _clear_assistant_provider(config)
+        _install_fake_ledger_query(monkeypatch)
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = [
+            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
+            _make_text_stream('餐饮支出 **50** 元。'),
+            _make_text_stream('另外还有 **88** 元。'),
+        ]
+
+        service = AssistantService(user)
+        events = _collect_events(service, [{'role': 'user', 'content': '餐饮花了多少？'}])
+
+        done = events[-1]
+        assert done.event == 'done'
+        assert mock_client.chat.completions.create.call_count == 3
+        assert '88' in done.data['reply']
+        assert '部分金额可能未完全来自' in done.data['reply']
+
     def test_query_record_ledger_roundtrip(self):
         assert 'ledger' not in query_record_to_dict(
             QueryRecord(bql='SELECT 1', result_preview='x')

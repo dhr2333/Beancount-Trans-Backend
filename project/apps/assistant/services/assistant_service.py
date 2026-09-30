@@ -628,14 +628,18 @@ class AssistantService:
             return []
         return [q for q in queries if (q.ledger or 'self') == 'self']
 
+    def _plain_reply(self, queries: list[QueryRecord]) -> bool:
+        """本条回复是否属于简明表达（含数据取自共享账本的情况）。"""
+        return self.plain_language_mode or any(
+            (q.ledger or 'self') != 'self' for q in queries
+        )
+
     def _recorded_modes(self, queries: list[QueryRecord]) -> list[str]:
         """本条回复使用的模式标签（供后台统计）。"""
         modes: list[str] = []
         if self.insight_mode:
             modes.append('insight')
-        if self.plain_language_mode or any(
-            (q.ledger or 'self') != 'self' for q in queries
-        ):
+        if self._plain_reply(queries):
             modes.append('plain')
         if self.bookkeeping_used:
             modes.append('bookkeeping')
@@ -871,8 +875,11 @@ class AssistantService:
 
         if not validation.ok:
             base_reply = final.reply.split(GUARD_DISCLAIMER.strip())[0].rstrip()
+            # 简明表达模式不下发查询详情，附加「以 BQL 结果为准」的提示会自相矛盾。
+            if not self._plain_reply(validation_queries):
+                base_reply = apply_guard_disclaimer(base_reply)
             final = self._finalize_reply(
-                apply_guard_disclaimer(base_reply),
+                base_reply,
                 final.queries,
                 show_bql,
                 reasoning=final.reasoning,
