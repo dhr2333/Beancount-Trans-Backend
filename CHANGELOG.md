@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.14.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.1...5.14.2) (2026-09-30)
+
+### Bug Fixes
+
+* 新增聊天消息应答模式字段并优化查询记录过滤逻辑 ([c7f91ff](https://github.com/dhr2333/Beancount-Trans-Backend/commit/c7f91ff5f783e01aa5359e93c4e6e35b9041948c))
+
 ## [5.14.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.0...5.14.1) (2026-09-29)
 
 ### Bug Fixes
