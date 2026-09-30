@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.14.3](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.2...5.14.3) (2026-09-30)
+
+### Performance Improvements
+
+* **assistant:** 修复简明模式和共享账本下的免责提示逻辑，重构重复代码 ([3925109](https://github.com/dhr2333/Beancount-Trans-Backend/commit/39251097fffccf9d003f231c16368e5a99a7f291))
+
 ## [5.14.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.1...5.14.2) (2026-09-30)
 
 ### Bug Fixes
