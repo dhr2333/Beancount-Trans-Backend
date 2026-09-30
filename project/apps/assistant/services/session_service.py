@@ -228,6 +228,7 @@ def update_assistant_message(
     thinking: str = '',
     reasoning: str = '',
     queries: list[dict[str, Any]] | None = None,
+    modes: list[str] | None = None,
     generation_status: str | None = None,
 ) -> ChatMessage:
     message.content = content
@@ -235,6 +236,9 @@ def update_assistant_message(
     message.reasoning = reasoning or ''
     message.queries = queries or []
     update_fields = ['content', 'thinking', 'reasoning', 'queries', 'modified']
+    if modes is not None:
+        message.modes = modes
+        update_fields.append('modes')
     if generation_status is not None:
         message.generation_status = generation_status
         update_fields.append('generation_status')
@@ -256,6 +260,7 @@ class StreamAccumulator:
     thinking: str = ''
     reasoning: str = ''
     queries: list[dict[str, Any]] = field(default_factory=list)
+    modes: list[str] = field(default_factory=list)
 
     def apply(self, event: StreamEvent) -> None:
         if event.event == 'reasoning_delta':
@@ -282,6 +287,7 @@ class StreamAccumulator:
             self.thinking = event.data.get('thinking', self.thinking) or ''
             self.reasoning = event.data.get('reasoning', self.reasoning) or ''
             self.queries = event.data.get('queries', self.queries) or []
+            self.modes = event.data.get('modes', self.modes) or []
 
     def persist_kwargs(self) -> dict[str, Any]:
         content = self.reply.strip() or INTERRUPTED_REPLY
@@ -290,6 +296,7 @@ class StreamAccumulator:
             'thinking': self.thinking,
             'reasoning': self.reasoning,
             'queries': self.queries,
+            'modes': self.modes,
         }
 
 

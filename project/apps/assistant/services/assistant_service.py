@@ -24,7 +24,10 @@ from .reply_number_guard import (
     validate_reply_numbers,
 )
 from .insight_mode import INSIGHT_MODE_BLOCK, detect_insight_mode, get_last_user_message
-from .plain_language_mode import PLAIN_LANGUAGE_BLOCK, detect_plain_language_mode
+from .plain_language_mode import (
+    build_plain_language_prompt_block,
+    detect_plain_language_mode,
+)
 from .fava_url import query_record_fava_fields
 from .schema_provider import (
     build_bql_examples,
@@ -89,6 +92,7 @@ def build_system_prompt(
     insight_mode: bool = False,
     shared_ledger_block: str = '',
     plain_language_mode: bool = False,
+    shared_plain_conditional: bool = False,
 ) -> str:
     ref = reference_date or get_reference_date()
     bql_examples = build_bql_examples(ref)
@@ -107,7 +111,9 @@ def build_system_prompt(
     if shared_ledger_block:
         prompt = f'{prompt}\n\n{shared_ledger_block}'
     if plain_language_mode:
-        prompt = f'{prompt}\n\n{PLAIN_LANGUAGE_BLOCK}'
+        prompt = f'{prompt}\n\n{build_plain_language_prompt_block(forced=True)}'
+    elif shared_plain_conditional:
+        prompt = f'{prompt}\n\n{build_plain_language_prompt_block(forced=False)}'
     return prompt
 
 
@@ -439,6 +445,10 @@ class AssistantService:
         self.reference_date = reference_date or get_reference_date()
         self.ledger_query = LedgerQueryService(user)
         self.ledger_options = build_ledger_options(shared_ledgers or [])
+        # 共享账本来源用户名：提问可能直接点名对方用户名，用于判定简明表达。
+        self.shared_owner_usernames = [
+            item['owner'].username for item in (shared_ledgers or [])
+        ]
         self.ledger_queries: dict[str, LedgerQueryService] = {'self': self.ledger_query}
         for item in (shared_ledgers or []):
             shared_service = LedgerQueryService(item['owner'])
@@ -453,9 +463,12 @@ class AssistantService:
         self.thinking_enabled = is_thinking_enabled(self.provider, deep_think=deep_think)
         self.max_bql_runs = get_max_bql_runs()
         self.max_tool_rounds = get_max_tool_rounds()
-        # 简明表达模式：会话只涉及共享账本时置真，由 _iter_chat_events 计算；
+        # 简明表达模式：回答来自共享账本数据时置真，由 _iter_chat_events 计算；
         # 该模式下不下发 BQL 查询记录给客户端（界面不展示查询详情）。
         self.plain_language_mode = False
+        # 本轮是否启用洞察模式 / 是否调用了记账工具，用于后台统计应答模式。
+        self.insight_mode = False
+        self.bookkeeping_used = False
 
     def _build_client(self, provider: LlmProvider) -> OpenAI:
         import httpx
@@ -551,6 +564,7 @@ class AssistantService:
                 result = CopilotBookkeepingService.create_entries(self.user, entries)
                 if not isinstance(result, dict):
                     return '记账失败: 记账服务返回了异常结果。'
+                self.bookkeeping_used = True
                 text = format_bookkeeping_result(result)
                 requested_ledger = arguments.get('ledger')
                 if requested_ledger not in (None, '', 'self'):
@@ -603,15 +617,43 @@ class AssistantService:
             reasoning=reasoning,
         )
 
+    def _client_visible_queries(self, queries: list[QueryRecord]) -> list[QueryRecord]:
+        """下发给客户端的查询记录。
+
+        共享账本不向使用者披露数据来源与查询过程：简明模式（含来自共享账本的回答）
+        不展示任何查询记录，其余情况下也一律剔除共享账本记录，只保留本人账本记录。
+        与 ``shared_ledger.filter_client_visible_queries`` 的持久化读取口径保持一致。
+        """
+        if 'plain' in self._recorded_modes(queries):
+            return []
+        return [q for q in queries if (q.ledger or 'self') == 'self']
+
+    def _recorded_modes(self, queries: list[QueryRecord]) -> list[str]:
+        """本条回复使用的模式标签（供后台统计）。"""
+        modes: list[str] = []
+        if self.insight_mode:
+            modes.append('insight')
+        if self.plain_language_mode or any(
+            (q.ledger or 'self') != 'self' for q in queries
+        ):
+            modes.append('plain')
+        if self.bookkeeping_used:
+            modes.append('bookkeeping')
+        if not modes:
+            modes.append('normal')
+        return modes
+
     def _done_event_data(self, reply: AssistantReply) -> dict[str, Any]:
         return {
             'reply': reply.reply,
-            'queries': [] if self.plain_language_mode else [
-                query_record_to_dict(q) for q in reply.queries
+            'queries': [
+                query_record_to_dict(q)
+                for q in self._client_visible_queries(reply.queries)
             ],
             'thinking': reply.thinking,
             'reasoning': reply.reasoning,
             'model': self.model,
+            'modes': self._recorded_modes(reply.queries),
         }
 
     def _build_thinking_reply(
@@ -859,10 +901,20 @@ class AssistantService:
         queries: list[QueryRecord] = []
         last_user_message = get_last_user_message(messages)
         insight_mode = detect_insight_mode(last_user_message)
+        self.insight_mode = insight_mode
+        self.bookkeeping_used = False
         self_ledger_available = self.ledger_query.ledger_exists()
+        shared_ledger_keys = [
+            key
+            for option in self.ledger_options
+            if option.get('key') != 'self'
+            for key in (option.get('keys') or [option.get('key')])
+        ]
+        shared_ledger_keys.extend(self.shared_owner_usernames)
         plain_language_mode = detect_plain_language_mode(
-            prior_queries,
             self_ledger_available=self_ledger_available,
+            last_user_message=last_user_message,
+            shared_ledger_keys=shared_ledger_keys,
         )
         self.plain_language_mode = plain_language_mode
         tools = build_tools(
@@ -881,6 +933,8 @@ class AssistantService:
                         self_ledger_available=self_ledger_available,
                     ),
                     plain_language_mode=plain_language_mode,
+                    shared_plain_conditional=bool(shared_ledger_keys)
+                    and not plain_language_mode,
                 ),
             },
             *messages,
@@ -963,10 +1017,9 @@ class AssistantService:
                     if (
                         fn_name == 'run_bql'
                         and len(queries) > queries_before
-                        and not self.plain_language_mode
+                        and self._client_visible_queries(queries)
                     ):
-                        record = queries[-1]
-                        tool_end.update(query_record_to_dict(record))
+                        tool_end.update(query_record_to_dict(queries[-1]))
                     yield StreamEvent('tool_end', tool_end)
 
                     llm_messages.append({

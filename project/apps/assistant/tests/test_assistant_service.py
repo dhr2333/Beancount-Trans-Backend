@@ -662,37 +662,41 @@ class TestSharedLedgerAssistantService:
         owner = User.objects.create_user(username='wife', password='x')
         _install_fake_ledger_query(monkeypatch)
 
-        def system_content_for(prior_queries):
+        shared_ledgers = [{'aliases': ['家庭账本'], 'owner': owner}]
+
+        def system_content_for(ledgers, message):
             mock_client = MagicMock()
             mock_openai_cls.return_value = mock_client
             mock_client.chat.completions.create.side_effect = [
                 _make_text_stream('好的。'),
             ]
-            service = AssistantService(
-                user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
-            )
+            service = AssistantService(user, shared_ledgers=ledgers)
             list(service._iter_chat_events(
-                [{'role': 'user', 'content': '上月餐厅花了多少'}],
-                prior_queries=prior_queries,
+                [{'role': 'user', 'content': message}],
             ))
             return (
                 mock_client.chat.completions.create
                 .call_args_list[0].kwargs['messages'][0]['content']
             )
 
-        shared_only = system_content_for(
-            [{'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': '家庭账本'}]
-        )
-        assert '【简明表达模式】' in shared_only
+        conditional = system_content_for(shared_ledgers, '上月餐厅花了多少')
+        assert '【共享账本数据回答规则】' in conditional
+        assert '【简明表达模式】' in conditional
 
-        with_self = system_content_for(
-            [{'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': 'self'}]
-        )
-        assert '【简明表达模式】' not in with_self
+        forced = system_content_for(shared_ledgers, '家庭账本上月餐厅花了多少')
+        assert '【共享账本数据回答规则】' not in forced
+        assert '【简明表达模式】' in forced
+
+        by_username = system_content_for(shared_ledgers, 'wife 上月餐厅花了多少')
+        assert '【共享账本数据回答规则】' not in by_username
+        assert '【简明表达模式】' in by_username
+
+        no_shared = system_content_for([], '上月餐厅花了多少')
+        assert '【简明表达模式】' not in no_shared
 
     @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
     @patch('project.apps.assistant.services.assistant_service.OpenAI')
-    def test_plain_language_mode_hides_query_records(
+    def test_shared_ledger_query_records_hidden(
         self, mock_openai_cls, monkeypatch, user, bean_file,
     ):
         config = FormatConfig.get_user_config(user)
@@ -702,19 +706,17 @@ class TestSharedLedgerAssistantService:
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
+        shared_args = '{"query": "SELECT 1", "ledger": "家庭账本"}'
         mock_client.chat.completions.create.side_effect = _with_guard_retry(
-            _make_tool_call_stream('run_bql', _FOOD_SUM_BQL),
-            _make_text_stream('本月餐饮支出 50 元。'),
+            _make_tool_call_stream('run_bql', shared_args),
+            _make_text_stream('上月餐饮支出 50 元。'),
         )
 
         service = AssistantService(
             user, shared_ledgers=[{'aliases': ['家庭账本'], 'owner': owner}]
         )
         events = list(service._iter_chat_events(
-            [{'role': 'user', 'content': '上月餐厅花了多少'}],
-            prior_queries=[
-                {'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': '家庭账本'}
-            ],
+            [{'role': 'user', 'content': '家庭账本上月餐厅花了多少'}],
         ))
 
         tool_end = next(e for e in events if e.event == 'tool_end')
@@ -724,6 +726,7 @@ class TestSharedLedgerAssistantService:
         done = events[-1]
         assert done.event == 'done'
         assert done.data['queries'] == []
+        assert 'plain' in done.data['modes']
 
     def test_query_record_ledger_roundtrip(self):
         assert 'ledger' not in query_record_to_dict(

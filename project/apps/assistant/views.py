@@ -54,6 +54,7 @@ from .services.shared_ledger import (
     bind_by_token,
     bindings_with_usability,
     effective_binding_ids,
+    filter_client_visible_queries,
     has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
@@ -94,7 +95,8 @@ def _build_done_payload_from_message(message: ChatMessage) -> dict:
         'reply': message.content,
         'thinking': message.thinking or '',
         'reasoning': message.reasoning or '',
-        'queries': message.queries or [],
+        'queries': filter_client_visible_queries(message.modes, message.queries),
+        'modes': message.modes or [],
         'session_id': str(message.session_id),
         'user_message_id': str(user_message.id) if user_message else '',
         'assistant_message_id': str(message.id),
@@ -330,7 +332,7 @@ class AssistantChatView(APIView):
             'reply': result.reply,
             'queries': [
                 {'bql': q.bql, 'result_preview': q.result_preview, 'ledger': q.ledger}
-                for q in result.queries
+                for q in service._client_visible_queries(result.queries)
             ],
             'thinking': result.thinking,
             'reasoning': result.reasoning,

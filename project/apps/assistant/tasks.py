@@ -43,6 +43,7 @@ def _persist_from_accumulator(
         thinking=kwargs['thinking'],
         reasoning=kwargs['reasoning'],
         queries=kwargs['queries'],
+        modes=kwargs['modes'] or None,
         generation_status=generation_status,
     )
 
@@ -60,6 +61,7 @@ def _finalize_done(
         thinking=done_data.get('thinking', ''),
         reasoning=done_data.get('reasoning', ''),
         queries=done_data.get('queries', []),
+        modes=done_data.get('modes') or [],
         generation_status=ChatMessage.STATUS_COMPLETE,
     )
     payload = {
@@ -92,6 +94,7 @@ def _finalize_cancelled(message: ChatMessage, accumulator: StreamAccumulator) ->
             thinking=kwargs['thinking'],
             reasoning=kwargs['reasoning'],
             queries=kwargs['queries'],
+            modes=kwargs['modes'],
         ),
         generation_status=ChatMessage.STATUS_CANCELLED,
     )

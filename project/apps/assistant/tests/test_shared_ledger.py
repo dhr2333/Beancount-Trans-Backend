@@ -15,6 +15,7 @@ from project.apps.assistant.services.shared_ledger import (
     bindings_with_usability,
     build_ledger_options,
     effective_binding_ids,
+    filter_client_visible_queries,
     has_usable_shared_ledger,
     resolve_shared_ledgers,
     unbind,
@@ -645,3 +646,21 @@ class TestBuildLedgerOptions:
 
         assert len(options) == 3
         assert spy.call_count == 2
+
+
+class TestFilterClientVisibleQueries:
+    def test_plain_mode_hides_all_queries(self):
+        records = [
+            {'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': 'self'},
+            {'bql': 'SELECT 2', 'result_preview': 'y', 'ledger': 'family'},
+        ]
+        assert filter_client_visible_queries(['plain'], records) == []
+
+    def test_shared_records_dropped_in_normal_mode(self):
+        records = [
+            {'bql': 'SELECT 1', 'result_preview': 'x', 'ledger': 'self'},
+            {'bql': 'SELECT 2', 'result_preview': 'y', 'ledger': 'family'},
+            {'bql': 'SELECT 3', 'result_preview': 'z'},
+        ]
+        visible = filter_client_visible_queries(['normal'], records)
+        assert [r['bql'] for r in visible] == ['SELECT 1', 'SELECT 3']

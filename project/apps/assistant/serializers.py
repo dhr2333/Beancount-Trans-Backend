@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import ChatMessage, ChatSession
-from .services.shared_ledger import get_max_shared_ledgers
+from .services.shared_ledger import filter_client_visible_queries, get_max_shared_ledgers
 
 
 class ChatMessageSerializer(serializers.Serializer):
@@ -128,6 +128,7 @@ class ChatSessionListSerializer(serializers.ModelSerializer):
 
 class StoredChatMessageSerializer(serializers.ModelSerializer):
     feedback = serializers.SerializerMethodField()
+    queries = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatMessage
@@ -143,6 +144,9 @@ class StoredChatMessageSerializer(serializers.ModelSerializer):
             'feedback',
             'created',
         )
+
+    def get_queries(self, obj: ChatMessage):
+        return filter_client_visible_queries(obj.modes, obj.queries)
 
     def get_feedback(self, obj: ChatMessage):
         feedback_map = self.context.get('feedback_map', {})

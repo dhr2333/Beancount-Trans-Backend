@@ -63,6 +63,12 @@ class ChatMessage(BaseModel):
     thinking = models.TextField(blank=True, default='')
     reasoning = models.TextField(blank=True, default='')
     queries = models.JSONField(default=list, blank=True)
+    modes = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='应答模式',
+        help_text='本条回复使用的模式标签，如 normal/plain/insight/bookkeeping',
+    )
     position = models.PositiveIntegerField()
     generation_status = models.CharField(
         max_length=16,

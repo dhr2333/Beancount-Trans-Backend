@@ -262,6 +262,20 @@ def build_ledger_options(recipient: User, binding_ids) -> list[dict]:
     return options
 
 
+def filter_client_visible_queries(modes, records) -> list[dict]:
+    """下发给客户端的查询记录（入参为已持久化的 dict 记录）。
+
+    共享账本不向使用者披露数据来源与查询过程：简明模式的回复不展示任何查询记录，
+    其余情况下也一律剔除共享账本记录，只保留本人账本记录。
+    """
+    if 'plain' in (modes or []):
+        return []
+    return [
+        record for record in (records or [])
+        if (record.get('ledger') or 'self') == 'self'
+    ]
+
+
 def _sanitize_binding_ids(binding_ids) -> list[int]:
     ids: list[int] = []
     for value in binding_ids or []:

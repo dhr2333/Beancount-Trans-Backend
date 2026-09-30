@@ -2,13 +2,43 @@ from django.contrib import admin
 
 from .models import AssistantFeedback, ChatMessage, ChatSession
 
+MODE_LABELS = {
+    'normal': '常规',
+    'plain': '简明',
+    'insight': '洞察',
+    'bookkeeping': '记账',
+}
+
+
+def format_modes(modes) -> str:
+    """把模式标签列表渲染成中文展示文本。"""
+    values = [str(mode) for mode in (modes or [])]
+    return '、'.join(MODE_LABELS.get(mode, mode) for mode in values) or '-'
+
+
+class MessageModeFilter(admin.SimpleListFilter):
+    title = '应答模式'
+    parameter_name = 'mode'
+
+    def lookups(self, request, model_admin):
+        return list(MODE_LABELS.items())
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(modes__contains=[self.value()])
+        return queryset
+
 
 class ChatMessageInline(admin.TabularInline):
     model = ChatMessage
     extra = 0
-    readonly_fields = ('id', 'role', 'position', 'created')
-    fields = ('position', 'role', 'content', 'created')
+    readonly_fields = ('id', 'role', 'position', 'modes_display', 'created')
+    fields = ('position', 'role', 'content', 'modes_display', 'created')
     ordering = ('position',)
+
+    @admin.display(description='应答模式')
+    def modes_display(self, obj: ChatMessage) -> str:
+        return format_modes(obj.modes)
 
 
 @admin.register(ChatSession)
@@ -19,6 +49,27 @@ class ChatSessionAdmin(admin.ModelAdmin):
     readonly_fields = ('created', 'modified')
     ordering = ('-modified',)
     inlines = [ChatMessageInline]
+
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'session',
+        'position',
+        'role',
+        'modes_display',
+        'generation_status',
+        'created',
+    )
+    list_filter = ('role', 'generation_status', MessageModeFilter)
+    search_fields = ('session__user__username', 'content')
+    readonly_fields = ('created', 'modified')
+    ordering = ('-created',)
+
+    @admin.display(description='应答模式')
+    def modes_display(self, obj: ChatMessage) -> str:
+        return format_modes(obj.modes)
 
 
 @admin.register(AssistantFeedback)
