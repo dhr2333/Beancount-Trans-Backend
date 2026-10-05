@@ -1019,6 +1019,7 @@ def _propagate_candidate_key_to_batch(
         changed = True
         updated_entries.append({
             'uuid': entry_uuid,
+            'file_id': file_id,
             'expense_candidates_with_score': candidates,
         })
 
@@ -1177,14 +1178,37 @@ class EntryReviewReparseView(EntryReviewViewSet):
 
             response_data = payload
             if propagate_candidates and mapping_type != 'asset':
+                from project.apps.translate.services.entry_review_queue_service import (
+                    EntryReviewQueueService,
+                )
+
+                # 覆盖解析审核页当前全部账单（同批 + 跨账单）
+                target_file_ids = [parse_file.file_id]
+                for ref in EntryReviewQueueService.list_refs(request.user.id):
+                    if (
+                        EntryReviewQueueService.ref_source(ref)
+                        != EntryReviewQueueService.SOURCE_FILE
+                    ):
+                        continue
+                    ref_file_id = ref.get('file_id')
+                    if ref_file_id is None or ref_file_id in target_file_ids:
+                        continue
+                    target_file_ids.append(ref_file_id)
+
+                candidate_updated_entries = []
+                for target_file_id in target_file_ids:
+                    candidate_updated_entries.extend(
+                        _propagate_candidate_key_to_batch(
+                            file_id=target_file_id,
+                            mapping_key=selected_key,
+                            mapping_type=mapping_type,
+                            exclude_uuid=entry_uuid,
+                        )
+                    )
+
                 response_data = {
                     **payload,
-                    'candidate_updated_entries': _propagate_candidate_key_to_batch(
-                        file_id=file_id,
-                        mapping_key=selected_key,
-                        mapping_type=mapping_type,
-                        exclude_uuid=entry_uuid,
-                    ),
+                    'candidate_updated_entries': candidate_updated_entries,
                 }
 
             return Response(response_data, status=status.HTTP_200_OK)
