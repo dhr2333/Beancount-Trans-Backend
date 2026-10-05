@@ -106,6 +106,23 @@ class ParseReviewService:
         return edited
 
     @classmethod
+    def row_matches_mapping_key(
+        cls,
+        original_row: Optional[Dict[str, Any]],
+        key: str,
+        mapping_type: str = 'expense',
+    ) -> bool:
+        """判断原始行是否匹配映射关键字（支出/收入按对方或商品，资产按支付方式）。"""
+        if not key or not original_row:
+            return False
+        if mapping_type == 'asset':
+            payment_method = str(original_row.get('payment_method') or '')
+            return key in payment_method
+        counterparty = str(original_row.get('counterparty') or '')
+        commodity = str(original_row.get('commodity') or '')
+        return key in counterparty or key in commodity
+
+    @classmethod
     def get_effective_tag_details(cls, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
         cls.normalize_entry_tag_fields(entry)
         return cls.apply_tag_overrides(

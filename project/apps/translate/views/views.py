@@ -985,6 +985,52 @@ def _reparse_review_entry(
     )
 
 
+def _propagate_candidate_key_to_batch(
+    *,
+    file_id: int,
+    mapping_key: str,
+    mapping_type: str,
+    exclude_uuid: str,
+) -> list:
+    """将新增的映射关键字补充为同批匹配条目的候选分类（不改动当前分类/条目文本）。"""
+    from project.apps.translate.services.parse_review_service import ParseReviewService
+
+    cached = ParseReviewService.get_parse_result_migrated(file_id)
+    if not cached:
+        return []
+
+    updated_entries = []
+    changed = False
+    for entry in cached.get('formatted_data') or []:
+        entry_uuid = entry.get('uuid')
+        if not entry_uuid or entry_uuid == exclude_uuid:
+            continue
+        if entry.get('installment_role') == 'installment':
+            continue
+        if not ParseReviewService.row_matches_mapping_key(
+            entry.get('original_row'), mapping_key, mapping_type=mapping_type
+        ):
+            continue
+        candidates = entry.get('expense_candidates_with_score') or []
+        if any(str(item.get('key')) == mapping_key for item in candidates):
+            continue
+        candidates = [*candidates, {'key': mapping_key, 'score': 1.0}]
+        entry['expense_candidates_with_score'] = candidates
+        changed = True
+        updated_entries.append({
+            'uuid': entry_uuid,
+            'expense_candidates_with_score': candidates,
+        })
+
+    if changed:
+        ParseReviewService.save_parse_result(
+            file_id,
+            cached,
+            timeout=ParseReviewService._ttl_for_resave(file_id),
+        )
+    return updated_entries
+
+
 class EntryReviewResultsView(EntryReviewViewSet):
     """获取用户级统一审核结果"""
 
@@ -1069,6 +1115,8 @@ class EntryReviewReparseView(EntryReviewViewSet):
         mapping_type = request.data.get('mapping_type') or 'expense'
         if mapping_type not in ('expense', 'income', 'asset'):
             mapping_type = 'expense'
+        # 新增/编辑映射时，把新关键字补充为同批匹配条目的候选分类（可选）
+        propagate_candidates = bool(request.data.get('propagate_candidates'))
 
         if not entry_uuid or not selected_key:
             return Response(
@@ -1127,7 +1175,19 @@ class EntryReviewReparseView(EntryReviewViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-            return Response(payload, status=status.HTTP_200_OK)
+            response_data = payload
+            if propagate_candidates and mapping_type != 'asset':
+                response_data = {
+                    **payload,
+                    'candidate_updated_entries': _propagate_candidate_key_to_batch(
+                        file_id=file_id,
+                        mapping_key=selected_key,
+                        mapping_type=mapping_type,
+                        exclude_uuid=entry_uuid,
+                    ),
+                }
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.exception(e)

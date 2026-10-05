@@ -451,6 +451,109 @@ class TestEntryReviewReparseView:
         assert mock_reparse.call_args.kwargs['mapping_type'] == 'asset'
         assert mock_reparse.call_args.kwargs['selected_key'] == '0814'
 
+    @patch('project.apps.translate.views.views._reparse_review_entry')
+    def test_reparse_propagates_candidate_key_without_touching_classification(
+        self,
+        mock_reparse,
+        user,
+        entry_review_task,
+        parse_file,
+    ):
+        """propagate_candidates 时，仅给同批匹配条目补充候选分类，当前分类与文本不变"""
+        self.client.force_authenticate(user=user)
+        mock_reparse.return_value = {
+            'uuid': 'entry-1',
+            'formatted': 'formatted-1',
+            'edited_formatted': 'formatted-1',
+            'selected_expense_key': '商店',
+            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
+            'tag_details': [],
+            'tag_overrides': {'removed_paths': [], 'added_paths': []},
+        }
+        target = _make_entry('entry-1', original_row={'counterparty': '商店', 'commodity': '商品A'})
+        matched = _make_entry(
+            'entry-2',
+            original_row={'counterparty': '商店街', 'commodity': '商品B'},
+            selected_expense_key='餐饮',
+        )
+        unrelated = _make_entry(
+            'entry-3',
+            original_row={'counterparty': '餐厅', 'commodity': '午餐'},
+            selected_expense_key='其他',
+        )
+        _save_review(parse_file.file_id, [target, matched, unrelated])
+
+        response = self.client.post(
+            '/api/translate/entry-review/reparse',
+            {
+                'file_id': parse_file.file_id,
+                'entry_uuid': 'entry-1',
+                'selected_key': '商店',
+                'propagate_candidates': True,
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        updated = response.data['candidate_updated_entries']
+        assert [item['uuid'] for item in updated] == ['entry-2']
+
+        cached = ParseReviewService.get_parse_result(parse_file.file_id)
+        entry_2 = next(e for e in cached['formatted_data'] if e['uuid'] == 'entry-2')
+        assert {'key': '商店', 'score': 1.0} in entry_2['expense_candidates_with_score']
+        # 当前分类与条目文本保持不变
+        assert entry_2['selected_expense_key'] == '餐饮'
+        assert entry_2['formatted'] == matched['formatted']
+        assert entry_2['edited_formatted'] == matched['edited_formatted']
+
+        entry_3 = next(e for e in cached['formatted_data'] if e['uuid'] == 'entry-3')
+        assert all(item['key'] != '商店' for item in entry_3['expense_candidates_with_score'])
+
+    @patch('project.apps.translate.views.views._reparse_review_entry')
+    def test_reparse_without_flag_skips_candidate_propagation(
+        self,
+        mock_reparse,
+        user,
+        entry_review_task,
+        parse_file,
+    ):
+        """未传 propagate_candidates 时不做候选分类传播"""
+        self.client.force_authenticate(user=user)
+        mock_reparse.return_value = {
+            'uuid': 'entry-1',
+            'formatted': 'formatted-1',
+            'edited_formatted': 'formatted-1',
+            'selected_expense_key': '商店',
+            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
+            'tag_details': [],
+            'tag_overrides': {'removed_paths': [], 'added_paths': []},
+        }
+        matched = _make_entry(
+            'entry-2',
+            original_row={'counterparty': '商店街', 'commodity': '商品B'},
+            selected_expense_key='餐饮',
+        )
+        _save_review(parse_file.file_id, [
+            _make_entry('entry-1', original_row={'counterparty': '商店', 'commodity': '商品A'}),
+            matched,
+        ])
+
+        response = self.client.post(
+            '/api/translate/entry-review/reparse',
+            {
+                'file_id': parse_file.file_id,
+                'entry_uuid': 'entry-1',
+                'selected_key': '商店',
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert 'candidate_updated_entries' not in response.data
+        cached = ParseReviewService.get_parse_result(parse_file.file_id)
+        entry_2 = next(e for e in cached['formatted_data'] if e['uuid'] == 'entry-2')
+        assert all(item['key'] != '商店' for item in entry_2['expense_candidates_with_score'])
+
 
 @pytest.mark.django_db
 class TestEntryReviewPreviewSyncView:
