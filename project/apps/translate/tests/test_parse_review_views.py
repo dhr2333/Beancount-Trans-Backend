@@ -192,7 +192,6 @@ class TestEntryReviewReparseView:
         assert 'formatted' in response.data
         assert 'edited_formatted' in response.data
         assert response.data['selected_expense_key'] == 'Expenses:Updated'
-        assert 'propagated_entries' in response.data
 
         # 验证缓存已更新
         cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
@@ -400,63 +399,10 @@ class TestEntryReviewReparseView:
         assert 'Liabilities:CreditCard:Bank:CITIC:C6428' in installment['formatted']
         assert 'Expenses:Shopping:Digital' not in installment['formatted']
 
-    @patch('project.apps.translate.views.views._propagate_mapping_to_batch')
-    @patch('project.apps.translate.views.views._reparse_review_entry')
-    def test_reparse_includes_propagated_entries(
-        self,
-        mock_reparse,
-        mock_propagate,
-        user,
-        entry_review_task,
-        parse_file,
-    ):
-        self.client.force_authenticate(user=user)
-        mock_reparse.return_value = {
-            'uuid': 'entry-1',
-            'formatted': 'formatted-1',
-            'edited_formatted': 'formatted-1',
-            'selected_expense_key': '商店',
-            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
-            'tag_details': [],
-            'tag_overrides': {'removed_paths': [], 'added_paths': []},
-        }
-        mock_propagate.return_value = [{
-            'uuid': 'entry-2',
-            'formatted': 'formatted-2',
-            'edited_formatted': 'formatted-2',
-            'selected_expense_key': '商店',
-            'expense_candidates_with_score': [{'key': '商店', 'score': 1.0}],
-            'tag_details': [],
-            'tag_overrides': {'removed_paths': [], 'added_paths': []},
-        }]
-        ParseReviewService.save_parse_result(parse_file.file_id, {
-            'file_id': parse_file.file_id,
-            'formatted_data': [{
-                'uuid': 'entry-1',
-                'formatted': 'old',
-                'edited_formatted': 'old',
-                'original_row': {'counterparty': '商店', 'commodity': '商品A'},
-            }],
-            'created_at': time.time(),
-            'review_expires_at': time.time() + 86400,
-        })
-
-        response = self.client.post(
-            '/api/translate/entry-review/reparse',
-            {'file_id': parse_file.file_id, 'entry_uuid': 'entry-1', 'selected_key': '商店'},
-            format='json',
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert len(response.data['propagated_entries']) == 1
-        assert response.data['propagated_entries'][0]['uuid'] == 'entry-2'
-
-    @patch('project.apps.translate.views.views._propagate_mapping_to_batch')
     @patch('project.apps.translate.views.views._reparse_review_entry')
     def test_reparse_asset_mapping_type(
         self,
         mock_reparse,
-        mock_propagate,
         user,
         entry_review_task,
         parse_file,
@@ -471,7 +417,6 @@ class TestEntryReviewReparseView:
             'tag_details': [],
             'tag_overrides': {'removed_paths': [], 'added_paths': []},
         }
-        mock_propagate.return_value = []
         ParseReviewService.save_parse_result(parse_file.file_id, {
             'file_id': parse_file.file_id,
             'formatted_data': [{
@@ -505,9 +450,6 @@ class TestEntryReviewReparseView:
         mock_reparse.assert_called_once()
         assert mock_reparse.call_args.kwargs['mapping_type'] == 'asset'
         assert mock_reparse.call_args.kwargs['selected_key'] == '0814'
-        mock_propagate.assert_called_once()
-        assert mock_propagate.call_args.kwargs['mapping_type'] == 'asset'
-        assert mock_propagate.call_args.kwargs['mapping_key'] == '0814'
 
 
 @pytest.mark.django_db

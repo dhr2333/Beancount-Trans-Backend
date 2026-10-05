@@ -106,36 +106,6 @@ class ParseReviewService:
         return edited
 
     @classmethod
-    def _posting_lines(cls, formatted_text: str) -> List[str]:
-        lines = (formatted_text or '').split('\n')
-        return [line.strip() for line in lines[1:] if line.strip()]
-
-    @classmethod
-    def entry_postings_manually_edited(cls, entry: Dict[str, Any]) -> bool:
-        """比较 posting 行（不含首行标签），判断用户是否手改过账户。"""
-        formatted = (entry.get('formatted') or '').strip()
-        edited = (entry.get('edited_formatted') or '').strip()
-        if not edited or edited == formatted:
-            return False
-        return cls._posting_lines(formatted) != cls._posting_lines(edited)
-
-    @classmethod
-    def row_matches_mapping_key(
-        cls,
-        original_row: Optional[Dict[str, Any]],
-        key: str,
-        mapping_type: str = 'expense',
-    ) -> bool:
-        if not key or not original_row:
-            return False
-        if mapping_type == 'asset':
-            payment_method = str(original_row.get('payment_method') or '')
-            return key in payment_method
-        counterparty = str(original_row.get('counterparty') or '')
-        commodity = str(original_row.get('commodity') or '')
-        return key in counterparty or key in commodity
-
-    @classmethod
     def get_effective_tag_details(cls, entry: Dict[str, Any]) -> List[Dict[str, Any]]:
         cls.normalize_entry_tag_fields(entry)
         return cls.apply_tag_overrides(

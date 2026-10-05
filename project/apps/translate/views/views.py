@@ -985,47 +985,6 @@ def _reparse_review_entry(
     )
 
 
-def _propagate_mapping_to_batch(
-    *,
-    file_id: int,
-    owner_id: int,
-    config,
-    user,
-    mapping_key: str,
-    exclude_uuid: str,
-    mapping_type: str = 'expense',
-) -> list:
-    """将新建/更新的映射套用到同批匹配条目（不强制 selected_key）。"""
-    from project.apps.translate.services.parse_review_service import ParseReviewService
-
-    cached = ParseReviewService.get_parse_result_migrated(file_id) or {}
-    propagated = []
-    for entry in cached.get('formatted_data') or []:
-        entry_uuid = entry.get('uuid')
-        if not entry_uuid or entry_uuid == exclude_uuid:
-            continue
-        if entry.get('installment_role') == 'installment':
-            continue
-        if ParseReviewService.entry_postings_manually_edited(entry):
-            continue
-        if not ParseReviewService.row_matches_mapping_key(
-            entry.get('original_row'), mapping_key, mapping_type=mapping_type
-        ):
-            continue
-        payload = _reparse_review_entry(
-            file_id=file_id,
-            entry=entry,
-            owner_id=owner_id,
-            config=config,
-            user=user,
-            selected_key=None,
-            mapping_type=mapping_type,
-        )
-        if payload:
-            propagated.append(payload)
-    return propagated
-
-
 class EntryReviewResultsView(EntryReviewViewSet):
     """获取用户级统一审核结果"""
 
@@ -1168,20 +1127,7 @@ class EntryReviewReparseView(EntryReviewViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-            propagated_entries = _propagate_mapping_to_batch(
-                file_id=file_id,
-                owner_id=owner_id,
-                config=config,
-                user=request.user,
-                mapping_key=selected_key,
-                exclude_uuid=entry_uuid,
-                mapping_type=mapping_type,
-            )
-
-            return Response({
-                **payload,
-                'propagated_entries': propagated_entries,
-            }, status=status.HTTP_200_OK)
+            return Response(payload, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.exception(e)
