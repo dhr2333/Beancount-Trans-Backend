@@ -683,17 +683,6 @@ include "trans/main.bean"
         return year_dir
 
     @staticmethod
-    def _entry_fingerprint(text):
-        """条目内容指纹：去注释行、压缩空白，用于迁移去重"""
-        normalized_lines = []
-        for line in str(text).splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith(';'):
-                continue
-            normalized_lines.append(' '.join(stripped.split()))
-        return '\n'.join(normalized_lines)
-
-    @staticmethod
     def split_entries(text):
         """按日期起始行把 bean 文本切分为条目
 
@@ -753,9 +742,10 @@ include "trans/main.bean"
 
     @staticmethod
     def append_entries_to_monthly(user_or_username, year, month, entry_texts):
-        """把条目追加写入 {year}/{MM}.bean（幂等去重）
+        """把条目追加写入 {year}/{MM}.bean
 
-        写入前确保年度结构存在；与文件已有条目按内容指纹去重，重复条目不写入。
+        写入前确保年度结构存在；**不做去重**——去重是写入/审核阶段的职责，
+        提交阶段只负责把 trans/ 中已有条目按月份归位。
 
         Args:
             user_or_username: User 对象或 username 字符串
@@ -764,35 +754,21 @@ include "trans/main.bean"
             entry_texts: 条目文本列表
 
         Returns:
-            Dict[str, int]: {'appended': 新增条数, 'skipped': 跳过（重复）条数}
+            int: 实际追加的条目数
         """
         BeanFileManager.ensure_year_structure(user_or_username, year)
         month_path = BeanFileManager.get_monthly_bean_path(user_or_username, year, month)
 
-        existing = ''
-        if os.path.exists(month_path):
-            with open(month_path, 'r', encoding='utf-8') as f:
-                existing = f.read()
-
-        seen = {
-            BeanFileManager._entry_fingerprint(block)
-            for _date, block in BeanFileManager.split_entries(existing)
-        }
-
         appended = 0
-        skipped = 0
         with open(month_path, 'a', encoding='utf-8') as f:
             for entry_text in entry_texts or []:
-                fingerprint = BeanFileManager._entry_fingerprint(entry_text)
-                if not fingerprint or fingerprint in seen:
-                    skipped += 1
+                if not str(entry_text).strip():
                     continue
-                f.write(entry_text.rstrip('\n'))
+                f.write(str(entry_text).rstrip('\n'))
                 f.write('\n\n')
-                seen.add(fingerprint)
                 appended += 1
 
-        return {'appended': appended, 'skipped': skipped}
+        return appended
 
     @staticmethod
     def clear_trans_entries(user_or_username):

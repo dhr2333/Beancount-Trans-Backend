@@ -77,21 +77,20 @@ class TestPreview:
         assert result['total_entries'] == 2
         assert result['files_scanned'] == 1
         targets = {p['target']: p for p in result['plans']}
-        assert targets['2025/05.bean']['new'] == 1
-        assert targets['2025/06.bean']['new'] == 1
+        assert targets['2025/05.bean']['count'] == 1
+        assert targets['2025/06.bean']['count'] == 1
         # 未落盘
         assert not Path(BeanFileManager.get_monthly_bean_path(user, 2025, 5)).exists()
 
-    def test_counts_duplicates_against_existing(self, git_user):
+    def test_preview_counts_entries_in_trans(self, git_user):
         user, _repo = git_user
-        BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_MAY])
-        _write_trans(user, 'bill.bean', ENTRY_MAY)
+        _write_trans(user, 'bill.bean', ENTRY_MAY + '\n\n' + ENTRY_MAY)
 
         result = LedgerCommitService.preview(user)
 
         plan = next(p for p in result['plans'] if p['target'] == '2025/05.bean')
-        assert plan['new'] == 0
-        assert plan['duplicate'] == 1
+        # 不做去重：两条相同条目均计入
+        assert plan['count'] == 2
 
 
 class TestExecute:
@@ -128,8 +127,10 @@ class TestExecute:
         assert result['status'] == 'skipped'
         mock_push.assert_not_called()
 
-    def test_push_failure_keeps_trans_entries(self, git_user):
+    def test_push_failure_keeps_trans_and_rolls_back(self, git_user):
         user, _repo = git_user
+        BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_JUN])
+        monthly_before = _monthly_text(user, 2025, 5)
         _write_trans(user, 'bill.bean', ENTRY_MAY)
 
         with patch.object(
@@ -139,6 +140,9 @@ class TestExecute:
             with pytest.raises(GitServiceException):
                 LedgerCommitService.execute(user)
 
+        # 月度文件回滚到推送前内容
+        assert _monthly_text(user, 2025, 5) == monthly_before
+        # trans/ 条目保留以便重试
         trans_text = Path(BeanFileManager._resolve_trans_path(user, 'bill.bean')).read_text('utf-8')
         assert '商户A' in trans_text
 

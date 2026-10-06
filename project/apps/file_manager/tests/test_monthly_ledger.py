@@ -4,7 +4,7 @@
 - 路径拼接（{year}/{MM}.bean、{year}/00.bean）
 - ensure_year_structure（目录/12 月度文件/年度索引/main.bean include，幂等）
 - split_entries 条目切分
-- append_entries_to_monthly（追加 + 条目级去重）
+- append_entries_to_monthly（追加，不做去重）
 - iter_trans_bean_files / clear_trans_entries
 
 所有测试将 settings.ASSETS_BASE_PATH 指向 tmp_path，避免污染真实 Assets 目录。
@@ -126,21 +126,21 @@ class TestSplitEntries:
 
 class TestAppendEntriesToMonthly:
     def test_appends_and_buckets(self, user):
-        result = BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A, ENTRY_B])
+        appended = BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A, ENTRY_B])
 
-        assert result == {'appended': 2, 'skipped': 0}
+        assert appended == 2
         content = _read(BeanFileManager.get_monthly_bean_path(user, 2025, 5))
         assert '商户A' in content and '商户B' in content
 
-    def test_dedup_skips_existing_entries(self, user):
+    def test_appends_without_dedup(self, user):
         BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A])
 
-        result = BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A, ENTRY_B])
+        appended = BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A])
 
-        # ENTRY_A 重复被跳过，ENTRY_B 新增
-        assert result == {'appended': 1, 'skipped': 1}
+        # 提交阶段不做去重（去重属于写入/审核阶段职责）
+        assert appended == 1
         content = _read(BeanFileManager.get_monthly_bean_path(user, 2025, 5))
-        assert content.count('商户A') == 1
+        assert content.count('商户A') == 2
 
     def test_ensures_year_structure(self, user):
         BeanFileManager.append_entries_to_monthly(user, 2025, 5, [ENTRY_A])

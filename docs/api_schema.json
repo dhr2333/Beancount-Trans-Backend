@@ -7897,19 +7897,14 @@
             "type": "string",
             "description": "目标月度文件相对路径，如 2025/05.bean"
           },
-          "new": {
+          "count": {
             "type": "integer",
-            "description": "将新增的条目数"
-          },
-          "duplicate": {
-            "type": "integer",
-            "description": "已存在将被跳过的条目数"
+            "description": "将写入该文件的条目数"
           }
         },
         "required": [
-          "duplicate",
+          "count",
           "month",
-          "new",
           "target",
           "year"
         ]
@@ -7969,11 +7964,7 @@
           },
           "entries_appended": {
             "type": "integer",
-            "description": "新增条目数"
-          },
-          "entries_duplicated": {
-            "type": "integer",
-            "description": "跳过的重复条目数"
+            "description": "写入的条目数"
           },
           "files_cleared": {
             "type": "integer",
@@ -7991,7 +7982,6 @@
         },
         "required": [
           "entries_appended",
-          "entries_duplicated",
           "files_cleared",
           "message",
           "plans",
