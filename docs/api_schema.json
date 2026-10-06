@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Beancount-Trans API",
-    "version": "5.7.0",
+    "version": "5.9.0",
     "description": "Beancount交易记录转换和管理系统的API文档"
   },
   "paths": {
@@ -1113,8 +1113,7 @@
                 "$ref": "#/components/schemas/AssistantChatRequestRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -1162,8 +1161,7 @@
                 "$ref": "#/components/schemas/AssistantChatRequestRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -1175,15 +1173,40 @@
         ],
         "responses": {
           "200": {
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string",
-                  "description": "SSE 事件流：status, reasoning_delta, thinking_set, tool_start, tool_end, delta, done, error。thinking/thinking_set.content 仅为推理与规划文本；BQL 通过 tool_end 与 done.queries 返回。"
-                }
-              }
+            "description": "SSE 流式响应 (text/event-stream)。事件类型：session, status, reasoning_delta, thinking_set, tool_start, tool_end, delta, done, error"
+          }
+        }
+      }
+    },
+    "/api/assistant/chat/stream/{assistant_message_id}/": {
+      "get": {
+        "operationId": "assistant_chat_stream_retrieve",
+        "summary": "重连助手流式生成",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assistant_message_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             },
-            "description": ""
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE 重连订阅（text/event-stream）"
           }
         }
       }
@@ -1198,6 +1221,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantFeedbackRequestRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantFeedbackRequestRequest"
+              }
+            },
+            "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/AssistantFeedbackRequestRequest"
               }
@@ -1227,6 +1260,359 @@
         }
       }
     },
+    "/api/assistant/messages/{message_id}/stop/": {
+      "post": {
+        "operationId": "assistant_messages_stop_create",
+        "summary": "停止助手消息生成",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已请求停止生成"
+          }
+        }
+      }
+    },
+    "/api/assistant/sessions/": {
+      "get": {
+        "operationId": "assistant_sessions_list",
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChatSessionList"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/assistant/sessions/{id}/": {
+      "get": {
+        "operationId": "assistant_sessions_retrieve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionDetail"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "operationId": "assistant_sessions_partial_update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedChatSessionUpdateRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedChatSessionUpdateRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedChatSessionUpdateRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionUpdate"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "operationId": "assistant_sessions_destroy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/assistant/shared-ledgers/": {
+      "get": {
+        "operationId": "assistant_shared_ledgers_list",
+        "summary": "列出共享账本绑定",
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SharedLedgerBinding"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "operationId": "assistant_shared_ledgers_create",
+        "summary": "绑定共享账本",
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindSharedLedgerRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/BindSharedLedgerRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/BindSharedLedgerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedLedgerBinding"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/assistant/shared-ledgers/{id}/": {
+      "patch": {
+        "operationId": "assistant_shared_ledgers_partial_update",
+        "summary": "更新共享账本别名",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedUpdateSharedLedgerAliasesRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedUpdateSharedLedgerAliasesRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchedUpdateSharedLedgerAliasesRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedLedgerBinding"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "operationId": "assistant_shared_ledgers_destroy",
+        "summary": "解除共享账本绑定",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "assistant"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已解除绑定"
+          }
+        }
+      }
+    },
     "/api/assistant/status/": {
       "get": {
         "operationId": "assistant_status_retrieve",
@@ -1248,6 +1634,54 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AssistantStatus"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/assistant/test-key/": {
+      "post": {
+        "operationId": "assistant_test_key_create",
+        "summary": "测试 Copilot API 密钥",
+        "tags": [
+          "assistant"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantKeyTestRequestRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantKeyTestRequestRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantKeyTestRequestRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantKeyTestResponse"
                 }
               }
             },
@@ -1796,6 +2230,97 @@
               }
             },
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/tokens/": {
+      "get": {
+        "operationId": "auth_tokens_list",
+        "description": "个人访问令牌管理（供 MCP 等外部客户端使用）",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonalAccessToken"
+                  }
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "operationId": "auth_tokens_create",
+        "description": "个人访问令牌管理（供 MCP 等外部客户端使用）",
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalAccessToken"
+                }
+              }
+            },
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/auth/tokens/{id}/": {
+      "delete": {
+        "operationId": "auth_tokens_destroy",
+        "description": "删除访问令牌（硬删除；绑定的共享账本会随之一并失效）",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "auth"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No response body"
           }
         }
       }
@@ -3308,6 +3833,45 @@
         }
       }
     },
+    "/api/git/sync/cancel/": {
+      "post": {
+        "operationId": "git_sync_cancel_create",
+        "description": "清除服务器本地由 Git 同步引入的账本内容，并暂停后续自动拉取",
+        "summary": "取消同步：清除服务器本地账本副本",
+        "tags": [
+          "git"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "cookieAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearSyncedLedgerResponse"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "description": "用户未启用 Git 功能"
+          },
+          "500": {
+            "description": "清除失败"
+          }
+        }
+      }
+    },
     "/api/git/sync/status/": {
       "get": {
         "operationId": "git_sync_status_retrieve",
@@ -3344,11 +3908,11 @@
         }
       }
     },
-    "/api/git/trans/download/": {
-      "get": {
-        "operationId": "git_trans_download_retrieve",
-        "description": "下载 trans/ 目录的 ZIP 压缩包",
-        "summary": "下载 trans 目录",
+    "/api/git/trans/commit/": {
+      "post": {
+        "operationId": "git_trans_commit_create",
+        "description": "迁移 trans/ 条目到月度文件，提交并推送到远程仓库",
+        "summary": "提交 trans 条目到月度账本并推送远程",
         "tags": [
           "git"
         ],
@@ -3365,10 +3929,53 @@
         ],
         "responses": {
           "200": {
-            "description": "ZIP 文件"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerCommitResult"
+                }
+              }
+            },
+            "description": ""
           },
-          "404": {
-            "description": "用户未启用 Git 功能或 trans 目录不存在"
+          "400": {
+            "description": "用户未启用 Git 功能或提交失败"
+          }
+        }
+      }
+    },
+    "/api/git/trans/commit/preview/": {
+      "post": {
+        "operationId": "git_trans_commit_preview_create",
+        "description": "返回迁移计划（各月度文件将新增/跳过的条目数），不落盘、不提交",
+        "summary": "预览 trans 条目迁移到月度账本",
+        "tags": [
+          "git"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "cookieAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerCommitPreview"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "用户未启用 Git 功能或参数错误"
           }
         }
       }
@@ -3376,7 +3983,7 @@
     "/api/git/webhook/": {
       "post": {
         "operationId": "git_webhook_create",
-        "description": "Git Webhook：支持 GitHub 与平台托管 Gitea。",
+        "description": "Git Webhook：支持 GitHub、GitLab、Gitea（含平台托管）与 Gogs。",
         "summary": "处理 Git push Webhook",
         "tags": [
           "git"
@@ -5359,218 +5966,184 @@
         }
       }
     },
+    "/api/translate/entry-review/confirm": {
+      "post": {
+        "operationId": "translate_entry_review_confirm_create",
+        "description": "确认写入\n\nPOST /api/translate/entry-review/confirm",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/entries/{uuid}/edit": {
+      "put": {
+        "operationId": "translate_entry_review_entries_edit_update",
+        "description": "更新编辑内容\n\nPUT /api/translate/entry-review/entries/{uuid}/edit\nBody: {\"file_id\": ..., \"edited_formatted\": \"...\", \"source\": \"file|copilot\"}",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uuid",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/entries/{uuid}/tags": {
+      "patch": {
+        "operationId": "translate_entry_review_entries_tags_partial_update",
+        "description": "PATCH /api/translate/entry-review/entries/{uuid}/tags\n\nBody: {\"file_id\": ..., \"action\": \"add|remove\", \"tag_path\": \"Category/EDUCATION\", \"source\": \"file|copilot\"}",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uuid",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/preview-sync": {
+      "put": {
+        "operationId": "translate_entry_review_preview_sync_update",
+        "description": "PUT /api/translate/entry-review/preview-sync\n\nBody: {\"file_id\": ..., \"entries\": [{\"uuid\": \"...\", \"edited_formatted\": \"...\"}], \"source\": \"file|copilot\"}",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/reparse": {
+      "post": {
+        "operationId": "translate_entry_review_reparse_create",
+        "description": "重解析单个条目\n\nPOST /api/translate/entry-review/reparse\nBody: {\"file_id\": ..., \"entry_uuid\": \"...\", \"selected_key\": \"...\", \"mapping_type\": \"expense\"}",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/reparse-all": {
+      "post": {
+        "operationId": "translate_entry_review_reparse_all_create",
+        "description": "重新解析所有条目\n\nPOST /api/translate/entry-review/reparse-all\nBody: {\"file_id\": ..., \"source\": \"file|copilot\"}",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/entry-review/results": {
+      "get": {
+        "operationId": "translate_entry_review_results_retrieve",
+        "description": "获取待审核条目列表\n\nGET /api/translate/entry-review/results",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
     "/api/translate/multi": {
       "post": {
         "operationId": "translate_multi_create",
         "description": "多账单解析接口\n\n该接口实现解析单个/多个文件\n\nArgs:\n    files (list): 上传的文件列表\n\nReturns:\n    包含Celery任务组 ID 的响应",
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/confirm": {
-      "post": {
-        "operationId": "translate_parse_review_confirm_create",
-        "description": "确认写入\n\nPOST /api/translate/parse-review/{task_id}/confirm",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          }
-        ],
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/entries/{uuid}/edit": {
-      "put": {
-        "operationId": "translate_parse_review_entries_edit_update",
-        "description": "更新编辑内容\n\nPUT /api/parse-review/{task_id}/entries/{uuid}/edit\nBody: {\"edited_formatted\": \"...\"}",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          },
-          {
-            "in": "path",
-            "name": "uuid",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/entries/{uuid}/tags": {
-      "patch": {
-        "operationId": "translate_parse_review_entries_tags_partial_update",
-        "description": "PATCH /api/translate/parse-review/{task_id}/entries/{uuid}/tags\n\nBody: {\"action\": \"add|remove\", \"tag_path\": \"Category/EDUCATION\"}",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          },
-          {
-            "in": "path",
-            "name": "uuid",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/reparse": {
-      "post": {
-        "operationId": "translate_parse_review_reparse_create",
-        "description": "重解析单个条目\n\nPOST /api/parse-review/{task_id}/reparse\nBody: {\"entry_uuid\": \"...\", \"selected_key\": \"...\"}",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          }
-        ],
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/reparse-all": {
-      "post": {
-        "operationId": "translate_parse_review_reparse_all_create",
-        "description": "重新解析所有条目\n\nPOST /api/parse-review/{task_id}/reparse-all",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          }
-        ],
-        "tags": [
-          "translate"
-        ],
-        "security": [
-          {
-            "jwtAuth": []
-          },
-          {
-            "Bearer": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "No response body"
-          }
-        }
-      }
-    },
-    "/api/translate/parse-review/{task_id}/results": {
-      "get": {
-        "operationId": "translate_parse_review_results_retrieve",
-        "description": "获取解析结果\n\nGET /api/translate/parse-review/{task_id}/results",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "schema": {
-              "type": "integer"
-            },
-            "required": true
-          }
-        ],
         "tags": [
           "translate"
         ],
@@ -5664,6 +6237,70 @@
             "Bearer": []
           },
           {}
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/upload-parse": {
+      "post": {
+        "operationId": "translate_upload_parse_create",
+        "description": "上传解析并入队\n\nPOST /api/translate/upload-parse（multipart，文件字段 ``trans``）",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/validate-entry": {
+      "post": {
+        "operationId": "translate_validate_entry_create",
+        "description": "单条 Beancount 语法校验（不阻断保存，仅返回 warning）",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "Bearer": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "description": "No response body"
+          }
+        }
+      }
+    },
+    "/api/translate/write-collect": {
+      "post": {
+        "operationId": "translate_write_collect_create",
+        "description": "写入解析条目\n\nPOST /api/translate/write-collect\n请求体：``{\"entries\": [{\"uuid\": \"...\", \"directive\": \"...\"}]}``",
+        "tags": [
+          "translate"
+        ],
+        "security": [
+          {
+            "jwtAuth": []
+          },
+          {
+            "Bearer": []
+          }
         ],
         "responses": {
           "200": {
@@ -6248,15 +6885,6 @@
           "parent_account"
         ]
       },
-      "ApiKeySourceEnum": {
-        "enum": [
-          "user",
-          "platform",
-          "none"
-        ],
-        "type": "string",
-        "description": "* `user` - user\n* `platform` - platform\n* `none` - none"
-      },
       "Assets": {
         "type": "object",
         "properties": {
@@ -6366,19 +6994,37 @@
               "$ref": "#/components/schemas/ChatMessageRequest"
             }
           },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "edit_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "show_bql": {
             "type": "boolean",
             "default": false
           },
           "deep_think": {
             "type": "boolean",
-            "default": false,
-            "description": "启用深度思考（deepseek-reasoner），展示完整推理链，响应更慢"
+            "default": false
+          },
+          "shared_binding_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true
           }
-        },
-        "required": [
-          "messages"
-        ]
+        }
       },
       "AssistantChatResponse": {
         "type": "object",
@@ -6392,24 +7038,35 @@
               "$ref": "#/components/schemas/QueryRecord"
             }
           },
-          "api_key_source": {
-            "$ref": "#/components/schemas/ApiKeySourceEnum"
-          },
           "thinking": {
             "type": "string",
-            "description": "合并后的思考过程（模型推理链 + Agent 工具步骤）"
+            "default": ""
           },
           "reasoning": {
             "type": "string",
-            "description": "模型推理链（deepseek-reasoner 时非空）"
+            "default": ""
           },
           "model": {
             "type": "string",
-            "description": "本次对话使用的模型名称"
+            "default": ""
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "user_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "assistant_message_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "required": [
-          "api_key_source",
           "queries",
           "reply"
         ]
@@ -6425,28 +7082,31 @@
             "nullable": true,
             "oneOf": [
               {
-                "$ref": "#/components/schemas/AssistantFeedbackRatingEnum"
+                "$ref": "#/components/schemas/RatingEnum"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/NullEnum"
               }
             ]
           },
           "user_message": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 4000
           },
           "assistant_reply": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "queries": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/QueryRecord"
+              "$ref": "#/components/schemas/QueryRecordRequest"
             }
           },
           "comment": {
             "type": "string",
+            "default": "",
             "maxLength": 500
           }
         },
@@ -6467,10 +7127,10 @@
             "nullable": true,
             "oneOf": [
               {
-                "$ref": "#/components/schemas/AssistantFeedbackRatingEnum"
+                "$ref": "#/components/schemas/RatingEnum"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/NullEnum"
               }
             ]
           },
@@ -6483,12 +7143,45 @@
           "rating"
         ]
       },
-      "AssistantFeedbackRatingEnum": {
-        "enum": [
-          "like",
-          "dislike"
-        ],
-        "type": "string"
+      "AssistantKeyTestRequestRequest": {
+        "type": "object",
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "default": ""
+          },
+          "base_url": {
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "type": "string",
+            "default": ""
+          }
+        }
+      },
+      "AssistantKeyTestResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "copilot_available": {
+            "type": "boolean"
+          },
+          "parse_available": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "copilot_available",
+          "detail",
+          "ok",
+          "parse_available"
+        ]
       },
       "AssistantStatus": {
         "type": "object",
@@ -6496,21 +7189,56 @@
           "api_key_configured": {
             "type": "boolean"
           },
-          "api_key_source": {
-            "$ref": "#/components/schemas/ApiKeySourceEnum"
+          "assistant_model": {
+            "type": "string",
+            "default": ""
+          },
+          "deep_think_supported": {
+            "type": "boolean"
           },
           "ledger_exists": {
             "type": "boolean"
           },
           "ledger_path": {
             "type": "string"
+          },
+          "has_usable_shared_ledger": {
+            "type": "boolean",
+            "default": false
+          },
+          "reference_date": {
+            "type": "string",
+            "format": "date",
+            "description": "助手使用的基准日期（今天）"
           }
         },
         "required": [
           "api_key_configured",
-          "api_key_source",
+          "deep_think_supported",
           "ledger_exists",
-          "ledger_path"
+          "ledger_path",
+          "reference_date"
+        ]
+      },
+      "BindSharedLedgerRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "writeOnly": true,
+            "minLength": 1
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "Copilot 可用其中任意一个别名识别这个共享账本"
+          }
+        },
+        "required": [
+          "token"
         ]
       },
       "BlankEnum": {
@@ -6533,6 +7261,112 @@
         "required": [
           "content",
           "role"
+        ]
+      },
+      "ChatSessionDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "title_locked": {
+            "type": "boolean"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "messages": {
+            "type": "string",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "created",
+          "id",
+          "messages",
+          "modified"
+        ]
+      },
+      "ChatSessionList": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "modified": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "created",
+          "id",
+          "modified"
+        ]
+      },
+      "ChatSessionUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          }
+        }
+      },
+      "ClearSyncedLedgerResponse": {
+        "type": "object",
+        "description": "取消同步响应序列化器",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "操作结果消息"
+          },
+          "cleaned_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "已清理的文件/目录列表"
+          },
+          "trans_preserved": {
+            "type": "boolean",
+            "description": "是否保留了 trans/ 解析结果"
+          },
+          "repo_name": {
+            "type": "string",
+            "description": "仓库目录名（未变更）"
+          }
+        },
+        "required": [
+          "cleaned_files",
+          "message",
+          "repo_name",
+          "trans_preserved"
         ]
       },
       "CreateRepositoryRequest": {
@@ -6920,7 +7754,7 @@
               }
             ],
             "readOnly": true,
-            "description": "远程代码托管平台\n\n* `gitea_hosted` - 平台托管 Gitea\n* `github` - GitHub\n* `gitlab` - GitLab\n* `gitea` - Gitea\n* `other` - 其他"
+            "description": "远程代码托管平台\n\n* `gitea_hosted` - 平台托管 Gitea\n* `github` - GitHub\n* `gitlab` - GitLab\n* `gitea` - Gitea\n* `gogs` - Gogs\n* `other` - 其他"
           },
           "remote_ssh_url": {
             "type": "string",
@@ -6975,6 +7809,11 @@
             "readOnly": true,
             "description": "最后一次同步错误信息"
           },
+          "sync_paused": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "是否已取消同步（暂停自动拉取）"
+          },
           "deploy_key_download_url": {
             "type": "string",
             "readOnly": true
@@ -7006,6 +7845,7 @@
           "setup_mode",
           "ssh_clone_url",
           "sync_error",
+          "sync_paused",
           "sync_status",
           "webhook_callback_url"
         ]
@@ -7016,10 +7856,11 @@
           "github",
           "gitlab",
           "gitea",
+          "gogs",
           "other"
         ],
         "type": "string",
-        "description": "* `gitea_hosted` - 平台托管 Gitea\n* `github` - GitHub\n* `gitlab` - GitLab\n* `gitea` - Gitea\n* `other` - 其他"
+        "description": "* `gitea_hosted` - 平台托管 Gitea\n* `github` - GitHub\n* `gitlab` - GitLab\n* `gitea` - Gitea\n* `gogs` - Gogs\n* `other` - 其他"
       },
       "Income": {
         "type": "object",
@@ -7120,16 +7961,185 @@
           "key"
         ]
       },
+      "LedgerCommitError": {
+        "type": "object",
+        "description": "trans/ 文件解析错误",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "相对 trans/ 的文件路径"
+          },
+          "error": {
+            "type": "string",
+            "description": "错误信息"
+          }
+        },
+        "required": [
+          "error",
+          "file"
+        ]
+      },
+      "LedgerCommitPlan": {
+        "type": "object",
+        "description": "单个月度文件的迁移计划",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "description": "年度"
+          },
+          "month": {
+            "type": "integer",
+            "description": "月份（1-12）"
+          },
+          "target": {
+            "type": "string",
+            "description": "目标月度文件相对路径，如 2025/05-expenses.bean"
+          },
+          "new": {
+            "type": "integer",
+            "description": "将新增的条目数"
+          },
+          "duplicate": {
+            "type": "integer",
+            "description": "已存在将被跳过的条目数"
+          }
+        },
+        "required": [
+          "duplicate",
+          "month",
+          "new",
+          "target",
+          "year"
+        ]
+      },
+      "LedgerCommitPreview": {
+        "type": "object",
+        "description": "迁移预览响应序列化器",
+        "properties": {
+          "total_entries": {
+            "type": "integer",
+            "description": "扫描到的条目总数"
+          },
+          "files_scanned": {
+            "type": "integer",
+            "description": "扫描的文件数"
+          },
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerCommitPlan"
+            },
+            "description": "各月度文件迁移计划"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerCommitError"
+            },
+            "description": "解析失败的文件"
+          }
+        },
+        "required": [
+          "errors",
+          "files_scanned",
+          "plans",
+          "total_entries"
+        ]
+      },
+      "LedgerCommitResult": {
+        "type": "object",
+        "description": "迁移提交响应序列化器",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "结果状态：success / skipped"
+          },
+          "message": {
+            "type": "string",
+            "description": "结果消息"
+          },
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerCommitPlan"
+            },
+            "description": "各月度文件迁移计划"
+          },
+          "entries_appended": {
+            "type": "integer",
+            "description": "新增条目数"
+          },
+          "entries_duplicated": {
+            "type": "integer",
+            "description": "跳过的重复条目数"
+          },
+          "files_cleared": {
+            "type": "integer",
+            "description": "清空的 trans/ 文件数"
+          },
+          "push": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LedgerPushResult"
+              }
+            ],
+            "nullable": true,
+            "description": "推送结果"
+          }
+        },
+        "required": [
+          "entries_appended",
+          "entries_duplicated",
+          "files_cleared",
+          "message",
+          "plans",
+          "status"
+        ]
+      },
+      "LedgerPushResult": {
+        "type": "object",
+        "description": "推送结果序列化器",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "推送状态：success / skipped"
+          },
+          "message": {
+            "type": "string",
+            "description": "结果消息"
+          },
+          "commit": {
+            "type": "string",
+            "nullable": true,
+            "description": "提交短哈希"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "本次提交的文件"
+          }
+        },
+        "required": [
+          "message",
+          "status"
+        ]
+      },
       "LinkRepositoryProviderEnum": {
         "enum": [
-          "github"
+          "github",
+          "gitlab",
+          "gitea",
+          "gogs",
+          "other"
         ],
         "type": "string",
-        "description": "* `github` - github"
+        "description": "* `` - \n* `github` - github\n* `gitlab` - gitlab\n* `gitea` - gitea\n* `gogs` - gogs\n* `other` - other"
       },
       "LinkRepositoryRequest": {
         "type": "object",
-        "description": "关联已有远程仓库。",
+        "description": "关联已有远程仓库。支持任意可公网访问的 SSH 仓库（GitHub / GitLab / Gitea / Gogs / 自建）。",
         "properties": {
           "remote_ssh_url": {
             "type": "string",
@@ -7137,12 +8147,16 @@
             "maxLength": 500
           },
           "provider": {
-            "allOf": [
+            "default": "",
+            "description": "留空则由平台从 SSH 地址自动识别\n\n* `` - \n* `github` - github\n* `gitlab` - gitlab\n* `gitea` - gitea\n* `gogs` - gogs\n* `other` - other",
+            "oneOf": [
               {
                 "$ref": "#/components/schemas/LinkRepositoryProviderEnum"
+              },
+              {
+                "$ref": "#/components/schemas/BlankEnum"
               }
-            ],
-            "default": "github"
+            ]
           },
           "default_branch": {
             "type": "string",
@@ -7299,6 +8313,15 @@
             },
             "writeOnly": true,
             "description": "标签ID列表"
+          }
+        }
+      },
+      "PatchedChatSessionUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120
           }
         }
       },
@@ -7556,6 +8579,83 @@
           }
         }
       },
+      "PatchedUpdateSharedLedgerAliasesRequest": {
+        "type": "object",
+        "properties": {
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "description": "整体覆盖该共享账本的别名；传空列表表示清除别名"
+          }
+        }
+      },
+      "PersonalAccessToken": {
+        "type": "object",
+        "description": "个人访问令牌输出序列化器（不含明文令牌）",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "readOnly": true,
+            "title": "名称",
+            "description": "便于用户识别的用途说明，如 Claude Code"
+          },
+          "prefix": {
+            "type": "string",
+            "readOnly": true,
+            "title": "令牌前缀",
+            "description": "明文前缀，用于按前缀定位令牌记录"
+          },
+          "scopes": {
+            "type": "string",
+            "readOnly": true,
+            "title": "权限范围",
+            "description": "空格分隔的 scope 列表"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true,
+            "title": "过期时间"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true,
+            "title": "最后使用时间"
+          },
+          "revoked_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "nullable": true,
+            "title": "撤销时间"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        },
+        "required": [
+          "created",
+          "expires_at",
+          "id",
+          "last_used_at",
+          "name",
+          "prefix",
+          "revoked_at",
+          "scopes"
+        ]
+      },
       "QueryRecord": {
         "type": "object",
         "properties": {
@@ -7564,12 +8664,110 @@
           },
           "result_preview": {
             "type": "string"
+          },
+          "ledger": {
+            "type": "string",
+            "default": ""
+          },
+          "fava_path": {
+            "type": "string",
+            "default": ""
+          },
+          "report": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QueryReportLink"
+              }
+            ],
+            "nullable": true
           }
         },
         "required": [
           "bql",
           "result_preview"
         ]
+      },
+      "QueryRecordRequest": {
+        "type": "object",
+        "properties": {
+          "bql": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result_preview": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ledger": {
+            "type": "string",
+            "default": ""
+          },
+          "fava_path": {
+            "type": "string",
+            "default": ""
+          },
+          "report": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QueryReportLinkRequest"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "bql",
+          "result_preview"
+        ]
+      },
+      "QueryReportLink": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "name",
+          "path"
+        ]
+      },
+      "QueryReportLinkRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "label",
+          "name",
+          "path"
+        ]
+      },
+      "RatingEnum": {
+        "enum": [
+          "like",
+          "dislike"
+        ],
+        "type": "string",
+        "description": "* `like` - like\n* `dislike` - dislike"
       },
       "ReconciliationCycleUnitEnum": {
         "enum": [
@@ -7929,6 +9127,10 @@
             "type": "string",
             "readOnly": true
           },
+          "entry_count": {
+            "type": "string",
+            "readOnly": true
+          },
           "created": {
             "type": "string",
             "format": "date-time",
@@ -7944,6 +9146,7 @@
           "account_name",
           "account_type",
           "created",
+          "entry_count",
           "file_id",
           "file_name",
           "id",
@@ -8033,6 +9236,46 @@
         "type": "string",
         "description": "* `create` - 创建远程\n* `link` - 关联远程"
       },
+      "SharedLedgerBinding": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "owner_username": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usable": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "created",
+          "id",
+          "owner_username",
+          "usable"
+        ]
+      },
       "StatusEnum": {
         "enum": [
           "inactive",
@@ -8091,11 +9334,16 @@
             "type": "string",
             "nullable": true,
             "description": "错误信息"
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "是否已取消同步"
           }
         },
         "required": [
           "error",
           "last_sync_at",
+          "paused",
           "status"
         ]
       },
@@ -8322,10 +9570,11 @@
       "TaskTypeEnum": {
         "enum": [
           "reconciliation",
-          "parse_review"
+          "parse_review",
+          "entry_review"
         ],
         "type": "string",
-        "description": "* `reconciliation` - 对账\n* `parse_review` - 解析审核"
+        "description": "* `reconciliation` - 对账\n* `parse_review` - 解析审核\n* `entry_review` - 条目审核"
       },
       "TemplateDetail": {
         "type": "object",
@@ -8650,10 +9899,14 @@
           "access": {
             "type": "string",
             "readOnly": true
+          },
+          "refresh": {
+            "type": "string"
           }
         },
         "required": [
-          "access"
+          "access",
+          "refresh"
         ]
       },
       "TokenRefreshRequest": {
@@ -8661,7 +9914,6 @@
         "properties": {
           "refresh": {
             "type": "string",
-            "writeOnly": true,
             "minLength": 1
           }
         },
@@ -8745,12 +9997,16 @@
       },
       "WebhookPayloadRequest": {
         "type": "object",
-        "description": "GitHub / 平台托管 Gitea push Webhook 载荷（宽松校验，具体分支在视图中比对）。",
+        "description": "GitHub / GitLab / Gitea / Gogs push Webhook 载荷（宽松校验，具体分支在视图中比对）。",
         "properties": {
           "ref": {
             "type": "string"
           },
           "repository": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "project": {
             "type": "object",
             "additionalProperties": {}
           },

@@ -1,10 +1,9 @@
-import os
 import json
 import hashlib
 import hmac
 import logging
 from django.conf import settings
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.request import Request
@@ -19,8 +18,10 @@ from .serializers import (
     SyncStatusSerializer, SyncResponseSerializer,
     WebhookPayloadSerializer, DeployKeyResponseSerializer,
     DeleteRepositoryResponseSerializer, ClearSyncedLedgerResponseSerializer,
+    LedgerCommitPreviewSerializer, LedgerCommitResultSerializer,
 )
 from .services import PlatformGitService, GitServiceException
+from .ledger_commit_service import LedgerCommitService
 
 logger = logging.getLogger(__name__)
 
@@ -526,50 +527,43 @@ class GitWebhookView(APIView):
             return Response({'error': 'Processing failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class GitTransDownloadView(APIView):
-    """Git Trans 目录下载视图"""
+class GitTransCommitPreviewView(APIView):
+    """trans/ 条目迁移到月度账本：预览视图（仅 Git 用户）"""
 
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_git_service(self):
-        return PlatformGitService()
+    @extend_schema(
+        summary="预览 trans 条目迁移到月度账本",
+        responses={
+            200: LedgerCommitPreviewSerializer,
+            400: OpenApiResponse(description="用户未启用 Git 功能或参数错误"),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        """返回迁移计划（各月度文件将新增/跳过的条目数），不落盘、不提交"""
+        try:
+            result = LedgerCommitService.preview(request.user)
+            return Response(LedgerCommitPreviewSerializer(result).data)
+        except GitServiceException as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GitTransCommitView(APIView):
+    """trans/ 条目迁移到月度账本：执行视图（仅 Git 用户）"""
+
+    permission_classes = [permissions.IsAuthenticated]
 
     @extend_schema(
-        summary="下载 trans 目录",
+        summary="提交 trans 条目到月度账本并推送远程",
         responses={
-            200: OpenApiResponse(description="ZIP 文件"),
-            404: OpenApiResponse(description="用户未启用 Git 功能或 trans 目录不存在")
-        }
+            200: LedgerCommitResultSerializer,
+            400: OpenApiResponse(description="用户未启用 Git 功能或提交失败"),
+        },
     )
-    def get(self, request: Request) -> Response:
-        """下载 trans/ 目录的 ZIP 压缩包"""
+    def post(self, request: Request) -> Response:
+        """迁移 trans/ 条目到月度文件，提交并推送到远程仓库"""
         try:
-            git_service = self.get_git_service()
-            zip_path = git_service.create_trans_download_archive(request.user)
-
-            # 创建文件响应
-            filename = f"{request.user.username}_trans.zip"
-
-            response = FileResponse(
-                open(zip_path, 'rb'),
-                content_type='application/zip'
-            )
-            response['Content-Disposition'] = f'attachment; filename="{filename}"'
-
-            # 清理临时文件（在响应发送后）
-            def cleanup():
-                try:
-                    os.remove(zip_path)
-                except:
-                    pass
-
-            # 注册清理函数（Django 会在响应发送后调用）
-            response._cleanup_func = cleanup
-
-            return response
-
+            result = LedgerCommitService.execute(request.user)
+            return Response(LedgerCommitResultSerializer(result).data)
         except GitServiceException as e:
-            return Response(
-                {'error': str(e)}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -178,3 +178,54 @@ class ClearSyncedLedgerResponseSerializer(serializers.Serializer):
         help_text="是否保留了 trans/ 解析结果"
     )
     repo_name = serializers.CharField(help_text="仓库目录名（未变更）")
+
+
+class LedgerCommitPlanSerializer(serializers.Serializer):
+    """单个月度文件的迁移计划"""
+
+    year = serializers.IntegerField(help_text="年度")
+    month = serializers.IntegerField(help_text="月份（1-12）")
+    target = serializers.CharField(help_text="目标月度文件相对路径，如 2025/05-expenses.bean")
+    new = serializers.IntegerField(help_text="将新增的条目数")
+    duplicate = serializers.IntegerField(help_text="已存在将被跳过的条目数")
+
+
+class LedgerCommitErrorSerializer(serializers.Serializer):
+    """trans/ 文件解析错误"""
+
+    file = serializers.CharField(help_text="相对 trans/ 的文件路径")
+    error = serializers.CharField(help_text="错误信息")
+
+
+class LedgerCommitPreviewSerializer(serializers.Serializer):
+    """迁移预览响应序列化器"""
+
+    total_entries = serializers.IntegerField(help_text="扫描到的条目总数")
+    files_scanned = serializers.IntegerField(help_text="扫描的文件数")
+    plans = LedgerCommitPlanSerializer(many=True, help_text="各月度文件迁移计划")
+    errors = LedgerCommitErrorSerializer(many=True, help_text="解析失败的文件")
+
+
+class LedgerPushResultSerializer(serializers.Serializer):
+    """推送结果序列化器"""
+
+    status = serializers.CharField(help_text="推送状态：success / skipped")
+    message = serializers.CharField(help_text="结果消息")
+    commit = serializers.CharField(required=False, allow_null=True, help_text="提交短哈希")
+    files = serializers.ListField(
+        child=serializers.CharField(), required=False, help_text="本次提交的文件"
+    )
+
+
+class LedgerCommitResultSerializer(serializers.Serializer):
+    """迁移提交响应序列化器"""
+
+    status = serializers.CharField(help_text="结果状态：success / skipped")
+    message = serializers.CharField(help_text="结果消息")
+    plans = LedgerCommitPlanSerializer(many=True, help_text="各月度文件迁移计划")
+    entries_appended = serializers.IntegerField(help_text="新增条目数")
+    entries_duplicated = serializers.IntegerField(help_text="跳过的重复条目数")
+    files_cleared = serializers.IntegerField(help_text="清空的 trans/ 文件数")
+    push = LedgerPushResultSerializer(
+        required=False, allow_null=True, help_text="推送结果"
+    )

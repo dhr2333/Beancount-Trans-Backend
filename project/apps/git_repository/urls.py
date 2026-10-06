@@ -7,7 +7,8 @@ from .views import (
     GitSyncStatusView,
     GitSyncCancelView,
     GitWebhookView,
-    GitTransDownloadView
+    GitTransCommitPreviewView,
+    GitTransCommitView,
 )
 
 # 创建路由器并注册视图集
@@ -26,7 +27,8 @@ urlpatterns = [
     # Webhook（无需认证）
     path('webhook/', GitWebhookView.as_view(), name='git-webhook'),
 
-    # Trans 目录下载
-    path('trans/download/', GitTransDownloadView.as_view(), name='git-trans-download'),
+    # Trans 条目迁移到月度账本
+    path('trans/commit/preview/', GitTransCommitPreviewView.as_view(), name='git-trans-commit-preview'),
+    path('trans/commit/', GitTransCommitView.as_view(), name='git-trans-commit'),
 ]
 

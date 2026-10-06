@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import logging
 import subprocess
-import zipfile
 from pathlib import Path
 from typing import Dict, Any, Optional
 from django.conf import settings
@@ -426,6 +425,102 @@ class PlatformGitService:
                 'error': error_msg
             }
 
+    def push_ledger(self, user: User, paths: Optional[list] = None) -> Dict[str, Any]:
+        """把平台写入的账本内容提交并推送到远程（仅 Git 用户）
+
+        流程：git add → commit → git pull --rebase → git push。
+        无变更时不产生空提交，直接返回 skipped。
+
+        Args:
+            user: 用户对象
+            paths: 需要 add 的相对路径列表（相对仓库根）；为空时提交全部变更
+
+        Returns:
+            Dict[str, Any]: 含 status（success/skipped）、message、commit、files
+
+        Raises:
+            GitServiceException: 未启用 Git、仓库未初始化或 Git 操作失败
+        """
+        try:
+            git_repo = user.git_repo
+        except GitRepository.DoesNotExist:
+            raise GitServiceException("用户未启用 Git 功能")
+
+        user_assets_path = self.assets_base_path / git_repo.repo_name
+        if not (user_assets_path / '.git').exists():
+            raise GitServiceException("本地仓库尚未初始化，请先执行「立即同步」")
+
+        ssh_key_file = self._prepare_ssh_key(git_repo)
+        original_cwd = os.getcwd()
+
+        try:
+            env = os.environ.copy()
+            env['GIT_SSH_COMMAND'] = f'ssh -i {ssh_key_file} -o StrictHostKeyChecking=no'
+
+            os.chdir(user_assets_path)
+            branch = (git_repo.default_branch or 'main').strip() or 'main'
+
+            subprocess.run(
+                ['git', 'config', 'user.name', 'Beancount-Trans Platform'],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ['git', 'config', 'user.email', 'platform@beancount-trans.local'],
+                check=True, capture_output=True, text=True,
+            )
+
+            if paths:
+                subprocess.run(['git', 'add', '--', *paths], check=True, capture_output=True, text=True)
+            else:
+                subprocess.run(['git', 'add', '-A'], check=True, capture_output=True, text=True)
+
+            staged = subprocess.run(
+                ['git', 'diff', '--cached', '--name-only'],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            if not staged:
+                return {'status': 'skipped', 'message': '没有需要提交的账本变更', 'files': []}
+
+            subprocess.run(
+                ['git', 'commit', '-m', 'chore(ledger): 提交平台解析条目到月度账本'],
+                check=True, capture_output=True, text=True,
+            )
+            commit_hash = subprocess.run(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+
+            subprocess.run(
+                ['git', 'pull', '--rebase', 'origin', branch],
+                env=env, check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                ['git', 'push', 'origin', branch],
+                env=env, check=True, capture_output=True, text=True,
+            )
+
+            logger.info(f"Pushed ledger for user {user.username}: {commit_hash}")
+            return {
+                'status': 'success',
+                'message': '已提交并推送到远程仓库',
+                'commit': commit_hash,
+                'files': staged.splitlines(),
+            }
+
+        except subprocess.CalledProcessError as e:
+            err = (e.stderr or e.stdout or '').strip() or str(e)
+            logger.error(f"Failed to push ledger for user {user.username}: {err[:800]}")
+            raise GitServiceException(f"推送失败: {err[:800]}")
+        except GitServiceException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to push ledger for user {user.username}: {e}")
+            raise GitServiceException(f"推送失败: {e}")
+        finally:
+            os.chdir(original_cwd)
+            if os.path.exists(ssh_key_file):
+                os.remove(ssh_key_file)
+
     def regenerate_deploy_key(self, user: User) -> Dict[str, str]:
         """重新生成 Deploy Key
 
@@ -485,42 +580,6 @@ class PlatformGitService:
         except Exception as e:
             logger.error(f"Failed to regenerate deploy key for user {user.username}: {e}")
             raise GitServiceException(f"重新生成 Deploy Key 失败: {e}")
-
-    def create_trans_download_archive(self, user: User) -> str:
-        """创建 trans/ 目录的 ZIP 压缩包供用户下载
-
-        Returns:
-            ZIP 文件的路径
-        """
-        try:
-            git_repo = user.git_repo
-        except GitRepository.DoesNotExist:
-            raise GitServiceException("用户未启用 Git 功能")
-
-        user_assets_path = self.assets_base_path / git_repo.repo_name
-        trans_path = user_assets_path / 'trans'
-
-        if not trans_path.exists():
-            raise GitServiceException("trans/ 目录不存在")
-
-        # 创建临时 ZIP 文件
-        temp_dir = tempfile.mkdtemp()
-        zip_path = os.path.join(temp_dir, f"{user.username}_trans.zip")
-
-        try:
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for file_path in trans_path.rglob('*.bean'):
-                    arcname = os.path.join('trans', str(file_path.relative_to(trans_path)))
-                    zipf.write(file_path, arcname)
-
-            logger.info(f"Created trans/ archive for user {user.username}: {zip_path}")
-            return zip_path
-
-        except Exception as e:
-            # 清理临时文件
-            if os.path.exists(zip_path):
-                os.remove(zip_path)
-            raise GitServiceException(f"创建压缩包失败: {e}")
 
     def _generate_ssh_key_pair(self) -> tuple[str, str]:
         """生成 SSH 密钥对
@@ -659,7 +718,11 @@ class PlatformGitService:
                 subprocess.run(['git', 'fetch', 'origin'], env=env, check=True)
 
                 branch = (git_repo.default_branch or 'main').strip() or 'main'
-                subprocess.run(['git', 'reset', '--hard', f'origin/{branch}'], check=True)
+                # 采用 rebase 拉取：平台可能已有本地提交（月度账本），reset --hard 会将其抹除
+                subprocess.run(
+                    ['git', 'pull', '--rebase', 'origin', branch],
+                    env=env, check=True,
+                )
 
                 logger.info(f"Updated repository {git_repo.repo_name}")
 
