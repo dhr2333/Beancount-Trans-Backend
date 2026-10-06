@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.15.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.3...5.15.0) (2026-10-06)
+
+### Features
+
+* **git仓库:** 添加trans条目按月度账本迁移功能 ([23560d7](https://github.com/dhr2333/Beancount-Trans-Backend/commit/23560d78e968dd56139b758494f70e1556a6d56a))
+
+### Bug Fixes
+
+* **条目审核:** 添加重解析时的候选关键字批量传播功能 ([8f3e52d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/8f3e52d0fdb8fa9d1bed47b50e6dbb69b1544e2c))
+
 ## [5.14.3](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.2...5.14.3) (2026-09-30)
 
 ### Performance Improvements
