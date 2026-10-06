@@ -1,7 +1,7 @@
 """trans/ 条目迁移到月度账本的提交服务
 
 用于 Git 用户把 trans/ 下已审核的条目按交易日期归入仓库根的月度文件
-（{year}/{MM}-expenses.bean），提交并推送到远程，使其可通过 git pull 取回。
+（{year}/{MM}.bean），提交并推送到远程，使其可通过 git pull 取回。
 """
 import logging
 import os

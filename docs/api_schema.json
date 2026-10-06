@@ -7993,7 +7993,7 @@
           },
           "target": {
             "type": "string",
-            "description": "目标月度文件相对路径，如 2025/05-expenses.bean"
+            "description": "目标月度文件相对路径，如 2025/05.bean"
           },
           "new": {
             "type": "integer",

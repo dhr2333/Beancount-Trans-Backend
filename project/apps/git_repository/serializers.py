@@ -185,7 +185,7 @@ class LedgerCommitPlanSerializer(serializers.Serializer):
 
     year = serializers.IntegerField(help_text="年度")
     month = serializers.IntegerField(help_text="月份（1-12）")
-    target = serializers.CharField(help_text="目标月度文件相对路径，如 2025/05-expenses.bean")
+    target = serializers.CharField(help_text="目标月度文件相对路径，如 2025/05.bean")
     new = serializers.IntegerField(help_text="将新增的条目数")
     duplicate = serializers.IntegerField(help_text="已存在将被跳过的条目数")
 

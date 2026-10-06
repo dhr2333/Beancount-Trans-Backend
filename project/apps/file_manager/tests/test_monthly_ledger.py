@@ -1,7 +1,7 @@
 """年月度账本能力测试
 
 覆盖 BeanFileManager 新增的月度账本 API：
-- 路径拼接（{year}/{MM}-expenses.bean、{year}/00.bean）
+- 路径拼接（{year}/{MM}.bean、{year}/00.bean）
 - ensure_year_structure（目录/12 月度文件/年度索引/main.bean include，幂等）
 - split_entries 条目切分
 - append_entries_to_monthly（追加 + 条目级去重）
@@ -62,14 +62,14 @@ ENTRY_B = (
 
 class TestPaths:
     def test_monthly_relative_path(self):
-        assert BeanFileManager.get_monthly_relative_path(2025, 5) == '2025/05-expenses.bean'
-        assert BeanFileManager.get_monthly_relative_path(2025, 12) == '2025/12-expenses.bean'
+        assert BeanFileManager.get_monthly_relative_path(2025, 5) == '2025/05.bean'
+        assert BeanFileManager.get_monthly_relative_path(2025, 12) == '2025/12.bean'
 
     def test_year_index_relative_path(self):
         assert BeanFileManager.get_year_index_relative_path(2025) == '2025/00.bean'
 
     def test_monthly_bean_path(self, user, assets_dir):
-        expected = os.path.join(str(assets_dir), user.username, '2025', '03-expenses.bean')
+        expected = os.path.join(str(assets_dir), user.username, '2025', '03.bean')
 
         assert BeanFileManager.get_monthly_bean_path(user, 2025, 3) == expected
 
@@ -81,11 +81,11 @@ class TestEnsureYearStructure:
         year_dir = Path(BeanFileManager.get_year_dir(user, 2025))
         assert year_dir.is_dir()
         for month in range(1, 13):
-            assert (year_dir / f"{month:02d}-expenses.bean").is_file()
+            assert (year_dir / f"{month:02d}.bean").is_file()
 
         index_text = _read(BeanFileManager.get_year_index_path(user, 2025))
-        assert 'include "01-expenses.bean"' in index_text
-        assert 'include "12-expenses.bean"' in index_text
+        assert 'include "01.bean"' in index_text
+        assert 'include "12.bean"' in index_text
 
         assert 'include "2025/00.bean"' in _main_include_lines(user)
 

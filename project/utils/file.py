@@ -586,7 +586,7 @@ include "trans/main.bean"
 
     # 年度索引文件名与月度文件后缀，约定见文档 git-按月账本迁移方案.md
     YEAR_INDEX_FILENAME = '00.bean'
-    MONTHLY_BEAN_SUFFIX = '-expenses.bean'
+    MONTHLY_BEAN_SUFFIX = '.bean'
 
     @staticmethod
     def get_year_dir(user_or_username, year):
@@ -605,7 +605,7 @@ include "trans/main.bean"
 
     @staticmethod
     def get_monthly_bean_path(user_or_username, year, month):
-        """获取月度账本文件的绝对路径（{year}/{MM}-expenses.bean）"""
+        """获取月度账本文件的绝对路径（{year}/{MM}.bean）"""
         return os.path.join(
             BeanFileManager.get_year_dir(user_or_username, year),
             f"{int(month):02d}{BeanFileManager.MONTHLY_BEAN_SUFFIX}",
@@ -651,7 +651,7 @@ include "trans/main.bean"
         """幂等建立年度账本结构（仓库根）
 
         - 创建 {year}/ 目录
-        - 创建 12 个月度文件 {year}/{MM}-expenses.bean（含注释头，已存在不覆盖）
+        - 创建 12 个月度文件 {year}/{MM}.bean（含注释头，已存在不覆盖）
         - 创建年度索引 {year}/00.bean（include 12 个月度文件，已存在不覆盖）
         - 确保仓库根 main.bean include 年度索引
 
@@ -753,7 +753,7 @@ include "trans/main.bean"
 
     @staticmethod
     def append_entries_to_monthly(user_or_username, year, month, entry_texts):
-        """把条目追加写入 {year}/{MM}-expenses.bean（幂等去重）
+        """把条目追加写入 {year}/{MM}.bean（幂等去重）
 
         写入前确保年度结构存在；与文件已有条目按内容指纹去重，重复条目不写入。
 

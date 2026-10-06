@@ -77,8 +77,8 @@ class TestPreview:
         assert result['total_entries'] == 2
         assert result['files_scanned'] == 1
         targets = {p['target']: p for p in result['plans']}
-        assert targets['2025/05-expenses.bean']['new'] == 1
-        assert targets['2025/06-expenses.bean']['new'] == 1
+        assert targets['2025/05.bean']['new'] == 1
+        assert targets['2025/06.bean']['new'] == 1
         # 未落盘
         assert not Path(BeanFileManager.get_monthly_bean_path(user, 2025, 5)).exists()
 
@@ -89,7 +89,7 @@ class TestPreview:
 
         result = LedgerCommitService.preview(user)
 
-        plan = next(p for p in result['plans'] if p['target'] == '2025/05-expenses.bean')
+        plan = next(p for p in result['plans'] if p['target'] == '2025/05.bean')
         assert plan['new'] == 0
         assert plan['duplicate'] == 1
 
