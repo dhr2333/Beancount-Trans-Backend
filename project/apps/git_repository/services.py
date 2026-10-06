@@ -383,20 +383,10 @@ class PlatformGitService:
                 self._restore_trans_directory(trans_backup, user_assets_path / 'trans')
                 logger.info(f"Restored trans/ directory for user {user.username}")
 
-            # 4. 检测并注释重复的对账条目
-            reconciliation_comment_result = None
-            try:
-                from project.apps.reconciliation.services import ReconciliationCommentService
-                reconciliation_comment_result = ReconciliationCommentService.detect_and_comment_duplicates(user)
-                logger.info(f"对账条目检测完成: {reconciliation_comment_result.get('message', '')}")
-            except Exception as e:
-                logger.warning(f"检测对账重复条目失败: {e}", exc_info=True)
-                # 不阻断同步流程，只记录警告
-
-            # 5. 重建 trans/main.bean
+            # 4. 重建 trans/main.bean
             # self._rebuild_trans_main_bean(user_assets_path)
 
-            # 6. 更新同步状态
+            # 5. 更新同步状态
             git_repo.sync_status = 'success'
             git_repo.last_sync_at = timezone.now()
             git_repo.save()
@@ -407,7 +397,6 @@ class PlatformGitService:
                 'status': 'success',
                 'message': '同步成功',
                 'synced_at': git_repo.last_sync_at,
-                'reconciliation_comment_result': reconciliation_comment_result
             }
 
         except Exception as e:
@@ -882,17 +871,6 @@ class PlatformGitService:
         cleaned_files = []
 
         try:
-            # 取消所有对账条目的注释（恢复平台管理）
-            try:
-                from project.apps.reconciliation.services import ReconciliationCommentService
-                uncommented_count = ReconciliationCommentService.uncomment_all_entries(user)
-                logger.info(f"已取消 {uncommented_count} 个对账条目的注释")
-                if uncommented_count > 0:
-                    cleaned_files.append(f"取消注释: {uncommented_count} 个条目")
-            except Exception as e:
-                logger.warning(f"取消对账条目注释失败: {e}", exc_info=True)
-                # 不阻断删除流程，只记录警告
-
             # 1. 删除平台托管的 Gitea 远程仓库（外部远程不调用第三方删库）
             if git_repo.provider == 'gitea_hosted' and git_repo.gitea_repo_id is not None:
                 logger.info(f"Deleting Gitea repository for user {user.username}: {git_repo.repo_name}")
