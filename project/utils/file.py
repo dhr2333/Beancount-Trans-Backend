@@ -699,7 +699,11 @@ include "trans/main.bean"
         date_pattern = re.compile(r'^(\d{4})-(\d{2})-(\d{2})\s')
 
         for line in str(text).splitlines():
-            match = date_pattern.match(line.strip())
+            stripped = line.strip()
+            # 纯注释行不作为条目内容：跳过（如被清理注释掉的 pad，不应随上一条目迁移）
+            if stripped.startswith(';'):
+                continue
+            match = date_pattern.match(stripped)
             if match:
                 if current_lines and current_date:
                     entries.append((current_date, '\n'.join(current_lines).rstrip()))

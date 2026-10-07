@@ -123,6 +123,24 @@ class TestSplitEntries:
     def test_empty_text(self):
         assert BeanFileManager.split_entries('') == []
 
+    def test_skips_comment_lines_within_entries(self):
+        """纯注释行不作为条目内容，也不随上一条目迁移"""
+        text = (
+            '2025-05-01 * "a"\n'
+            '  Expenses:A  1.00 CNY\n'
+            '; 2025-05-02 pad Assets:A Equity:Opening-Balances\n'
+            '\n'
+            '2025-06-02 * "b"\n'
+            '  Expenses:B  2.00 CNY\n'
+        )
+
+        entries = BeanFileManager.split_entries(text)
+
+        assert [date for date, _ in entries] == ['2025-05', '2025-06']
+        # 注释行既不是独立条目，也不并入上一条目
+        assert all('pad' not in block for _, block in entries)
+        assert all(';' not in block for _, block in entries)
+
 
 class TestAppendEntriesToMonthly:
     def test_appends_and_buckets(self, user):
