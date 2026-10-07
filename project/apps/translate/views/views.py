@@ -475,6 +475,13 @@ class WriteCollectView(APIView):
                 )
 
             BeanFileManager.append_to_collect_bean(request.user, directives)
+
+            # 解析写入后，对账生成的 pad 可能因真实交易落入断言容差而变为无用，
+            # 自动注释之（best-effort，失败不影响写入结果）
+            from project.apps.reconciliation.services.reconciliation_comment_service import (
+                ReconciliationCommentService,
+            )
+            ReconciliationCommentService.cleanup_unused_pads(request.user)
         except Exception as e:
             logger.exception(e)
             return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1595,6 +1602,13 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 {'error': f'写入文件失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+        # 解析写入后，对账生成的 pad 可能因真实交易落入断言容差而变为无用，
+        # 自动注释之（best-effort，失败不影响写入结果）
+        from project.apps.reconciliation.services.reconciliation_comment_service import (
+            ReconciliationCommentService,
+        )
+        ReconciliationCommentService.cleanup_unused_pads(request.user)
 
         # 写入成功后删除 Copilot 暂存区
         if copilot_written:

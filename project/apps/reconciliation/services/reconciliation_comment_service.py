@@ -258,3 +258,67 @@ class ReconciliationCommentService:
             logger.info(f"已注释 {commented_count} 行在文件 {file_path}")
         
         return commented_count
+
+    @staticmethod
+    def cleanup_unused_pads(user_or_username) -> int:
+        """注释掉 reconciliation.bean 中已变为「无用」的 pad（保留 balance 断言）
+
+        Beancount 的 pad 插件在某个 pad 未为后续 balance 合成补差交易时报
+        "Unused Pad entry"。判定标准由 Beancount 的断言容差决定（例如两位小数的
+        balance 容差为 0.01），因此「金额完全一致」与「相差在容差内」都会被识别。
+        这里直接依据 loader 的输出进行检测，与 Fava 判定保持一致。
+
+        该方法为 best-effort：内部捕获全部异常并仅记录日志，不向外抛出，
+        以免影响调用方的写入流程。
+
+        Args:
+            user_or_username: User 对象或 username 字符串
+
+        Returns:
+            实际注释的行数；无需清理或失败时返回 0
+        """
+        try:
+            reconciliation_path = BeanFileManager.get_reconciliation_bean_path(user_or_username)
+            if not os.path.exists(reconciliation_path):
+                return 0
+
+            main_path = BeanFileManager.get_main_bean_path(user_or_username)
+            if not os.path.exists(main_path):
+                return 0
+
+            _entries, errors, _options = loader.load_file(main_path)
+
+            target_path = os.path.abspath(os.path.realpath(reconciliation_path))
+            line_numbers = []
+            for error in errors:
+                # PadError: (source, message, entry)，仅处理「无用 pad」
+                if getattr(error, 'message', None) != 'Unused Pad entry':
+                    continue
+                pad = getattr(error, 'entry', None)
+                if not isinstance(pad, Pad):
+                    continue
+                meta = getattr(pad, 'meta', None) or {}
+                filename = meta.get('filename')
+                lineno = meta.get('lineno')
+                if not filename or not lineno:
+                    continue
+                # 只处理 reconciliation.bean 中的 pad（平台托管文件），
+                # 不误伤用户自有文件中的 pad
+                if os.path.abspath(os.path.realpath(filename)) != target_path:
+                    continue
+                line_numbers.append(lineno)
+
+            if not line_numbers:
+                return 0
+
+            commented = ReconciliationCommentService._comment_lines_in_file(
+                reconciliation_path, sorted(set(line_numbers))
+            )
+            if commented:
+                logger.info(
+                    f"已注释 {commented} 行无用 pad 在文件 {reconciliation_path}"
+                )
+            return commented
+        except Exception as e:
+            logger.warning(f"清理无用 pad 失败: {e}", exc_info=True)
+            return 0

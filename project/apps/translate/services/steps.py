@@ -329,4 +329,11 @@ class FileWritingStep(Step):
 
             # 注意：include语句的添加已在上传文件时完成，解析功能仅处理文件内容的写入
 
+            # 写入后，对账生成的 pad 可能因真实交易落入断言容差而变为无用，
+            # 自动注释之（best-effort，失败不影响写入结果）
+            from project.apps.reconciliation.services.reconciliation_comment_service import (
+                ReconciliationCommentService,
+            )
+            ReconciliationCommentService.cleanup_unused_pads(user)
+
         return context

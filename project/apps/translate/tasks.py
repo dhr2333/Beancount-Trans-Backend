@@ -479,6 +479,13 @@ def auto_confirm_expired_entry_reviews():
             user.id, user_entries_written,
         )
 
+        # 自动写入后，对账生成的 pad 可能因真实交易落入断言容差而变为无用，
+        # 自动注释之（best-effort，失败不影响写入结果）
+        from project.apps.reconciliation.services.reconciliation_comment_service import (
+            ReconciliationCommentService,
+        )
+        ReconciliationCommentService.cleanup_unused_pads(user)
+
         # 该用户队列已清空，完成待办；否则保持 pending
         if EntryReviewQueueService.is_empty(user.id):
             EntryReviewQueueService.complete_task(user)
