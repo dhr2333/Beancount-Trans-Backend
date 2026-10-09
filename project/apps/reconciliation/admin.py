@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
 
-from .models import ScheduledTask
+from .models import ScheduledTask, RecurringTask
 
 
 class ScheduledTaskUserFilter(admin.SimpleListFilter):
@@ -182,3 +182,11 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
             pass
         return '-'
     get_user.short_description = '用户'
+
+
+@admin.register(RecurringTask)
+class RecurringTaskAdmin(admin.ModelAdmin):
+    """RecurringTask 管理界面"""
+    list_display = ['id', 'user', 'title', 'rule_text', 'rrule', 'next_date', 'status', 'generated_count']
+    list_filter = ['status', 'recurrence_basis']
+    search_fields = ['title', 'rule_text']

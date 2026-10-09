@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import timedelta
 from django.db import models
 
-from .models import ScheduledTask
+from .models import ScheduledTask, RecurringTask
 
 
 class ScheduledTaskSerializer(serializers.ModelSerializer):
@@ -44,6 +44,9 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     
     # 待审核条目数量（条目审核待办）
     entry_count = serializers.SerializerMethodField()
+
+    # 循环待办标题（循环待办实例）
+    recurring_title = serializers.SerializerMethodField()
     
     class Meta:
         model = ScheduledTask
@@ -54,6 +57,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'account_name', 'account_type',
             'file_name', 'file_id',
             'review_expires_at', 'entry_count',
+            'recurring_title',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -109,6 +113,12 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             return len(EntryReviewQueueService.list_refs(obj.object_id))
         return None
 
+    def get_recurring_title(self, obj):
+        """获取循环待办定义标题（仅循环待办实例返回，否则为 None）"""
+        if isinstance(obj.content_object, RecurringTask):
+            return obj.content_object.title
+        return None
+
 
 class ScheduledTaskUpdateSerializer(serializers.ModelSerializer):
     """ScheduledTask 更新序列化器（仅允许修改 scheduled_date）"""
@@ -116,6 +126,81 @@ class ScheduledTaskUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScheduledTask
         fields = ['scheduled_date']
+
+
+class RecurringTaskSerializer(serializers.ModelSerializer):
+    """循环待办定义序列化器"""
+
+    # 只读计算字段：后续发生日期（ISO 字符串）与规则描述
+    next_occurrences = serializers.SerializerMethodField()
+    describe = serializers.SerializerMethodField()
+
+    # 可选字段：创建时未提供 start_date 时由服务默认取当天
+    start_date = serializers.DateField(required=False)
+    recurrence_basis = serializers.ChoiceField(
+        choices=RecurringTask.RECURRENCE_BASIS_CHOICES,
+        required=False,
+    )
+
+    class Meta:
+        model = RecurringTask
+        fields = [
+            'id', 'title', 'note', 'rule_text', 'rrule',
+            'recurrence_basis', 'start_date', 'next_date', 'status',
+            'generated_count', 'next_occurrences', 'describe',
+            'created', 'modified'
+        ]
+        read_only_fields = [
+            'id', 'rrule', 'next_date', 'status', 'generated_count',
+            'next_occurrences', 'describe', 'created', 'modified'
+        ]
+
+    def get_next_occurrences(self, obj):
+        """预览定义的后续发生日期（最多 5 次），失败时返回空列表"""
+        from .services import RecurringTaskService
+        try:
+            return [d.isoformat() for d in RecurringTaskService.preview(obj, count=5)]
+        except Exception:
+            return []
+
+    def get_describe(self, obj):
+        """解析规则原文并返回可读描述，失败时返回空字符串"""
+        from .services.recurrence import RecurrenceParser
+        try:
+            return RecurrenceParser.parse(obj.rule_text).describe()
+        except Exception:
+            return ''
+
+    def validate_rule_text(self, value):
+        """校验循环规则原文，无法解析时抛出校验错误"""
+        from .services.recurrence import RecurrenceParser, RecurrenceParseError
+        try:
+            RecurrenceParser.parse(value)
+        except RecurrenceParseError as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def create(self, validated_data):
+        """通过服务创建循环待办定义（归一化 rrule、初始化 next_date）"""
+        from .services import RecurringTaskService
+        user = self.context['request'].user
+        return RecurringTaskService.create(
+            user=user,
+            title=validated_data['title'],
+            rule_text=validated_data['rule_text'],
+            note=validated_data.get('note', ''),
+            start_date=validated_data.get('start_date'),
+            basis=validated_data.get('recurrence_basis'),
+        )
+
+    def update(self, instance, validated_data):
+        """通过服务更新循环待办定义（仅允许白名单字段）"""
+        from .services import RecurringTaskService
+        kwargs = {}
+        for key in ('title', 'note', 'rule_text', 'start_date', 'recurrence_basis'):
+            if key in validated_data:
+                kwargs[key] = validated_data[key]
+        return RecurringTaskService.update(instance, **kwargs)
 
 
 class TransactionItemSerializer(serializers.Serializer):

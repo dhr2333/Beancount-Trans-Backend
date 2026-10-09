@@ -4,6 +4,7 @@
 包含周期单位枚举、通用待办任务模型等。
 """
 from django.db import models
+from django.contrib.auth.models import User
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
@@ -27,6 +28,7 @@ class ScheduledTask(BaseModel):
         ('reconciliation', '对账'),
         ('parse_review', '解析审核'),
         ('entry_review', '条目审核'),
+        ('recurring', '循环待办'),
         # 后续可扩展其他类型
     ]
     
@@ -115,3 +117,70 @@ class ScheduledTask(BaseModel):
         if as_of_date is None:
             as_of_date = date.today()
         return queryset.filter(scheduled_date__lte=as_of_date)
+
+
+class RecurringTask(BaseModel):
+    """循环待办定义
+
+    用户级别的循环待办定义，基于 rule_text（原始 DSL）与 rrule（归一化 RRULE）
+    周期性地生成 ScheduledTask 实例。
+    """
+
+    RECURRENCE_BASIS_CHOICES = [
+        ('scheduled', '按计划日期'),
+        ('completed', '按完成日期'),
+    ]
+
+    STATUS_CHOICES = [
+        ('active', '进行中'),
+        ('paused', '已暂停'),
+        ('ended', '已结束'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        related_name='recurring_tasks',
+        on_delete=models.CASCADE,
+        db_index=True,
+        verbose_name='属主'
+    )
+    title = models.CharField(max_length=128, verbose_name='标题')
+    note = models.TextField(blank=True, default='', verbose_name='备注')
+    rule_text = models.CharField(max_length=128, verbose_name='循环规则原文')
+    rrule = models.CharField(max_length=256, verbose_name='归一化 RRULE')
+    recurrence_basis = models.CharField(
+        max_length=16,
+        choices=RECURRENCE_BASIS_CHOICES,
+        default='scheduled',
+        verbose_name='循环基准'
+    )
+    start_date = models.DateField(verbose_name='基准日期')
+    next_date = models.DateField(null=True, blank=True, verbose_name='下次生成日期')
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default='active',
+        verbose_name='状态'
+    )
+    last_generated_task = models.ForeignKey(
+        'ScheduledTask',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        verbose_name='最近生成的实例'
+    )
+    generated_count = models.PositiveIntegerField(default=0, verbose_name='已生成实例数')
+
+    class Meta:
+        db_table = 'recurring_task'
+        verbose_name = '循环待办定义'
+        verbose_name_plural = verbose_name
+        ordering = ['next_date']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['status', 'next_date']),
+        ]
+
+    def __str__(self):
+        return f'{self.title} ({self.get_status_display()})'

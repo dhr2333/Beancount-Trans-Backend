@@ -7,6 +7,7 @@ from decimal import Decimal
 
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -16,7 +17,7 @@ from project.apps.common.permissions import IsOwnerOrAdminReadWriteOnly
 from project.apps.common.filters import ScheduledTaskUserFilterBackend
 from project.apps.translate.models import FormatConfig
 
-from .models import ScheduledTask
+from .models import ScheduledTask, RecurringTask
 from .serializers import (
     ScheduledTaskSerializer,
     ScheduledTaskListSerializer,
@@ -24,11 +25,14 @@ from .serializers import (
     ReconciliationStartSerializer,
     ReconciliationExecuteSerializer,
     ReconciliationExecuteResponseSerializer,
+    RecurringTaskSerializer,
 )
 from .services import (
     BalanceCalculationService,
-    ReconciliationService
+    ReconciliationService,
+    RecurringTaskService,
 )
+from .services.recurrence import RecurrenceParser, RecurrenceParseError
 
 logger = logging.getLogger(__name__)
 
@@ -262,4 +266,86 @@ class ScheduledTaskViewSet(ModelViewSet):
                 {'error': f'撤销对账失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def complete(self, request, pk=None):
+        """完成循环待办实例，并按基准推进其定义的下次生成日期"""
+        task = self.get_object()
+
+        if task.task_type != 'recurring':
+            return Response(
+                {'error': '该待办不是循环待办'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if task.status != 'pending':
+            return Response(
+                {'error': '该待办已完成或已取消'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            result = RecurringTaskService.complete_instance(task)
+            return Response({
+                'completed': result['completed'],
+                'next_date': result['next_date'],
+            })
+        except Exception as e:
+            logger.error(f"完成循环待办失败: {e}", exc_info=True)
+            return Response(
+                {'error': f'完成循环待办失败: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class RecurringTaskViewSet(ModelViewSet):
+    """循环待办定义视图集
+
+    提供循环待办定义的增删改查，以及预览、暂停、恢复等自定义 action。
+    """
+    queryset = RecurringTask.objects.all()
+    serializer_class = RecurringTaskSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    pagination_class = None
+
+    def get_queryset(self):
+        """仅返回当前用户的循环待办定义"""
+        return RecurringTask.objects.filter(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        """删除定义，同时取消其所有待执行的实例"""
+        RecurringTaskService.delete(instance, cancel_pending=True)
+
+    @action(detail=True, methods=['post'])
+    def preview(self, request, pk=None):
+        """预览定义的规则描述与后续发生日期"""
+        defn = self.get_object()
+        try:
+            occurrences = RecurringTaskService.preview(defn, count=5)
+            spec = RecurrenceParser.parse(defn.rule_text)
+        except RecurrenceParseError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response({
+            'describe': spec.describe(),
+            'next_occurrences': [d.isoformat() for d in occurrences],
+            'basis': defn.recurrence_basis,
+        })
+
+    @action(detail=True, methods=['post'])
+    def pause(self, request, pk=None):
+        """暂停定义（不再生成实例）"""
+        defn = self.get_object()
+        RecurringTaskService.pause(defn)
+        return Response(self.get_serializer(defn).data)
+
+    @action(detail=True, methods=['post'])
+    def resume(self, request, pk=None):
+        """恢复定义"""
+        defn = self.get_object()
+        RecurringTaskService.resume(defn)
+        return Response(self.get_serializer(defn).data)
 

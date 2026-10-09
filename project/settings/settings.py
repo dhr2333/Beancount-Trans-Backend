@@ -572,6 +572,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'project.apps.translate.tasks.auto_confirm_expired_entry_reviews',
         'schedule': datetime.timedelta(hours=1),  # 每小时执行一次
     },
+    'generate_due_recurring_tasks': {
+        'task': 'project.apps.reconciliation.tasks.generate_due_recurring_tasks',
+        'schedule': datetime.timedelta(hours=1),  # 每小时执行一次
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

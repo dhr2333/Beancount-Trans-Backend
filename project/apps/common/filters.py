@@ -77,8 +77,15 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
             user_parse_file_ids = list(ParseFile.objects.filter(
                 file_id__in=user_file_ids
             ).values_list('file_id', flat=True))
+
+            # 获取循环待办（RecurringTask）类型的 ContentType 和用户相关的定义 ID
+            from project.apps.reconciliation.models import RecurringTask
+            recurring_content_type = ContentType.objects.get_for_model(RecurringTask)
+            user_recurring_ids = list(RecurringTask.objects.filter(
+                user=request.user
+            ).values_list('id', flat=True))
             
-            # 构建查询条件：Account 类型 OR ParseFile 类型 OR User 类型
+            # 构建查询条件：Account 类型 OR ParseFile 类型 OR User 类型 OR RecurringTask 类型
             conditions = Q(
                 content_type=user_content_type,
                 object_id=request.user.id
@@ -95,11 +102,17 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
                     content_type=parse_file_content_type,
                     object_id__in=user_parse_file_ids
                 )
+
+            if user_recurring_ids:
+                conditions |= Q(
+                    content_type=recurring_content_type,
+                    object_id__in=user_recurring_ids
+                )
             
             return queryset.filter(conditions)
             
         except Exception as e:
-            # 如果 ParseFile 导入失败，回退到 Account + User
+            # 如果 ParseFile/RecurringTask 导入失败，回退到 Account + User
             conditions = Q(
                 content_type=user_content_type,
                 object_id=request.user.id
@@ -109,4 +122,18 @@ class ScheduledTaskUserFilterBackend(BaseFilterBackend):
                     content_type=account_content_type,
                     object_id__in=user_account_ids
                 )
+            # 尽力附加循环待办分支（导入失败时忽略）
+            try:
+                from project.apps.reconciliation.models import RecurringTask
+                recurring_content_type = ContentType.objects.get_for_model(RecurringTask)
+                user_recurring_ids = list(RecurringTask.objects.filter(
+                    user=request.user
+                ).values_list('id', flat=True))
+                if user_recurring_ids:
+                    conditions |= Q(
+                        content_type=recurring_content_type,
+                        object_id__in=user_recurring_ids
+                    )
+            except Exception:
+                pass
             return queryset.filter(conditions)
