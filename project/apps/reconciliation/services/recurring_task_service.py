@@ -31,7 +31,7 @@ class RecurringTaskService:
             title=title,
             note=note,
             kind=kind,
-            template_ref=template_ref,
+            template_ref=template_ref or '',
             rule_text=rule_text,
             rrule=spec.to_rrule_string(),
             recurrence_basis=spec.basis,
@@ -50,7 +50,7 @@ class RecurringTaskService:
         if 'kind' in fields:
             defn.kind = fields['kind']
         if 'template_ref' in fields:
-            defn.template_ref = fields['template_ref']
+            defn.template_ref = fields['template_ref'] or ''
 
         if fields.get('rule_text'):
             spec = RecurrenceParser.parse(fields['rule_text'])

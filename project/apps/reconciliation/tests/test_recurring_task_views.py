@@ -43,6 +43,24 @@ class TestRecurringTaskViewSet:
         assert defn.status == 'active'
         assert defn.next_date == defn.start_date
 
+    def test_create_allows_null_optional_fields(self, user):
+        """POST 传 null 的可选字段（template_ref/start_date/recurrence_basis）应成功并归一化"""
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(RECURRING_URL, {
+            'title': '月对账复核提醒',
+            'rule_text': 'every month on the last',
+            'kind': 'notify',
+            'template_ref': None,
+            'start_date': None,
+            'recurrence_basis': None,
+        }, format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data['template_ref'] == ''
+        assert response.data['kind'] == 'notify'
+
     def test_create_invalid_rule_returns_400_and_persists_nothing(self, user):
         """POST 无效规则返回 400，且不落库"""
         client = APIClient()

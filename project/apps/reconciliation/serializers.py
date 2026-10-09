@@ -119,10 +119,14 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
     kind_display = serializers.CharField(source='get_kind_display', read_only=True)
 
     # 可选字段：创建时未提供 start_date 时由服务默认取当天
-    start_date = serializers.DateField(required=False)
+    start_date = serializers.DateField(required=False, allow_null=True)
     recurrence_basis = serializers.ChoiceField(
         choices=RecurringTask.RECURRENCE_BASIS_CHOICES,
         required=False,
+        allow_null=True,
+    )
+    template_ref = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default=''
     )
 
     class Meta:
@@ -176,7 +180,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
             start_date=validated_data.get('start_date'),
             basis=validated_data.get('recurrence_basis'),
             kind=validated_data.get('kind', 'notify'),
-            template_ref=validated_data.get('template_ref', ''),
+            template_ref=validated_data.get('template_ref') or '',
         )
 
     def update(self, instance, validated_data):
