@@ -19,7 +19,8 @@ class RecurringTaskService:
     # ---- 定义管理 ----
 
     @staticmethod
-    def create(user, title, rule_text, note='', start_date=None, basis=None) -> RecurringTask:
+    def create(user, title, rule_text, note='', start_date=None, basis=None,
+               kind='notify', template_ref='') -> RecurringTask:
         """创建循环待办定义；规则无法解析时抛出 RecurrenceParseError"""
         spec = RecurrenceParser.parse(rule_text)
         if basis is not None:
@@ -29,6 +30,8 @@ class RecurringTaskService:
             user=user,
             title=title,
             note=note,
+            kind=kind,
+            template_ref=template_ref,
             rule_text=rule_text,
             rrule=spec.to_rrule_string(),
             recurrence_basis=spec.basis,
@@ -39,11 +42,15 @@ class RecurringTaskService:
 
     @staticmethod
     def update(defn, **fields) -> RecurringTask:
-        """更新循环待办定义（允许 title/note/rule_text/start_date/recurrence_basis）"""
+        """更新循环待办定义（允许 title/note/kind/template_ref/rule_text/start_date/recurrence_basis）"""
         if 'title' in fields:
             defn.title = fields['title']
         if 'note' in fields:
             defn.note = fields['note']
+        if 'kind' in fields:
+            defn.kind = fields['kind']
+        if 'template_ref' in fields:
+            defn.template_ref = fields['template_ref']
 
         if fields.get('rule_text'):
             spec = RecurrenceParser.parse(fields['rule_text'])

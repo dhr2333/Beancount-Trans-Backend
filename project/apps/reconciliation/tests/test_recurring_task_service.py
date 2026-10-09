@@ -260,3 +260,53 @@ def test_preview_text_shape():
     assert result['describe'] == '每 3 天'
     assert result['basis'] == 'scheduled'
     assert result['next_occurrences'] == ['2026-01-04', '2026-01-07']
+
+
+# ---- kind（到期产出） ----
+
+@pytest.mark.django_db
+def test_create_default_kind_is_notify(user):
+    """未指定 kind 时默认 notify，template_ref 为空"""
+    defn = RecurringTaskService.create(user, '复核提醒', 'every month')
+    assert defn.kind == 'notify'
+    assert defn.template_ref == ''
+
+
+@pytest.mark.django_db
+def test_create_with_generate_review_kind(user):
+    """创建 generate_review 类型并保存模板引用"""
+    defn = RecurringTaskService.create(
+        user, '生成审核', 'every month on the 25th',
+        kind='generate_review', template_ref='salary',
+    )
+    assert defn.kind == 'generate_review'
+    assert defn.template_ref == 'salary'
+
+
+@pytest.mark.django_db
+def test_update_kind_and_template_ref(user):
+    """更新 kind 与 template_ref"""
+    defn = RecurringTaskService.create(user, '喝水', 'every 3 days')
+    RecurringTaskService.update(defn, kind='generate_review', template_ref='tpl-1')
+    defn.refresh_from_db()
+    assert defn.kind == 'generate_review'
+    assert defn.template_ref == 'tpl-1'
+
+
+@pytest.mark.django_db
+def test_list_serializer_exposes_recurring_kind(user):
+    """列表序列化器返回循环实例的标题与到期产出类型"""
+    from project.apps.reconciliation.serializers import ScheduledTaskListSerializer
+
+    defn = RecurringTaskService.create(user, '复核', 'every 3 days', kind='generate_review')
+    task = ScheduledTask.objects.create(
+        task_type='recurring',
+        content_type=ContentType.objects.get_for_model(RecurringTask),
+        object_id=defn.id,
+        scheduled_date=defn.next_date,
+        status='pending',
+    )
+
+    data = ScheduledTaskListSerializer(task).data
+    assert data['recurring_title'] == '复核'
+    assert data['recurring_kind'] == 'generate_review'

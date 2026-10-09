@@ -335,6 +335,23 @@ class RecurringTaskViewSet(ModelViewSet):
             'basis': defn.recurrence_basis,
         })
 
+    @action(detail=False, methods=['post'], url_path='preview')
+    def preview_rule(self, request):
+        """即时预览规则文本（未持久化的 DSL）"""
+        rule_text = request.data.get('rule_text', '')
+        start_date = request.data.get('start_date')
+        try:
+            result = RecurringTaskService.preview_text(
+                rule_text,
+                start_date=date.fromisoformat(start_date) if start_date else None,
+            )
+        except RecurrenceParseError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(result)
+
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
         """暂停定义（不再生成实例）"""
