@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.16.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.15.0...5.16.0) (2026-10-09)
+
+### Features
+
+* **reconciliation, translate:** 新增无用pad自动清理功能与调用点（先对账再解析的流程顺畅） ([5379b58](https://github.com/dhr2333/Beancount-Trans-Backend/commit/5379b58a2e2a73f8961ce60e565d32e1a33ae59e))
+
+### Bug Fixes
+
+* **split_entries:** 修复条目拆分时保留注释行的问题，新增测试用例 ([db00651](https://github.com/dhr2333/Beancount-Trans-Backend/commit/db00651f6ea04534253886e468d98ad450b880bf))
+
 ## [5.15.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.14.3...5.15.0) (2026-10-06)
 
 ### Features
