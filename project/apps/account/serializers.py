@@ -82,10 +82,23 @@ class AccountSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'account', 'parent', 'parent_account',
             'owner', 'enable', 'account_type', 'has_children', 'mapping_count',
-            'reconciliation_cycle_unit', 'reconciliation_cycle_interval',
+            'reconciliation_rule',
             'description', 'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified', 'owner']
+
+    def validate_reconciliation_rule(self, value):
+        """校验对账周期规则（受控自然语言 DSL）"""
+        if value:
+            from project.apps.reconciliation.services.recurrence import (
+                RecurrenceParser,
+                RecurrenceParseError,
+            )
+            try:
+                RecurrenceParser.parse(value)
+            except RecurrenceParseError as e:
+                raise serializers.ValidationError(str(e))
+        return value
 
     def get_mapping_count(self, obj):
         """获取与此账户相关的映射数量"""
@@ -265,8 +278,21 @@ class AccountTemplateItemSerializer(serializers.ModelSerializer):
     """账户模板项序列化器"""
     class Meta:
         model = AccountTemplateItem
-        fields = ['id', 'account_path', 'enable', 'reconciliation_cycle_unit', 'reconciliation_cycle_interval', 'description', 'created', 'modified']
+        fields = ['id', 'account_path', 'enable', 'reconciliation_rule', 'description', 'created', 'modified']
         read_only_fields = ['created', 'modified']
+
+    def validate_reconciliation_rule(self, value):
+        """校验对账周期规则（受控自然语言 DSL）"""
+        if value:
+            from project.apps.reconciliation.services.recurrence import (
+                RecurrenceParser,
+                RecurrenceParseError,
+            )
+            try:
+                RecurrenceParser.parse(value)
+            except RecurrenceParseError as e:
+                raise serializers.ValidationError(str(e))
+        return value
 
 
 class AccountTemplateListSerializer(serializers.ModelSerializer):

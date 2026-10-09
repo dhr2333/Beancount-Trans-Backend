@@ -35,8 +35,7 @@ def apply_official_account_templates(user):
                         owner=user,
                         account=item.account_path,
                         enable=item.enable,
-                        reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                        reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                        reconciliation_rule=item.reconciliation_rule,
                         description=item.description or ''
                     )
                     logger.debug(f"为用户 {user.username} 创建账户: {item.account_path}")

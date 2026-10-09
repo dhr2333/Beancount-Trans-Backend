@@ -4,7 +4,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from project.models import BaseModel
-from project.apps.reconciliation.models import CycleUnit
 
 
 def _is_valid_account_part(part: str) -> bool:
@@ -32,21 +31,13 @@ class Account(BaseModel):
     owner = models.ForeignKey(User, related_name='accounts', on_delete=models.CASCADE, db_index=True, help_text="属主", verbose_name="属主")
     enable = models.BooleanField(default=True,verbose_name="是否启用",help_text="启用状态")
     
-    # 对账周期配置
-    reconciliation_cycle_unit = models.CharField(
-        max_length=10,
-        choices=CycleUnit.choices,
-        null=True,
+    # 对账周期配置（受控自然语言循环规则，如 every month on the last）
+    reconciliation_rule = models.CharField(
+        max_length=128,
         blank=True,
-        verbose_name="对账周期单位",
-        help_text="对账周期单位：天/周/月/年"
-    )
-    reconciliation_cycle_interval = models.PositiveIntegerField(
-        default=1,
-        null=True,
-        blank=True,
-        verbose_name="对账周期间隔",
-        help_text="每隔多少个周期单位执行一次对账"
+        default='',
+        verbose_name="对账周期规则",
+        help_text="受控自然语言循环规则，如 every month on the last"
     )
     description = models.CharField(max_length=256, blank=True, default='', verbose_name='描述', help_text='描述')
 
@@ -69,18 +60,16 @@ class Account(BaseModel):
         if root not in valid_roots:
             raise ValidationError(f"根账户必须是以下之一: {', '.join(valid_roots)}")
 
-        # 验证对账周期配置的一致性
-        has_unit = bool(self.reconciliation_cycle_unit)
-        has_interval = self.reconciliation_cycle_interval is not None
-
-        if has_unit != has_interval:
-           raise ValidationError(
-              "对账周期单位和对账周期间隔必须同时设置或同时为空"
-         )
-
-        # 如果设置了周期，验证间隔必须大于 0
-        if has_unit and self.reconciliation_cycle_interval <= 0:
-            raise ValidationError("对账周期间隔必须大于 0")
+        # 验证对账周期规则（受控自然语言 DSL）
+        if self.reconciliation_rule:
+            from project.apps.reconciliation.services.recurrence import (
+                RecurrenceParser,
+                RecurrenceParseError,
+            )
+            try:
+                RecurrenceParser.parse(self.reconciliation_rule)
+            except RecurrenceParseError as e:
+                raise ValidationError(f"对账周期规则无效：{e}")
 
     def save(self, *args, **kwargs):
         """保存账户时自动创建父账户，并同步映射状态"""
@@ -241,8 +230,8 @@ class Account(BaseModel):
         if not self.enable:
             return
         
-        # 检查是否配置了对账周期
-        if not self.reconciliation_cycle_unit or not self.reconciliation_cycle_interval:
+        # 检查是否配置了对账周期规则
+        if not self.reconciliation_rule:
             return
         
         try:
@@ -459,15 +448,21 @@ class Account(BaseModel):
         return result
 
     def has_reconciliation_cycle(self) -> bool:
-        """检查是否配置了对账周期"""
-        return bool(self.reconciliation_cycle_unit and self.reconciliation_cycle_interval)
-    
+        """检查是否配置了对账周期规则"""
+        return bool(self.reconciliation_rule)
+
     def get_reconciliation_cycle_display(self) -> str:
-        """获取对账周期的显示文本"""
+        """获取对账周期的显示文本（由循环规则生成中文描述）"""
         if not self.has_reconciliation_cycle():
             return "未设置"
-        unit_display = dict(CycleUnit.choices).get(self.reconciliation_cycle_unit, '')
-        return f"每 {self.reconciliation_cycle_interval} {unit_display}"
+        from project.apps.reconciliation.services.recurrence import (
+            RecurrenceParser,
+            RecurrenceParseError,
+        )
+        try:
+            return RecurrenceParser.parse(self.reconciliation_rule).describe()
+        except RecurrenceParseError:
+            return self.reconciliation_rule
 
     def is_first_reconciliation(self) -> bool:
         """检查是否首次对账（该账户是否已完成过对账任务）"""
@@ -516,20 +511,13 @@ class AccountTemplateItem(BaseModel):
     account_path = models.CharField(max_length=128, null=False, help_text="账户路径")
     enable = models.BooleanField(default=True, help_text="默认启用状态")
     
-    # 对账周期配置
-    reconciliation_cycle_unit = models.CharField(
-        max_length=10,
-        choices=CycleUnit.choices,
-        null=True,
+    # 对账周期配置（受控自然语言循环规则）
+    reconciliation_rule = models.CharField(
+        max_length=128,
         blank=True,
-        verbose_name="对账周期单位",
-        help_text="对账周期单位：天/周/月/年"
-    )
-    reconciliation_cycle_interval = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name="对账周期间隔",
-        help_text="每隔多少个周期单位执行一次对账"
+        default='',
+        verbose_name="对账周期规则",
+        help_text="受控自然语言循环规则，如 every month on the last"
     )
     description = models.CharField(max_length=256, blank=True, default='', verbose_name='描述', help_text='描述')
 
@@ -545,19 +533,16 @@ class AccountTemplateItem(BaseModel):
         ]
 
     def clean(self):
-        """验证对账周期配置的一致性"""
-        # 验证对账周期配置的一致性
-        has_unit = bool(self.reconciliation_cycle_unit)
-        has_interval = self.reconciliation_cycle_interval is not None
-
-        if has_unit != has_interval:
-            raise ValidationError(
-                "对账周期单位和对账周期间隔必须同时设置或同时为空"
+        """验证对账周期规则"""
+        if self.reconciliation_rule:
+            from project.apps.reconciliation.services.recurrence import (
+                RecurrenceParser,
+                RecurrenceParseError,
             )
-
-        # 如果设置了周期，验证间隔必须大于 0
-        if has_interval and self.reconciliation_cycle_interval <= 0:
-            raise ValidationError("对账周期间隔必须大于 0")
+            try:
+                RecurrenceParser.parse(self.reconciliation_rule)
+            except RecurrenceParseError as e:
+                raise ValidationError(f"对账周期规则无效：{e}")
 
     def __str__(self):
         return f"{self.template.name} - {self.account_path}"

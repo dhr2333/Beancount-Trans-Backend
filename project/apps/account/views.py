@@ -87,26 +87,24 @@ class AccountViewSet(ModelViewSet):
         serializer.save(owner=self.request.user)
     
     def perform_update(self, serializer):
-        """更新账户时处理对账周期配置变更"""
+        """更新账户时处理对账周期规则变更"""
         from datetime import date
         from django.contrib.contenttypes.models import ContentType
         from project.apps.reconciliation.models import ScheduledTask
-        
+
         instance = self.get_object()
-        old_cycle_unit = instance.reconciliation_cycle_unit
-        old_cycle_interval = instance.reconciliation_cycle_interval
-        
+        old_rule = instance.reconciliation_rule
+
         # 保存更新
         updated_instance = serializer.save()
-        
-        new_cycle_unit = updated_instance.reconciliation_cycle_unit
-        new_cycle_interval = updated_instance.reconciliation_cycle_interval
-        
-        # 处理对账周期配置变更
+
+        new_rule = updated_instance.reconciliation_rule
+
+        # 处理对账周期规则变更
         account_content_type = ContentType.objects.get_for_model(Account)
-        
-        # 场景1：设置周期（从无到有）
-        if not old_cycle_unit and new_cycle_unit:
+
+        # 场景1：设置规则（从无到有）
+        if not old_rule and new_rule:
             # 创建首个待办，执行日期为今日
             ScheduledTask.objects.create(
                 task_type='reconciliation',
@@ -115,9 +113,9 @@ class AccountViewSet(ModelViewSet):
                 scheduled_date=date.today(),
                 status='pending'
             )
-        
-        # 场景2：删除周期配置（从有到无）
-        elif old_cycle_unit and not new_cycle_unit:
+
+        # 场景2：删除规则（从有到无）
+        elif old_rule and not new_rule:
             # 将相关待办的状态更新为 cancelled
             ScheduledTask.objects.filter(
                 task_type='reconciliation',
@@ -125,8 +123,8 @@ class AccountViewSet(ModelViewSet):
                 object_id=updated_instance.id,
                 status='pending'
             ).update(status='cancelled')
-        
-        # 场景3：修改周期配置（从有到有）
+
+        # 场景3：修改规则（从有到有）
         # 相关待办不自动更新，保持原有 scheduled_date
 
     @action(detail=False, methods=['get'])
@@ -182,8 +180,7 @@ class AccountViewSet(ModelViewSet):
             result = {
                 'account': account.account,
                 'account_id': account.id,
-                'reconciliation_cycle_unit': account.reconciliation_cycle_unit,
-                'reconciliation_cycle_interval': account.reconciliation_cycle_interval,
+                'reconciliation_rule': account.reconciliation_rule,
                 'reconciliation_cycle_display': account.get_reconciliation_cycle_display(),
                 'expense_mappings': [
                     {
@@ -394,8 +391,7 @@ class AccountTemplateViewSet(ModelViewSet):
                     owner=user,
                     account=item.account_path,
                     enable=item.enable,
-                    reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                    reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                    reconciliation_rule=item.reconciliation_rule,
                     description=item.description or ''
                 )
                 result['created'] += 1
@@ -417,8 +413,7 @@ class AccountTemplateViewSet(ModelViewSet):
                     owner=user,
                     account=item.account_path,
                     enable=item.enable,
-                    reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                    reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                    reconciliation_rule=item.reconciliation_rule,
                     description=item.description or ''
                 )
                 result['created'] += 1

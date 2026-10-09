@@ -212,9 +212,8 @@ class TestScheduledTaskViewSet:
         scheduled_task_pending.object_id = account_with_cycle.id
         scheduled_task_pending.save()
         
-        original_unit = account_with_cycle.reconciliation_cycle_unit
-        original_interval = account_with_cycle.reconciliation_cycle_interval
-        
+        original_rule = account_with_cycle.reconciliation_rule
+
         new_date = date.today() + timedelta(days=5)
         response = client.patch(
             f'/api/reconciliation/tasks/{scheduled_task_pending.id}/',
@@ -226,8 +225,7 @@ class TestScheduledTaskViewSet:
         
         # 验证账户周期配置未改变
         account_with_cycle.refresh_from_db()
-        assert account_with_cycle.reconciliation_cycle_unit == original_unit
-        assert account_with_cycle.reconciliation_cycle_interval == original_interval
+        assert account_with_cycle.reconciliation_rule == original_rule
     
     def test_update_completed_task_returns_error(self, user, account, scheduled_task_completed):
         """测试验证不能修改已完成或已取消的待办"""

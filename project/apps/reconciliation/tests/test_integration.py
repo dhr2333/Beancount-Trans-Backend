@@ -12,7 +12,6 @@ from django.contrib.contenttypes.models import ContentType
 
 from project.apps.reconciliation.models import ScheduledTask
 from project.apps.account.models import Account
-from project.apps.reconciliation.models import CycleUnit
 
 
 @pytest.mark.django_db
@@ -25,8 +24,7 @@ class TestReconciliationIntegration:
         client.force_authenticate(user=user)
         
         # 1. 账户已设置对账周期（通过 fixture account_with_cycle）
-        assert account_with_cycle.reconciliation_cycle_unit == CycleUnit.MONTHS
-        assert account_with_cycle.reconciliation_cycle_interval == 1
+        assert account_with_cycle.reconciliation_rule == 'every 1 months'
         
         # 2. 创建初始待办（模拟首次设置周期时自动创建）
         content_type = ContentType.objects.get_for_model(Account)
@@ -80,7 +78,7 @@ class TestReconciliationIntegration:
         # 验证下一个待办的 scheduled_date 是基于初始待办的 scheduled_date 计算的
         # 如果初始待办是 1 月 1 日，下一个应该是 2 月 1 日
         expected_next_date = initial_task.scheduled_date + timedelta(days=31)  # 简化计算
-        # 实际应该使用 CycleCalculator，这里只验证日期在合理范围内
+        # 实际使用 rrule 引擎计算，这里只验证日期在合理范围内
         assert next_task.scheduled_date > initial_task.scheduled_date
         
         # 7. 验证初始待办状态已更新
@@ -105,9 +103,8 @@ class TestReconciliationIntegration:
         
         original_scheduled_date = task.scheduled_date
         
-        # 2. 修改周期配置（从每月改为每周）
-        account_with_cycle.reconciliation_cycle_unit = CycleUnit.WEEKS
-        account_with_cycle.reconciliation_cycle_interval = 2
+        # 2. 修改周期配置（从每月改为每两周）
+        account_with_cycle.reconciliation_rule = 'every 2 weeks'
         account_with_cycle.save()
         
         # 3. 验证待办的 scheduled_date 未改变
@@ -116,8 +113,7 @@ class TestReconciliationIntegration:
         
         # 4. 验证账户周期配置已更新
         account_with_cycle.refresh_from_db()
-        assert account_with_cycle.reconciliation_cycle_unit == CycleUnit.WEEKS
-        assert account_with_cycle.reconciliation_cycle_interval == 2
+        assert account_with_cycle.reconciliation_rule == 'every 2 weeks'
     
     def test_delete_cycle_config_cancels_tasks(self, user, account_with_cycle):
         """测试删除周期配置 → 验证相关待办状态变更为 cancelled"""
@@ -143,16 +139,14 @@ class TestReconciliationIntegration:
         )
         
         # 2. 删除周期配置
-        account_with_cycle.reconciliation_cycle_unit = None
-        account_with_cycle.reconciliation_cycle_interval = None
+        account_with_cycle.reconciliation_rule = ''
         account_with_cycle.save()
         
         # 3. 验证相关待办状态变更为 cancelled
         # 注意：这个逻辑应该在 Account.save() 或信号中实现
         # 这里只验证账户配置已清空
         account_with_cycle.refresh_from_db()
-        assert account_with_cycle.reconciliation_cycle_unit is None
-        assert account_with_cycle.reconciliation_cycle_interval is None
+        assert account_with_cycle.reconciliation_rule == ''
         
         # 如果实现了自动取消逻辑，应该检查：
         # task1.refresh_from_db()

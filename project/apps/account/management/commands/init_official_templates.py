@@ -138,8 +138,7 @@ class Command(BaseCommand):
                     template=template,
                     account_path=item["account_path"],
                     enable=item.get("enable", True),
-                    reconciliation_cycle_unit=item.get("reconciliation_cycle_unit"),
-                    reconciliation_cycle_interval=item.get("reconciliation_cycle_interval"),
+                    reconciliation_rule=item.get("reconciliation_rule") or "",
                     description=(item.get("description") or "").strip() or "",
                 )
 

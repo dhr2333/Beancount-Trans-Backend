@@ -299,8 +299,7 @@ class Command(BaseCommand):
                 account=account_path,
                 parent=parent_account,
                 enable=item.enable,
-                reconciliation_cycle_unit=item.reconciliation_cycle_unit,
-                reconciliation_cycle_interval=item.reconciliation_cycle_interval,
+                reconciliation_rule=item.reconciliation_rule,
                 description=getattr(item, 'description', '') or ''
             )
             created_accounts[account_path] = account

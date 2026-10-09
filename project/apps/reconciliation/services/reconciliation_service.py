@@ -16,7 +16,7 @@ from beancount.core.data import Transaction, Pad, Balance
 
 from project.utils.file import BeanFileManager
 from .balance_calculation_service import BalanceCalculationService
-from .cycle_calculator import CycleCalculator
+from .recurrence import RecurrenceCalculator, RecurrenceParser
 from .account_currency_service import AccountCurrencyService
 from .entry_matcher import EntryMatcher
 
@@ -182,31 +182,29 @@ class ReconciliationService:
             task.as_of_date = as_of_date  # 保存账本对账日期，用于防止重复对账
             task.save()
             
-            # 10. 创建下一个待办
+            # 10. 创建下一个待办（基于 rrule 引擎，dtstart 取当前待办的 scheduled_date）
             next_task = None
-            if account.reconciliation_cycle_unit and account.reconciliation_cycle_interval:
+            if account.reconciliation_rule and task.scheduled_date:
                 try:
-                    next_date = CycleCalculator.get_next_date(
-                        account.reconciliation_cycle_unit,
-                        account.reconciliation_cycle_interval,
-                        task.scheduled_date  # 基于 scheduled_date，而非 completed_date
+                    spec = RecurrenceParser.parse(account.reconciliation_rule)
+                    next_date = RecurrenceCalculator.next_occurrence(
+                        spec, task.scheduled_date, task.scheduled_date
                     )
                     
                     # 如果计算出的日期是今天或之前，循环延后直到日期为明天之后
-                    while next_date <= today:
-                        next_date = CycleCalculator.get_next_date(
-                            account.reconciliation_cycle_unit,
-                            account.reconciliation_cycle_interval,
-                            next_date  # 基于计算出的 next_date 再延后一个周期
+                    while next_date is not None and next_date <= today:
+                        next_date = RecurrenceCalculator.next_occurrence(
+                            spec, task.scheduled_date, next_date
                         )
                     
-                    next_task = ScheduledTask.objects.create(
-                        task_type='reconciliation',
-                        content_type=ContentType.objects.get_for_model(Account),
-                        object_id=account.id,
-                        scheduled_date=next_date,
-                        status='pending'
-                    )
+                    if next_date is not None:
+                        next_task = ScheduledTask.objects.create(
+                            task_type='reconciliation',
+                            content_type=ContentType.objects.get_for_model(Account),
+                            object_id=account.id,
+                            scheduled_date=next_date,
+                            status='pending'
+                        )
                 except Exception as e:
                     logger.error(f"创建下一个待办失败: {e}")
                     # 注意：这里不抛出异常，因为创建下一个待办失败不应该影响主流程

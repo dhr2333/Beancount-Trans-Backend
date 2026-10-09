@@ -600,12 +600,8 @@ class TestInitOfficialTemplates(TransactionTestCase):
             self.assertIsNotNone(template_item)
             self.assertEqual(template_item.enable, json_item.get('enable', True))
             self.assertEqual(
-                template_item.reconciliation_cycle_unit,
-                json_item.get('reconciliation_cycle_unit')
-            )
-            self.assertEqual(
-                template_item.reconciliation_cycle_interval,
-                json_item.get('reconciliation_cycle_interval')
+                template_item.reconciliation_rule,
+                json_item.get('reconciliation_rule') or ''
             )
 
         # 验证映射模板项数据

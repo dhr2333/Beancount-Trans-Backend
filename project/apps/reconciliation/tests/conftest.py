@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
 from project.apps.account.models import Account
-from project.apps.reconciliation.models import ScheduledTask, CycleUnit
+from project.apps.reconciliation.models import ScheduledTask
 
 User = get_user_model()
 
@@ -52,8 +52,7 @@ def account_with_cycle(user):
     return Account.objects.create(
         account='Assets:Savings:Web:AliPay',
         owner=user,
-        reconciliation_cycle_unit=CycleUnit.MONTHS,
-        reconciliation_cycle_interval=1
+        reconciliation_rule='every 1 months'
     )
 
 
@@ -63,8 +62,7 @@ def account_with_weekly_cycle(user):
     return Account.objects.create(
         account='Assets:Savings:Web:WechatPay',
         owner=user,
-        reconciliation_cycle_unit=CycleUnit.WEEKS,
-        reconciliation_cycle_interval=2
+        reconciliation_rule='every 2 weeks'
     )
 
 
