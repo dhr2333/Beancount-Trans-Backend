@@ -9462,11 +9462,10 @@
       "TaskTypeEnum": {
         "enum": [
           "reconciliation",
-          "parse_review",
           "entry_review"
         ],
         "type": "string",
-        "description": "* `reconciliation` - 对账\n* `parse_review` - 解析审核\n* `entry_review` - 条目审核"
+        "description": "* `reconciliation` - 对账\n* `entry_review` - 条目审核"
       },
       "TemplateDetail": {
         "type": "object",

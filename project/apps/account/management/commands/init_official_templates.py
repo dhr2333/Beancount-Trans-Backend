@@ -422,8 +422,6 @@ class Command(BaseCommand):
         import os
         from project.apps.file_manager.models import Directory, File
         from project.apps.translate.models import ParseFile
-        from project.apps.reconciliation.models import ScheduledTask
-        from django.contrib.contenttypes.models import ContentType
         from project.utils.storage_factory import get_storage_client
         from project.utils.file import BeanFileManager
 
@@ -450,16 +448,9 @@ class Command(BaseCommand):
             name__in=['完整测试_微信.csv', '完整测试_支付宝.csv']
         )
         storage_client = get_storage_client()
-        parse_file_content_type = ContentType.objects.get_for_model(ParseFile)
 
         if existing_files.exists():
             for file_obj in list(existing_files):
-                # 先删除关联待办，避免残留无效 object_id
-                ScheduledTask.objects.filter(
-                    task_type='parse_review',
-                    content_type=parse_file_content_type,
-                    object_id=file_obj.id,
-                ).delete()
                 bean_relative_path = file_obj.get_bean_relative_path()
                 BeanFileManager.remove_bean_from_trans_main(admin_user, bean_relative_path)
                 BeanFileManager.delete_bean_file(admin_user, bean_relative_path)

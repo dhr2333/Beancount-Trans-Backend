@@ -217,12 +217,8 @@ class TestRevokeReconciliationAPI:
         user,
         scheduled_task_completed,
     ):
-        """测试非对账任务不能撤销（通过 parse_review 等）"""
-        # scheduled_task_completed 是对账任务，需要创建一个 parse_review 任务
-        from project.apps.translate.models import ParseFile
-        from django.contrib.contenttypes.models import ContentType
-
-        # 这里简化：我们测试传入非 completed 状态
+        """测试非 completed 状态的对账任务不能撤销"""
+        # scheduled_task_completed 是对账任务，这里将其置为非 completed 状态
         scheduled_task_completed.status = 'pending'
         scheduled_task_completed.save()
 

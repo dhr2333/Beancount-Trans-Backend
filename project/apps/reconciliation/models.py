@@ -26,7 +26,6 @@ class ScheduledTask(BaseModel):
     """
     TASK_TYPE_CHOICES = [
         ('reconciliation', '对账'),
-        ('parse_review', '解析审核'),
         ('entry_review', '条目审核'),
         ('recurring', '循环待办'),
         # 后续可扩展其他类型
@@ -52,7 +51,7 @@ class ScheduledTask(BaseModel):
     content_object = GenericForeignKey('content_type', 'object_id')
     
     # scheduled_date：预期执行日期（用户可调整，用于周期计算）
-    # 注意：解析待办（parse_review）不需要此字段，但为保持模型一致性，仍需要提供值
+    # 注意：条目审核待办（entry_review）不需要此字段，但为保持模型一致性，仍需要提供值
     scheduled_date = models.DateField(null=True, blank=True, verbose_name="预期执行日期")
     
     # completed_date：实际完成日期（仅当 status='completed' 时有效）
@@ -101,7 +100,6 @@ class ScheduledTask(BaseModel):
         """获取待执行的任务
         
         对于对账任务（reconciliation）：基于 scheduled_date 判断是否到期
-        对于解析审核任务（parse_review）：一旦 status='pending' 则直接列出
         对于条目审核任务（entry_review）：一旦 status='pending' 则直接列出
         """
         from datetime import date
@@ -109,8 +107,8 @@ class ScheduledTask(BaseModel):
         if task_type:
             queryset = queryset.filter(task_type=task_type)
         
-        # 解析审核/条目审核待办不需要 scheduled_date 筛选，直接返回
-        if task_type in ('parse_review', 'entry_review'):
+        # 条目审核待办不需要 scheduled_date 筛选，直接返回
+        if task_type == 'entry_review':
             return queryset
         
         # 对账待办需要基于 scheduled_date 筛选

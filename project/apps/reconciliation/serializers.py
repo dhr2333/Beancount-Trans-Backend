@@ -35,11 +35,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     account_name = serializers.SerializerMethodField()
     account_type = serializers.SerializerMethodField()
     
-    # 文件信息（解析待办）
-    file_name = serializers.SerializerMethodField()
-    file_id = serializers.SerializerMethodField()
-    
-    # 缓存审核截止时间（解析待办）
+    # 缓存审核截止时间（条目审核待办）
     review_expires_at = serializers.SerializerMethodField()
     
     # 待审核条目数量（条目审核待办）
@@ -55,7 +51,6 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'scheduled_date', 'completed_date',
             'status', 'status_display',
             'account_name', 'account_type',
-            'file_name', 'file_id',
             'review_expires_at', 'entry_count',
             'recurring_title',
             'created', 'modified'
@@ -76,31 +71,9 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             return obj.content_object.get_account_type()
         return None
     
-    def get_file_name(self, obj):
-        """获取关联文件名（解析待办）"""
-        from project.apps.translate.models import ParseFile
-        if isinstance(obj.content_object, ParseFile):
-            return obj.content_object.file.name
-        return None
-    
-    def get_file_id(self, obj):
-        """获取文件ID（解析待办）"""
-        from project.apps.translate.models import ParseFile
-        if isinstance(obj.content_object, ParseFile):
-            return obj.content_object.file_id
-        return None
-    
     def get_review_expires_at(self, obj):
-        """获取用户审核截止时间（解析待办/条目审核待办）"""
-        if obj.task_type == 'parse_review':
-            from project.apps.translate.models import ParseFile
-            from project.apps.translate.services.parse_review_service import ParseReviewService
-            if isinstance(obj.content_object, ParseFile):
-                parse_result = ParseReviewService.get_parse_result(obj.content_object.file_id)
-                expires_at = ParseReviewService.get_review_expires_at(parse_result, obj)
-                if expires_at is not None:
-                    return expires_at
-        elif obj.task_type == 'entry_review':
+        """获取用户审核截止时间（条目审核待办）"""
+        if obj.task_type == 'entry_review':
             # 条目审核待办：返回用户统一队列中最早到期时间
             from project.apps.translate.services.entry_review_queue_service import EntryReviewQueueService
             return EntryReviewQueueService.earliest_expires_at(obj.object_id)

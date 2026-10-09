@@ -177,27 +177,6 @@ class TestScheduledTaskListSerializerEntryReview:
         assert data['entry_count'] is None
         assert data['review_expires_at'] is None
 
-    def test_entry_count_none_for_parse_review_task(
-        self,
-        user,
-        parse_file_for_serializer,
-    ):
-        """非 entry_review（旧的按文件 parse_review 待办）entry_count 为 None"""
-        content_type = ContentType.objects.get_for_model(ParseFile)
-        task = ScheduledTask.objects.create(
-            task_type='parse_review',
-            content_type=content_type,
-            object_id=parse_file_for_serializer.file_id,
-            status='pending',
-        )
-        _save_parse_result(parse_file_for_serializer.file_id, time.time() + 86400)
-
-        data = ScheduledTaskListSerializer(task).data
-
-        assert data['entry_count'] is None
-        # parse_review 仍沿用解析缓存中的 review_expires_at
-        assert data['review_expires_at'] is not None
-
     def test_account_name_and_account_type_for_reconciliation(
         self,
         user,
@@ -209,5 +188,3 @@ class TestScheduledTaskListSerializerEntryReview:
 
         assert data['account_name'] == account.account
         assert data['account_type'] == account.get_account_type()
-        assert data['file_name'] is None
-        assert data['file_id'] is None

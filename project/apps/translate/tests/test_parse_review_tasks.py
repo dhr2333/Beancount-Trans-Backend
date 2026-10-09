@@ -2,7 +2,7 @@
 条目审核任务处理逻辑测试
 
 统一条目审核改造后：
-- 审核模式不再创建/激活 parse_review 待办，而是把保留条目写入用户级
+- 审核模式不再创建/激活文件级审核待办，而是把保留条目写入用户级
   统一审核队列（EntryReviewQueueService）并激活 entry_review 待办；
 - 到期自动确认任务为 auto_confirm_expired_entry_reviews。
 """

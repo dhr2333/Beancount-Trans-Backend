@@ -9,12 +9,12 @@ from .models import ScheduledTask, RecurringTask
 
 
 class ScheduledTaskUserFilter(admin.SimpleListFilter):
-    """按用户过滤待办任务（对账：关联账户所有者；解析审核：关联文件所有者）"""
+    """按用户过滤待办任务（对账：关联账户所有者）"""
     title = '用户'
     parameter_name = 'user'
 
     def lookups(self, request, model_admin):
-        """获取所有在对账或解析审核待办中出现的用户"""
+        """获取所有在对账待办中出现的用户"""
         from project.apps.account.models import Account
 
         user_dict = {}
@@ -27,18 +27,6 @@ class ScheduledTaskUserFilter(admin.SimpleListFilter):
             for owner_id, username in Account.objects.filter(
                 id__in=account_ids
             ).values_list('owner_id', 'owner__username').distinct():
-                user_dict[owner_id] = username
-
-        from project.apps.translate.models import ParseFile
-
-        parse_file_ct = ContentType.objects.get_for_model(ParseFile)
-        parse_file_ids = ScheduledTask.objects.filter(
-            content_type=parse_file_ct
-        ).values_list('object_id', flat=True).distinct()
-        if parse_file_ids:
-            for owner_id, username in ParseFile.objects.filter(
-                file_id__in=parse_file_ids
-            ).values_list('file__owner_id', 'file__owner__username').distinct():
                 user_dict[owner_id] = username
 
         if not user_dict:
@@ -61,16 +49,6 @@ class ScheduledTaskUserFilter(admin.SimpleListFilter):
         q = Q()
         if user_account_ids:
             q |= Q(content_type=account_content_type, object_id__in=user_account_ids)
-
-        from project.apps.file_manager.models import File
-        from project.apps.translate.models import ParseFile
-
-        parse_file_ct = ContentType.objects.get_for_model(ParseFile)
-        user_file_ids = list(
-            File.objects.filter(owner_id=self.value()).values_list('id', flat=True)
-        )
-        if user_file_ids:
-            q |= Q(content_type=parse_file_ct, object_id__in=user_file_ids)
 
         if q:
             return queryset.filter(q)
@@ -109,11 +87,8 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
             return queryset, may_have_duplicates
 
         from project.apps.account.models import Account
-        from project.apps.file_manager.models import File
-        from project.apps.translate.models import ParseFile
 
         account_content_type = ContentType.objects.get_for_model(Account)
-        parse_file_content_type = ContentType.objects.get_for_model(ParseFile)
 
         user_search_q = Q()
         has_user_match_condition = False
@@ -130,27 +105,14 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
             )
             has_user_match_condition = True
 
-        file_ids = list(
-            File.objects.filter(
-                owner__username__icontains=search_term
-            ).values_list('id', flat=True)
-        )
-        if file_ids:
-            user_search_q |= Q(
-                content_type=parse_file_content_type,
-                object_id__in=file_ids,
-            )
-            has_user_match_condition = True
-
         if not has_user_match_condition:
             return queryset, may_have_duplicates
 
         return queryset | base_queryset.filter(user_search_q), True
     
     def get_account_name(self, obj):
-        """获取关联对象展示名（对账：账户路径；解析审核：文件名）"""
+        """获取关联对象展示名（对账：账户路径）"""
         from project.apps.account.models import Account
-        from project.apps.translate.models import ParseFile
 
         try:
             co = obj.content_object
@@ -158,17 +120,14 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
                 return f"{obj.content_type} #{obj.object_id}"
             if isinstance(co, Account):
                 return co.account
-            if isinstance(co, ParseFile):
-                return co.file.name
         except (AttributeError, TypeError):
             pass
         return f"{obj.content_type} #{obj.object_id}"
     get_account_name.short_description = '关联对象'
 
     def get_user(self, obj):
-        """获取关联用户（对账：账户所有者；解析审核：文件所有者）"""
+        """获取关联用户（对账：账户所有者）"""
         from project.apps.account.models import Account
-        from project.apps.translate.models import ParseFile
 
         try:
             co = obj.content_object
@@ -176,8 +135,6 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
                 return '-'
             if isinstance(co, Account):
                 return co.owner.username
-            if isinstance(co, ParseFile):
-                return co.file.owner.username
         except (AttributeError, TypeError):
             pass
         return '-'

@@ -23,7 +23,6 @@ from project.apps.file_manager.models import Directory, File
 from project.apps.translate.models import ParseFile
 from project.apps.account.management.commands.init_official_templates import Command
 from project.apps.reconciliation.models import ScheduledTask
-from django.contrib.contenttypes.models import ContentType
 
 
 class SampleFilesTestCase(TransactionTestCase):
@@ -145,18 +144,7 @@ class SampleFilesTestCase(TransactionTestCase):
                 self.assertEqual(parse_files.count(), new_user_files.count(), 
                                "每个文件应该有对应的 ParseFile")
                 
-                # 统一条目审核改造后：不再为 ParseFile 创建 parse_review 待办。
-                # 待审核条目统一由用户级 entry_review 待办 + 审核队列管理。
-                content_type = ContentType.objects.get_for_model(ParseFile)
-                scheduled_tasks = ScheduledTask.objects.filter(
-                    task_type='parse_review',
-                    content_type=content_type,
-                    object_id__in=parse_files.values_list('file_id', flat=True),
-                )
-                self.assertEqual(scheduled_tasks.count(), 0,
-                               "统一改造后不应再为 ParseFile 创建 parse_review 待办")
-
-                print("✓ 新用户文件引用与 ParseFile 创建测试通过（不再创建 parse_review 待办）")
+                print("✓ 新用户文件引用与 ParseFile 创建测试通过")
             else:
                 # 如果没有文件引用，至少验证新用户有Root目录
                 print("⚠ 新用户没有文件引用（可能信号处理器未执行）")
@@ -250,7 +238,7 @@ def run_tests():
         print("✓ 文件引用机制避免重复存储")
         print("✓ 目录结构自动创建")
         print("✓ 解析记录自动创建")
-        print("✓ 待审核条目统一由用户级 entry_review 待办管理（不再创建 parse_review 待办）")
+        print("✓ 待审核条目统一由用户级 entry_review 待办管理")
         print("✓ .bean 文件自动创建")
         print("\n使用方法:")
         print("1. 运行: python manage.py init_official_templates")
