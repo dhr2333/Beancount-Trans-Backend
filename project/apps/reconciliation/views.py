@@ -32,7 +32,7 @@ from .services import (
     ReconciliationService,
     RecurringTaskService,
 )
-from .services.recurrence import RecurrenceParser, RecurrenceParseError
+from .services.recurrence import RecurrenceParseError
 
 logger = logging.getLogger(__name__)
 
@@ -316,24 +316,6 @@ class RecurringTaskViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         """删除定义，同时取消其所有待执行的实例"""
         RecurringTaskService.delete(instance, cancel_pending=True)
-
-    @action(detail=True, methods=['post'])
-    def preview(self, request, pk=None):
-        """预览定义的规则描述与后续发生日期"""
-        defn = self.get_object()
-        try:
-            occurrences = RecurringTaskService.preview(defn, count=5)
-            spec = RecurrenceParser.parse(defn.rule_text)
-        except RecurrenceParseError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        return Response({
-            'describe': spec.describe(),
-            'next_occurrences': [d.isoformat() for d in occurrences],
-            'basis': defn.recurrence_basis,
-        })
 
     @action(detail=False, methods=['post'], url_path='preview')
     def preview_rule(self, request):

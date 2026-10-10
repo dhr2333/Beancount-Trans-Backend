@@ -1,7 +1,7 @@
 """
 循环待办定义 API 测试
 
-覆盖 RecurringTaskViewSet 的增删改查/预览/暂停/恢复，以及
+覆盖 RecurringTaskViewSet 的增删改查/规则预览，以及
 ScheduledTaskViewSet.complete 完成循环待办实例的接口。
 """
 import pytest
@@ -44,22 +44,20 @@ class TestRecurringTaskViewSet:
         assert defn.next_date == defn.start_date
 
     def test_create_allows_null_optional_fields(self, user):
-        """POST 传 null 的可选字段（template_ref/start_date/recurrence_basis）应成功并归一化"""
+        """POST 传 null 的可选字段（start_date/recurrence_basis）应成功并归一化"""
         client = APIClient()
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
             'title': '月对账复核提醒',
             'rule_text': 'every month on the last',
-            'kind': 'notify',
-            'template_ref': None,
             'start_date': None,
             'recurrence_basis': None,
         }, format='json')
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
-        assert response.data['template_ref'] == ''
-        assert response.data['kind'] == 'notify'
+        assert response.data['start_date'] == date.today().isoformat()
+        assert response.data['recurrence_basis'] == 'scheduled'
 
     def test_create_invalid_rule_returns_400_and_persists_nothing(self, user):
         """POST 无效规则返回 400，且不落库"""
@@ -106,15 +104,14 @@ class TestRecurringTaskViewSet:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_preview_returns_describe_and_occurrences(self, user):
-        """POST .../{id}/preview/ 返回 describe 与非空 next_occurrences"""
-        defn = RecurringTaskService.create(
-            user, '喝水', 'every 3 days', start_date=date(2026, 1, 1)
-        )
-
+    def test_preview_rule_returns_describe_and_occurrences(self, user):
+        """POST .../recurring-tasks/preview/ 即时预览规则返回 describe 与 next_occurrences"""
         client = APIClient()
         client.force_authenticate(user=user)
-        response = client.post(f'{RECURRING_URL}{defn.id}/preview/')
+        response = client.post(f'{RECURRING_URL}preview/', {
+            'rule_text': 'every 3 days',
+            'start_date': '2026-01-01',
+        }, format='json')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['describe'] == '每 3 天'

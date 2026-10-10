@@ -44,9 +44,6 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     # 循环待办标题（循环待办实例）
     recurring_title = serializers.SerializerMethodField()
 
-    # 循环待办到期产出类型（循环待办实例）
-    recurring_kind = serializers.SerializerMethodField()
-    
     class Meta:
         model = ScheduledTask
         fields = [
@@ -55,7 +52,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'account_name', 'account_type',
             'review_expires_at', 'entry_count',
-            'recurring_title', 'recurring_kind',
+            'recurring_title',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -95,12 +92,6 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             return obj.content_object.title
         return None
 
-    def get_recurring_kind(self, obj):
-        """获取循环待办定义的到期产出类型（仅循环待办实例返回，否则为 None）"""
-        if isinstance(obj.content_object, RecurringTask):
-            return obj.content_object.kind
-        return None
-
 
 class ScheduledTaskUpdateSerializer(serializers.ModelSerializer):
     """ScheduledTask 更新序列化器（仅允许修改 scheduled_date）"""
@@ -116,7 +107,6 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
     # 只读计算字段：后续发生日期（ISO 字符串）与规则描述
     next_occurrences = serializers.SerializerMethodField()
     describe = serializers.SerializerMethodField()
-    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
 
     # 可选字段：创建时未提供 start_date 时由服务默认取当天
     start_date = serializers.DateField(required=False, allow_null=True)
@@ -125,14 +115,11 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    template_ref = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True, default=''
-    )
 
     class Meta:
         model = RecurringTask
         fields = [
-            'id', 'title', 'note', 'kind', 'kind_display', 'template_ref',
+            'id', 'title', 'note',
             'rule_text', 'rrule',
             'recurrence_basis', 'start_date', 'next_date', 'status',
             'generated_count', 'next_occurrences', 'describe',
@@ -140,7 +127,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'rrule', 'next_date', 'status', 'generated_count',
-            'kind_display', 'next_occurrences', 'describe', 'created', 'modified'
+            'next_occurrences', 'describe', 'created', 'modified'
         ]
 
     def get_next_occurrences(self, obj):
@@ -179,16 +166,13 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
             note=validated_data.get('note', ''),
             start_date=validated_data.get('start_date'),
             basis=validated_data.get('recurrence_basis'),
-            kind=validated_data.get('kind', 'notify'),
-            template_ref=validated_data.get('template_ref') or '',
         )
 
     def update(self, instance, validated_data):
         """通过服务更新循环待办定义（仅允许白名单字段）"""
         from .services import RecurringTaskService
         kwargs = {}
-        for key in ('title', 'note', 'kind', 'template_ref',
-                    'rule_text', 'start_date', 'recurrence_basis'):
+        for key in ('title', 'note', 'rule_text', 'start_date', 'recurrence_basis'):
             if key in validated_data:
                 kwargs[key] = validated_data[key]
         return RecurringTaskService.update(instance, **kwargs)
