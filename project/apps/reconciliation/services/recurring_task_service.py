@@ -33,7 +33,6 @@ class RecurringTaskService:
             rrule=spec.to_rrule_string(),
             recurrence_basis=spec.basis,
             start_date=start_date,
-            next_date=start_date,
             status='active',
         )
 
@@ -58,7 +57,6 @@ class RecurringTaskService:
 
         if fields.get('start_date'):
             defn.start_date = fields['start_date']
-            defn.next_date = fields['start_date']
 
         defn.save()
         return defn
@@ -99,66 +97,122 @@ class RecurringTaskService:
             'next_occurrences': [d.isoformat() for d in occurrences],
         }
 
+    # ---- 日期推算 ----
+
+    @staticmethod
+    def _instances(defn):
+        """该定义下的全部循环实例（按 scheduled_date 倒序）"""
+        ct = ContentType.objects.get_for_model(RecurringTask)
+        return ScheduledTask.objects.filter(
+            task_type='recurring',
+            content_type=ct,
+            object_id=defn.id,
+        ).order_by('-scheduled_date', '-id')
+
+    @staticmethod
+    def latest_instance(defn):
+        """最近一次已生成的实例（按 scheduled_date 取最新），无则 None"""
+        return RecurringTaskService._instances(defn).first()
+
+    @staticmethod
+    def has_pending(defn) -> bool:
+        """是否存在待执行实例"""
+        ct = ContentType.objects.get_for_model(RecurringTask)
+        return ScheduledTask.objects.filter(
+            task_type='recurring',
+            content_type=ct,
+            object_id=defn.id,
+            status='pending',
+        ).exists()
+
+    @staticmethod
+    def next_generation_date(defn, today=None) -> date | None:
+        """下一次生成待办的日期（由「最近一次待办日期」结合 rrule 动态推算，不入库）
+
+        - 从未生成：以 start_date 为种子取首个发生日
+        - scheduled 基准：上一次待办日期之后的下一次发生
+        - completed（when done）基准：上一次完成日期之后的下一次发生
+        """
+        spec = RecurrenceParser.parse(defn.rule_text)
+        latest = RecurringTaskService.latest_instance(defn)
+        if latest is None:
+            return RecurrenceCalculator.first_on_or_after(spec, defn.start_date)
+        if defn.recurrence_basis == 'scheduled':
+            return RecurrenceCalculator.next_occurrence(
+                spec, defn.start_date, latest.scheduled_date
+            )
+        anchor = latest.completed_date or latest.scheduled_date
+        return RecurrenceCalculator.next_occurrence(spec, anchor, anchor)
+
+    @staticmethod
+    def display_next_date(defn, today=None) -> date | None:
+        """管理页展示用的「下一次执行日期」
+
+        - 已生成（存在待执行实例）：展示完成后推算的下一次
+          - scheduled：待办日期之后的下一次
+          - completed：假定今天完成 → 以今天为锚点
+        - 还没到：展示下一次生成日期
+        """
+        today = today or date.today()
+        pending = RecurringTaskService._instances(defn).filter(status='pending').first()
+        if pending is None:
+            return RecurringTaskService.next_generation_date(defn)
+        spec = RecurrenceParser.parse(defn.rule_text)
+        if defn.recurrence_basis == 'scheduled':
+            return RecurrenceCalculator.next_occurrence(
+                spec, defn.start_date, pending.scheduled_date
+            )
+        return RecurrenceCalculator.next_occurrence(spec, today, today)
+
     # ---- 实例生成 / 完成 ----
 
     @staticmethod
-    def generate_due(today=None) -> int:
-        """扫描到期的活动定义并生成实例，返回本次生成的实例数"""
+    def generate_due_for(defn, today=None) -> bool:
+        """对单个定义做一次到期检查：无待执行实例且候选日期已到 → 生成实例
+
+        返回是否生成了实例。定义非 active / 已有待执行实例 / 候选日期未到均不生成。
+        """
         today = today or date.today()
-        ct = ContentType.objects.get_for_model(RecurringTask)
-        created = 0
+        if defn.status != 'active':
+            return False
+        # 已存在待执行实例：等待用户完成，不再生成（同时只允许一个未完成实例）
+        if RecurringTaskService.has_pending(defn):
+            return False
 
-        definitions = RecurringTask.objects.filter(
-            status='active',
-            next_date__isnull=False,
-            next_date__lte=today,
-        )
-        for defn in definitions:
-            # 已存在待执行实例：不重复生成，也不推进（等待用户完成）
-            pending_exists = ScheduledTask.objects.filter(
-                task_type='recurring',
-                content_type=ct,
-                object_id=defn.id,
-                status='pending',
-            ).exists()
-            if pending_exists:
-                continue
-
-            task = ScheduledTask.objects.create(
-                task_type='recurring',
-                content_type=ct,
-                object_id=defn.id,
-                scheduled_date=defn.next_date,
-                status='pending',
-            )
-            defn.last_generated_task = task
-            defn.generated_count += 1
-
-            # 仅按计划基准在生成时推进；按完成基准留给 complete_instance 计算
-            if defn.recurrence_basis == 'scheduled':
-                RecurringTaskService._advance_definition(defn, today)
-
+        cand = RecurringTaskService.next_generation_date(defn)
+        if cand is None:
+            # 规则耗尽（如每月 30 日遇到 2 月），结束定义
+            defn.status = 'ended'
             defn.save()
-            created += 1
+            return False
+        if cand > today:
+            return False
 
+        task = ScheduledTask.objects.create(
+            task_type='recurring',
+            content_type=ContentType.objects.get_for_model(RecurringTask),
+            object_id=defn.id,
+            scheduled_date=cand,
+            status='pending',
+        )
+        defn.last_generated_task = task
+        defn.generated_count += 1
+        defn.save()
+        return True
+
+    @staticmethod
+    def generate_due(today=None) -> int:
+        """扫描活跃定义并生成到期实例，返回本次生成的实例数"""
+        today = today or date.today()
+        created = 0
+        for defn in RecurringTask.objects.filter(status='active'):
+            if RecurringTaskService.generate_due_for(defn, today=today):
+                created += 1
         return created
 
     @staticmethod
-    def _advance_definition(defn, today) -> None:
-        """按计划基准把 next_date 推进到 today 之后；规则耗尽则结束定义"""
-        spec = RecurrenceParser.parse(defn.rule_text)
-        base = defn.next_date
-        while base is not None and base <= today:
-            base = RecurrenceCalculator.next_occurrence(spec, defn.start_date, base)
-        if base is None:
-            defn.status = 'ended'
-            defn.next_date = None
-        else:
-            defn.next_date = base
-
-    @staticmethod
     def complete_instance(task, completed_date=None) -> dict:
-        """完成循环待办实例，并按基准推进其定义的下次生成日期"""
+        """完成循环待办实例；返回下一次生成日期（动态推算，不落库）"""
         if task.task_type != 'recurring':
             raise ValueError('该待办不是循环待办')
 
@@ -168,23 +222,14 @@ class RecurringTaskService:
         task.save()
 
         defn = task.content_object
-        if isinstance(defn, RecurringTask) and defn.status == 'active':
-            if defn.recurrence_basis == 'completed':
-                # 按完成基准：以实际完成日期为锚点重算下次生成日期
-                # （when done 语义 = 每次完成后重新起算，如「每月完成后再过一个月」）
-                spec = RecurrenceParser.parse(defn.rule_text)
-                nxt = RecurrenceCalculator.next_occurrence(
-                    spec, completed_date, completed_date
-                )
-                if nxt is None:
-                    defn.status = 'ended'
-                    defn.next_date = None
-                else:
-                    defn.next_date = nxt
-                defn.save()
-            # 按计划基准：next_date 已在生成时推进，保持不变
+        if not isinstance(defn, RecurringTask):
+            return {'completed': task.id, 'next_date': None}
 
+        nxt = RecurringTaskService.next_generation_date(defn)
+        if nxt is None and defn.status == 'active':
+            defn.status = 'ended'
+            defn.save()
         return {
             'completed': task.id,
-            'next_date': defn.next_date if isinstance(defn, RecurringTask) else None,
+            'next_date': nxt.isoformat() if nxt else None,
         }

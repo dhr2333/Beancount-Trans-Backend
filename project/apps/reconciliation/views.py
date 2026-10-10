@@ -317,6 +317,18 @@ class RecurringTaskViewSet(ModelViewSet):
         """删除定义，同时取消其所有待执行的实例"""
         RecurringTaskService.delete(instance, cancel_pending=True)
 
+    def perform_create(self, serializer):
+        """创建后立即对该定义做一次到期检查：首次日期为今天（含）之前时立刻生成待办"""
+        instance = serializer.save()
+        RecurringTaskService.generate_due_for(instance)
+        return instance
+
+    def perform_update(self, serializer):
+        """更新后立即对该定义做一次到期检查：日期改为今天（含）之前时立刻生成待办"""
+        instance = serializer.save()
+        RecurringTaskService.generate_due_for(instance)
+        return instance
+
     @action(detail=False, methods=['post'], url_path='preview')
     def preview_rule(self, request):
         """即时预览规则文本（未持久化的 DSL）"""

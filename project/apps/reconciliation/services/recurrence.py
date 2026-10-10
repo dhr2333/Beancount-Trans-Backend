@@ -12,7 +12,7 @@ DSL 示例：
 """
 import re
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from dateutil.rrule import (
     rrule, DAILY, WEEKLY, MONTHLY, YEARLY,
@@ -365,6 +365,15 @@ class RecurrenceCalculator:
         """返回严格晚于 after 的下一次发生日期；规则不可满足时返回 None"""
         rule = RecurrenceCalculator._build_rrule(spec, dtstart)
         nxt = rule.after(RecurrenceCalculator._to_datetime(after), inc=False)
+        return nxt.date() if nxt is not None else None
+
+    @staticmethod
+    def first_on_or_after(spec: RecurrenceSpec, seed: date) -> date | None:
+        """返回首个不早于 seed 的发生日期；规则不可满足时返回 None"""
+        rule = RecurrenceCalculator._build_rrule(spec, seed)
+        nxt = rule.after(
+            RecurrenceCalculator._to_datetime(seed - timedelta(days=1)), inc=False
+        )
         return nxt.date() if nxt is not None else None
 
     @staticmethod

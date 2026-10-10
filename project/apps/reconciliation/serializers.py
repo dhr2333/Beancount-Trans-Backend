@@ -3,7 +3,7 @@
 """
 from rest_framework import serializers
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import timedelta
 from django.db import models
 
 from .models import ScheduledTask, RecurringTask
@@ -111,6 +111,9 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
     # 只读计算字段：管理页展示用的「下一次执行日期」（见 get_next_run_date）
     next_run_date = serializers.SerializerMethodField()
 
+    # 只读计算字段：是否存在待执行实例（决定管理页日期是否可编辑）
+    has_pending = serializers.SerializerMethodField()
+
     # 可选字段：创建时未提供 start_date 时由服务默认取当天
     start_date = serializers.DateField(required=False, allow_null=True)
     recurrence_basis = serializers.ChoiceField(
@@ -124,37 +127,25 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'note',
             'rule_text', 'rrule',
-            'recurrence_basis', 'start_date', 'next_date', 'next_run_date', 'status',
+            'recurrence_basis', 'start_date', 'next_run_date', 'has_pending', 'status',
             'generated_count', 'next_occurrences', 'describe',
             'created', 'modified'
         ]
         read_only_fields = [
-            'id', 'rrule', 'next_date', 'next_run_date', 'status', 'generated_count',
+            'id', 'rrule', 'next_run_date', 'has_pending', 'status', 'generated_count',
             'next_occurrences', 'describe', 'created', 'modified'
         ]
 
     def get_next_run_date(self, obj):
-        """管理页展示用的「下一次执行日期」：
-        - 未到期（next_date 在未来）：返回下一次生成日期 next_date
-        - 已到期/已生成：按「当天完成」推算下一次
-          - `scheduled` 基准：沿用固定节奏（以 start_date 为锚点）取今天之后的下一次
-          - `completed`（when done）基准：以今天为锚点重新起算
-        """
-        from .services.recurrence import RecurrenceParser, RecurrenceCalculator
-        today = date.today()
-        if obj.next_date is None:
-            return None
-        if obj.next_date > today:
-            return obj.next_date.isoformat()
-        try:
-            spec = RecurrenceParser.parse(obj.rule_text)
-        except Exception:
-            return obj.next_date.isoformat()
-        if spec.basis == 'completed':
-            nxt = RecurrenceCalculator.next_occurrence(spec, today, today)
-        else:
-            nxt = RecurrenceCalculator.next_occurrence(spec, obj.start_date, today)
+        """管理页展示用的「下一次执行日期」（动态推算，见 RecurringTaskService.display_next_date）"""
+        from .services import RecurringTaskService
+        nxt = RecurringTaskService.display_next_date(obj)
         return nxt.isoformat() if nxt else None
+
+    def get_has_pending(self, obj):
+        """是否存在待执行实例（存在 = 管理页日期只读，只能改实例日期）"""
+        from .services import RecurringTaskService
+        return RecurringTaskService.has_pending(obj)
 
     def get_next_occurrences(self, obj):
         """预览定义的后续发生日期（最多 5 次），失败时返回空列表"""

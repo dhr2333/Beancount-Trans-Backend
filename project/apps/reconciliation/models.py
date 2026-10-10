@@ -152,7 +152,6 @@ class RecurringTask(BaseModel):
         verbose_name='循环基准'
     )
     start_date = models.DateField(verbose_name='基准日期')
-    next_date = models.DateField(null=True, blank=True, verbose_name='下次生成日期')
     status = models.CharField(
         max_length=16,
         choices=STATUS_CHOICES,
@@ -173,10 +172,9 @@ class RecurringTask(BaseModel):
         db_table = 'recurring_task'
         verbose_name = '循环待办定义'
         verbose_name_plural = verbose_name
-        ordering = ['next_date']
+        ordering = ['start_date', 'id']
         indexes = [
             models.Index(fields=['user', 'status']),
-            models.Index(fields=['status', 'next_date']),
         ]
 
     def __str__(self):
