@@ -50,6 +50,10 @@ class IsOwnerOrAdminReadWriteOnly(permissions.BasePermission):
             if isinstance(content_obj, get_user_model()):
                 return content_obj == request.user
 
+            # 以 user 字段归属的对象（如循环待办定义 RecurringTask）
+            if hasattr(content_obj, 'user'):
+                return content_obj.user == request.user
+
         # 如果没有owner或user属性，拒绝访问
         return False
 

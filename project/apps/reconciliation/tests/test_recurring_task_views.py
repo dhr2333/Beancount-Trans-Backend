@@ -169,6 +169,26 @@ class TestScheduledTaskComplete:
         task.refresh_from_db()
         assert task.status == 'completed'
 
+    def test_update_recurring_instance_scheduled_date(self, user):
+        """PATCH /api/reconciliation/tasks/{id}/ 允许用户修改循环实例的执行日期"""
+        today = date.today()
+        defn = RecurringTaskService.create(
+            user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+        )
+        RecurringTaskService.generate_due(today=today)
+        task = ScheduledTask.objects.get(
+            task_type='recurring', object_id=defn.id, status='pending'
+        )
+        new_date = today + timedelta(days=5)
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.patch(f'{TASKS_URL}{task.id}/', {'scheduled_date': new_date.isoformat()})
+
+        assert response.status_code == status.HTTP_200_OK
+        task.refresh_from_db()
+        assert task.scheduled_date == new_date
+
     def test_complete_reconciliation_instance_returns_400(self, user, account, scheduled_task_pending):
         """对非循环（reconciliation）实例调用 complete 返回 400"""
         client = APIClient()
