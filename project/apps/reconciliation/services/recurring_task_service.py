@@ -171,9 +171,10 @@ class RecurringTaskService:
         if isinstance(defn, RecurringTask) and defn.status == 'active':
             if defn.recurrence_basis == 'completed':
                 # 按完成基准：以实际完成日期为锚点重算下次生成日期
+                # （when done 语义 = 每次完成后重新起算，如「每月完成后再过一个月」）
                 spec = RecurrenceParser.parse(defn.rule_text)
                 nxt = RecurrenceCalculator.next_occurrence(
-                    spec, defn.start_date, completed_date
+                    spec, completed_date, completed_date
                 )
                 if nxt is None:
                     defn.status = 'ended'

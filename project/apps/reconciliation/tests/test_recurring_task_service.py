@@ -179,7 +179,7 @@ def test_complete_instance_scheduled_basis_keeps_next_date(user):
 
 @pytest.mark.django_db
 def test_complete_instance_completed_basis_advances_from_completion(user):
-    """按完成基准：next_date 重算为完成日期之后的下一次发生"""
+    """按完成基准（when done）：以完成日期为锚点重新起算下一次发生"""
     start = date(2026, 1, 1)
     defn = RecurringTaskService.create(user, '健身', 'every 10 days when done', start_date=start)
     assert defn.recurrence_basis == 'completed'
@@ -190,9 +190,55 @@ def test_complete_instance_completed_basis_advances_from_completion(user):
     result = RecurringTaskService.complete_instance(task, completed_date=date(2026, 1, 20))
     defn.refresh_from_db()
 
-    assert result == {'completed': task.id, 'next_date': date(2026, 1, 21)}
-    assert defn.next_date == date(2026, 1, 21)
+    assert result == {'completed': task.id, 'next_date': date(2026, 1, 30)}
+    assert defn.next_date == date(2026, 1, 30)
     assert defn.status == 'active'
+
+
+# ---- next_run_date（管理页展示的下一次执行日期） ----
+
+@pytest.mark.django_db
+def test_next_run_date_future_returns_next_date(user):
+    """未到期：直接返回 next_date（下一次生成日期）"""
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    future = date.today() + timedelta(days=5)
+    defn = RecurringTaskService.create(user, '复核', 'every month', start_date=future)
+
+    data = RecurringTaskSerializer(defn).data
+    assert data['next_run_date'] == future.isoformat()
+
+
+@pytest.mark.django_db
+def test_next_run_date_due_scheduled_uses_fixed_grid(user):
+    """已到期且为计划基准：沿用固定节奏（每月 1 日 → 下月 1 日）"""
+    from dateutil.relativedelta import relativedelta
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    defn = RecurringTaskService.create(
+        user, '复核', 'every month on the 1st',
+        start_date=date.today() - timedelta(days=40),
+    )
+
+    data = RecurringTaskSerializer(defn).data
+    expected = date.today().replace(day=1) + relativedelta(months=1)
+    assert data['next_run_date'] == expected.isoformat()
+
+
+@pytest.mark.django_db
+def test_next_run_date_due_completed_anchors_today(user):
+    """已到期且为 when done：以今天为锚点重新起算（今天 + 1 个月）"""
+    from dateutil.relativedelta import relativedelta
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    defn = RecurringTaskService.create(
+        user, '复核', 'every month when done',
+        start_date=date.today() - timedelta(days=40),
+    )
+
+    data = RecurringTaskSerializer(defn).data
+    expected = date.today() + relativedelta(months=1)
+    assert data['next_run_date'] == expected.isoformat()
 
 
 @pytest.mark.django_db
