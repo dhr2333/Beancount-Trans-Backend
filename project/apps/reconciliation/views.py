@@ -301,7 +301,7 @@ class ScheduledTaskViewSet(ModelViewSet):
 class RecurringTaskViewSet(ModelViewSet):
     """循环待办定义视图集
 
-    提供循环待办定义的增删改查，以及预览、暂停、恢复等自定义 action。
+    提供循环待办定义的增删改查，以及预览等自定义 action。
     """
     queryset = RecurringTask.objects.all()
     serializer_class = RecurringTaskSerializer
@@ -351,18 +351,4 @@ class RecurringTaskViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         return Response(result)
-
-    @action(detail=True, methods=['post'])
-    def pause(self, request, pk=None):
-        """暂停定义（不再生成实例）"""
-        defn = self.get_object()
-        RecurringTaskService.pause(defn)
-        return Response(self.get_serializer(defn).data)
-
-    @action(detail=True, methods=['post'])
-    def resume(self, request, pk=None):
-        """恢复定义"""
-        defn = self.get_object()
-        RecurringTaskService.resume(defn)
-        return Response(self.get_serializer(defn).data)
 

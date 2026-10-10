@@ -211,32 +211,20 @@ def test_complete_instance_non_recurring_raises(user, account):
         RecurringTaskService.complete_instance(task)
 
 
-# ---- pause / resume ----
+# ---- 状态过滤 ----
 
 @pytest.mark.django_db
 def test_paused_definition_is_skipped(user):
+    """非 active 的定义不生成实例（兼容历史 paused 数据）"""
     today = date.today()
     defn = RecurringTaskService.create(
         user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
     )
 
-    RecurringTaskService.pause(defn)
-    assert defn.status == 'paused'
-
-    assert RecurringTaskService.generate_due(today=today) == 0
-
-
-@pytest.mark.django_db
-def test_resume_sets_active_and_restores_next_date(user):
-    defn = RecurringTaskService.create(user, '喝水', 'every 3 days', start_date=date(2026, 1, 1))
-    RecurringTaskService.pause(defn)
-    defn.next_date = None
+    defn.status = 'paused'
     defn.save()
 
-    RecurringTaskService.resume(defn)
-
-    assert defn.status == 'active'
-    assert defn.next_date == defn.start_date
+    assert RecurringTaskService.generate_due(today=today) == 0
 
 
 # ---- preview ----

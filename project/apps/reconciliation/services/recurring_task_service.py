@@ -83,22 +83,6 @@ class RecurringTaskService:
             ).update(status='cancelled')
         defn.delete()
 
-    @staticmethod
-    def pause(defn) -> RecurringTask:
-        """暂停定义（不再生成实例）"""
-        defn.status = 'paused'
-        defn.save()
-        return defn
-
-    @staticmethod
-    def resume(defn) -> RecurringTask:
-        """恢复定义；next_date 缺失时回退到 start_date"""
-        defn.status = 'active'
-        if defn.next_date is None:
-            defn.next_date = defn.start_date
-        defn.save()
-        return defn
-
     # ---- 预览 ----
 
     @staticmethod

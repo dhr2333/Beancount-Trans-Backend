@@ -120,27 +120,6 @@ class TestRecurringTaskViewSet:
         assert response.data['describe'] == '每 3 天'
         assert len(response.data['next_occurrences']) == 5
 
-    def test_pause_then_resume(self, user):
-        """POST pause/resume 状态流转"""
-        defn = RecurringTaskService.create(
-            user, '喝水', 'every 3 days', start_date=date(2026, 1, 1)
-        )
-
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        pause_response = client.post(f'{RECURRING_URL}{defn.id}/pause/')
-        assert pause_response.status_code == status.HTTP_200_OK
-        assert pause_response.data['status'] == 'paused'
-        defn.refresh_from_db()
-        assert defn.status == 'paused'
-
-        resume_response = client.post(f'{RECURRING_URL}{defn.id}/resume/')
-        assert resume_response.status_code == status.HTTP_200_OK
-        assert resume_response.data['status'] == 'active'
-        defn.refresh_from_db()
-        assert defn.status == 'active'
-
     def test_delete_cancels_pending_instances(self, user):
         """DELETE 定义后其待执行实例变为 cancelled"""
         today = date.today()
