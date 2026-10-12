@@ -294,6 +294,8 @@ def auto_confirm_expired_entry_reviews():
       ``parsed``；
     - ``copilot``（Copilot 记账来源）：按用户级暂存区截止时间判断到期，校验
       通过后追加写入 ``trans/collect.bean``（不覆盖已有内容），随后删除暂存区。
+    - ``recurring``（循环待办来源）：**永不过期、不自动写入**，始终跳过，
+      保留引用直到用户手动确认。
 
     单个用户或来源处理异常只记录日志并继续处理其他队列，不中断整个任务。
     """
@@ -335,6 +337,9 @@ def auto_confirm_expired_entry_reviews():
 
         for (source, file_id), group_refs in groups.items():
             try:
+                if source == EntryReviewQueueService.SOURCE_RECURRING:
+                    # 循环待办来源：永不过期、不自动写入，保留引用等待用户确认
+                    continue
                 if source == EntryReviewQueueService.SOURCE_COPILOT:
                     # ---- Copilot 记账来源：暂存区到期后追加写入 collect.bean ----
                     staging_key = CopilotBookkeepingService.staging_key(user.id)

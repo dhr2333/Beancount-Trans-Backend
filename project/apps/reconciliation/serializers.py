@@ -125,7 +125,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecurringTask
         fields = [
-            'id', 'title', 'note',
+            'id', 'title', 'note', 'kind', 'template',
             'rule_text', 'rrule',
             'recurrence_basis', 'start_date', 'next_run_date', 'has_pending', 'status',
             'generated_count', 'next_occurrences', 'describe',
@@ -172,6 +172,19 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(e))
         return value
 
+    def validate(self, attrs):
+        """到期产出为 generate_review 时，模板不能为空（不做语法校验）"""
+        kind = attrs.get('kind') or getattr(self.instance, 'kind', 'notify')
+        if kind == 'generate_review':
+            template = attrs.get('template')
+            if template is None:
+                template = getattr(self.instance, 'template', '') or ''
+            if not str(template).strip():
+                raise serializers.ValidationError(
+                    {'template': '生成审核待办时模板不能为空'}
+                )
+        return attrs
+
     def create(self, validated_data):
         """通过服务创建循环待办定义（归一化 rrule、初始化 next_date）"""
         from .services import RecurringTaskService
@@ -183,13 +196,16 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
             note=validated_data.get('note', ''),
             start_date=validated_data.get('start_date'),
             basis=validated_data.get('recurrence_basis'),
+            kind=validated_data.get('kind') or 'notify',
+            template=validated_data.get('template', '') or '',
         )
 
     def update(self, instance, validated_data):
         """通过服务更新循环待办定义（仅允许白名单字段）"""
         from .services import RecurringTaskService
         kwargs = {}
-        for key in ('title', 'note', 'rule_text', 'start_date', 'recurrence_basis'):
+        for key in ('title', 'note', 'kind', 'template', 'rule_text',
+                    'start_date', 'recurrence_basis'):
             if key in validated_data:
                 kwargs[key] = validated_data[key]
         return RecurringTaskService.update(instance, **kwargs)

@@ -75,6 +75,39 @@ class TestRecurringTaskViewSet:
         assert '无法识别的循环规则' in str(response.data)
         assert RecurringTask.objects.count() == 0
 
+    def test_create_generate_review_requires_template(self, user):
+        """kind=generate_review 且模板为空时返回 400（不做语法校验）"""
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(RECURRING_URL, {
+            'title': '模板待办',
+            'rule_text': 'every month',
+            'kind': 'generate_review',
+        }, format='json')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'template' in response.data
+        assert RecurringTask.objects.count() == 0
+
+    def test_create_generate_review_with_template_persists(self, user):
+        """kind=generate_review + 非空模板：保存成功，模板原样入库"""
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        response = client.post(RECURRING_URL, {
+            'title': '模板待办',
+            'rule_text': 'every month',
+            'start_date': '2099-01-01',
+            'kind': 'generate_review',
+            'template': '2099-01-01 * "x" "y"\n    Expenses:Food:Lunch 1.00 CNY\n    Assets:WeChat -1.00 CNY',
+        }, format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data['kind'] == 'generate_review'
+        defn = RecurringTask.objects.get(id=response.data['id'])
+        assert defn.template.startswith('2099-01-01 * "x"')
+
     def test_list_only_own_definitions(self, user, other_user):
         """GET 列表仅返回当前用户的定义"""
         mine = RecurringTaskService.create(

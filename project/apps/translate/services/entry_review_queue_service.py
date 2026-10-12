@@ -29,6 +29,7 @@ class EntryReviewQueueService:
 
     SOURCE_FILE = 'file'
     SOURCE_COPILOT = 'copilot'
+    SOURCE_RECURRING = 'recurring'
 
     @classmethod
     def _queue_key(cls, user_id: int) -> str:
@@ -57,6 +58,12 @@ class EntryReviewQueueService:
             )
 
             return CopilotBookkeepingService.has_staging(user_id)
+        if cls.ref_source(ref) == cls.SOURCE_RECURRING:
+            from project.apps.translate.services.recurring_bookkeeping_service import (
+                RecurringBookkeepingService,
+            )
+
+            return RecurringBookkeepingService.has_staging(user_id)
         file_id = ref.get('file_id')
         if file_id is None:
             return False
@@ -235,7 +242,7 @@ class EntryReviewQueueService:
                 expires_values.append(expires_at)
 
         for ref in refs:
-            if cls.ref_source(ref) == cls.SOURCE_COPILOT:
+            if cls.ref_source(ref) in (cls.SOURCE_COPILOT, cls.SOURCE_RECURRING):
                 continue
             cached_data = ParseReviewService.get_parse_result(ref.get('file_id'))
             if cached_data is None:
@@ -262,6 +269,18 @@ class EntryReviewQueueService:
                 )
 
                 entry = CopilotBookkeepingService.get_entry(user_id, entry_uuid)
+                if entry is not None:
+                    entries.append(entry)
+                continue
+
+            if cls.ref_source(ref) == cls.SOURCE_RECURRING:
+                from project.apps.translate.services.recurring_bookkeeping_service import (
+                    RecurringBookkeepingService,
+                )
+
+                # 读取时续期，保证未确认的循环条目长期保留
+                RecurringBookkeepingService.touch(user_id)
+                entry = RecurringBookkeepingService.get_entry(user_id, entry_uuid)
                 if entry is not None:
                     entries.append(entry)
                 continue

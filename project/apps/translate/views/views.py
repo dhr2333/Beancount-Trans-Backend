@@ -1436,6 +1436,9 @@ class EntryReviewConfirmView(EntryReviewViewSet):
         from project.apps.translate.services.copilot_bookkeeping_service import (
             CopilotBookkeepingService,
         )
+        from project.apps.translate.services.recurring_bookkeeping_service import (
+            RecurringBookkeepingService,
+        )
         from project.apps.translate.utils.beancount_validator import BeancountValidator
         from project.utils.file import BeanFileManager
 
@@ -1481,6 +1484,46 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                     continue
 
                 final_entries = ParseReviewService.get_final_result(copilot_key)
+                if not final_entries:
+                    pending_removal.append((source, file_id))
+                    continue
+
+                directives = [entry['formatted'].rstrip() for entry in final_entries]
+                formatted_text = '\n\n'.join(directives)
+
+                is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+                if not is_valid:
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(directives)
+                    error_entries.extend([
+                        {
+                            'source': source,
+                            'file_id': None,
+                            'uuid': final_entries[idx]['uuid'],
+                            'index': idx,
+                            'error_message': msg or error_message,
+                        }
+                        for idx, msg in error_entries_indices
+                    ])
+                    continue
+
+                validations.append({
+                    'source': source,
+                    'file_id': None,
+                    'directives': directives,
+                    'text': formatted_text,
+                    'entry_count': len(final_entries),
+                })
+                continue
+
+            if source == EntryReviewQueueService.SOURCE_RECURRING:
+                cached = RecurringBookkeepingService.get_staging_data(request.user.id)
+                if not cached:
+                    # 暂存区已失效：跳过并记录待清理
+                    pending_removal.append((source, file_id))
+                    continue
+
+                recurring_key = RecurringBookkeepingService.staging_key(request.user.id)
+                final_entries = ParseReviewService.get_final_result(recurring_key)
                 if not final_entries:
                     pending_removal.append((source, file_id))
                     continue
@@ -1568,6 +1611,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
         # 全部通过后再写入文件
         written_files = []
         copilot_written = False
+        recurring_written = False
         try:
             for item in validations:
                 if item['source'] == EntryReviewQueueService.SOURCE_COPILOT:
@@ -1576,6 +1620,17 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                     copilot_written = True
                     written_files.append({
                         'source': EntryReviewQueueService.SOURCE_COPILOT,
+                        'entry_count': item['entry_count'],
+                        'bean': 'trans/collect.bean',
+                    })
+                    continue
+
+                if item['source'] == EntryReviewQueueService.SOURCE_RECURRING:
+                    # 循环待办来源：追加写入 trans/collect.bean
+                    BeanFileManager.append_to_collect_bean(request.user, item['directives'])
+                    recurring_written = True
+                    written_files.append({
+                        'source': EntryReviewQueueService.SOURCE_RECURRING,
                         'entry_count': item['entry_count'],
                         'bean': 'trans/collect.bean',
                     })
@@ -1614,10 +1669,16 @@ class EntryReviewConfirmView(EntryReviewViewSet):
         if copilot_written:
             CopilotBookkeepingService.clear(request.user.id)
 
+        # 写入成功后删除循环待办暂存区
+        if recurring_written:
+            RecurringBookkeepingService.clear(request.user.id)
+
         # 清理无有效条目的文件引用后清空队列并完成待办
         for source, file_id in pending_removal:
             if source == EntryReviewQueueService.SOURCE_FILE:
                 EntryReviewQueueService.remove_file(request.user.id, file_id)
+            elif source == EntryReviewQueueService.SOURCE_RECURRING:
+                RecurringBookkeepingService.clear(request.user.id)
         EntryReviewQueueService.clear(request.user.id)
         EntryReviewQueueService.complete_task(request.user)
 

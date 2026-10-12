@@ -19,7 +19,8 @@ class RecurringTaskService:
     # ---- 定义管理 ----
 
     @staticmethod
-    def create(user, title, rule_text, note='', start_date=None, basis=None) -> RecurringTask:
+    def create(user, title, rule_text, note='', start_date=None, basis=None,
+               kind='notify', template='') -> RecurringTask:
         """创建循环待办定义；规则无法解析时抛出 RecurrenceParseError"""
         spec = RecurrenceParser.parse(rule_text)
         if basis is not None:
@@ -29,6 +30,8 @@ class RecurringTaskService:
             user=user,
             title=title,
             note=note,
+            kind=kind or 'notify',
+            template=template or '',
             rule_text=rule_text,
             rrule=spec.to_rrule_string(),
             recurrence_basis=spec.basis,
@@ -41,11 +44,15 @@ class RecurringTaskService:
 
     @staticmethod
     def update(defn, **fields) -> RecurringTask:
-        """更新循环待办定义（允许 title/note/rule_text/start_date/recurrence_basis）"""
+        """更新循环待办定义（允许 title/note/kind/template/rule_text/start_date/recurrence_basis）"""
         if 'title' in fields:
             defn.title = fields['title']
         if 'note' in fields:
             defn.note = fields['note']
+        if fields.get('kind'):
+            defn.kind = fields['kind']
+        if 'template' in fields:
+            defn.template = fields['template'] or ''
 
         if fields.get('rule_text'):
             spec = RecurrenceParser.parse(fields['rule_text'])
@@ -177,6 +184,42 @@ class RecurringTaskService:
     # ---- 即时对齐 ----
 
     @staticmethod
+    def _generate_instance(defn, due_date):
+        """按到期产出类型生成本期实例，返回用于排期锚定的 ScheduledTask
+
+        - kind='notify'：创建 pending 循环卡片（现状行为）
+        - kind='generate_review'：把固定模板并入统一审核队列，并创建一个
+          已完成实例作为排期锚点（对用户不可见，仅供 next_generation_date 推进）
+        """
+        ct = ContentType.objects.get_for_model(RecurringTask)
+        if defn.kind == 'generate_review':
+            from project.apps.translate.services.recurring_bookkeeping_service import (
+                RecurringBookkeepingService,
+            )
+
+            RecurringBookkeepingService.generate_for_definition(defn.user, defn, due_date)
+            task = ScheduledTask.objects.create(
+                task_type='recurring',
+                content_type=ct,
+                object_id=defn.id,
+                scheduled_date=due_date,
+                completed_date=due_date,
+                status='completed',
+            )
+        else:
+            task = ScheduledTask.objects.create(
+                task_type='recurring',
+                content_type=ct,
+                object_id=defn.id,
+                scheduled_date=due_date,
+                status='pending',
+            )
+        defn.last_generated_task = task
+        defn.generated_count += 1
+        defn.save(update_fields=['last_generated_task', 'generated_count'])
+        return task
+
+    @staticmethod
     def _align_schedule(defn, today=None) -> None:
         """按当前 start_date / rrule 立即对齐待办实例
 
@@ -206,16 +249,7 @@ class RecurringTaskService:
         if cand > today:
             return
 
-        task = ScheduledTask.objects.create(
-            task_type='recurring',
-            content_type=ct,
-            object_id=defn.id,
-            scheduled_date=cand,
-            status='pending',
-        )
-        defn.last_generated_task = task
-        defn.generated_count += 1
-        defn.save(update_fields=['last_generated_task', 'generated_count'])
+        RecurringTaskService._generate_instance(defn, cand)
 
     @staticmethod
     def reschedule(defn, new_start_date, today=None) -> RecurringTask:
@@ -235,7 +269,6 @@ class RecurringTaskService:
     def generate_due(today=None) -> int:
         """扫描活跃定义并生成到期实例，返回本次生成的实例数"""
         today = today or date.today()
-        ct = ContentType.objects.get_for_model(RecurringTask)
         created = 0
 
         for defn in RecurringTask.objects.filter(status='active'):
@@ -253,16 +286,7 @@ class RecurringTaskService:
             if cand > today:
                 continue
 
-            task = ScheduledTask.objects.create(
-                task_type='recurring',
-                content_type=ct,
-                object_id=defn.id,
-                scheduled_date=cand,
-                status='pending',
-            )
-            defn.last_generated_task = task
-            defn.generated_count += 1
-            defn.save()
+            RecurringTaskService._generate_instance(defn, cand)
             created += 1
 
         return created

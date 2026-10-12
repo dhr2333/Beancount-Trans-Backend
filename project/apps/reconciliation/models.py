@@ -129,6 +129,11 @@ class RecurringTask(BaseModel):
         ('completed', '按完成日期'),
     ]
 
+    KIND_CHOICES = [
+        ('notify', '通知'),
+        ('generate_review', '生成审核待办'),
+    ]
+
     STATUS_CHOICES = [
         ('active', '进行中'),
         ('ended', '已结束'),
@@ -143,6 +148,13 @@ class RecurringTask(BaseModel):
     )
     title = models.CharField(max_length=128, verbose_name='标题')
     note = models.TextField(blank=True, default='', verbose_name='备注')
+    kind = models.CharField(
+        max_length=16,
+        choices=KIND_CHOICES,
+        default='notify',
+        verbose_name='到期产出',
+    )
+    template = models.TextField(blank=True, default='', verbose_name='审核条目模板')
     rule_text = models.CharField(max_length=128, verbose_name='循环规则原文')
     rrule = models.CharField(max_length=256, verbose_name='归一化 RRULE')
     recurrence_basis = models.CharField(
