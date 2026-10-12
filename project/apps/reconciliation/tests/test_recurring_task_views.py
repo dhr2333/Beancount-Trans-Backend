@@ -31,7 +31,6 @@ class TestRecurringTaskViewSet:
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
-            'title': '喝水',
             'rule_text': 'every 3 days',
             'start_date': '2099-01-01',
         }, format='json')
@@ -51,7 +50,6 @@ class TestRecurringTaskViewSet:
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
-            'title': '月对账复核提醒',
             'rule_text': 'every month on the last',
             'start_date': None,
             'recurrence_basis': None,
@@ -67,7 +65,6 @@ class TestRecurringTaskViewSet:
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
-            'title': '喝水',
             'rule_text': 'foo bar',
         }, format='json')
 
@@ -81,7 +78,6 @@ class TestRecurringTaskViewSet:
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
-            'title': '模板待办',
             'rule_text': 'every month',
             'kind': 'generate_review',
         }, format='json')
@@ -96,7 +92,6 @@ class TestRecurringTaskViewSet:
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
-            'title': '模板待办',
             'rule_text': 'every month',
             'start_date': '2099-01-01',
             'kind': 'generate_review',
@@ -111,10 +106,10 @@ class TestRecurringTaskViewSet:
     def test_list_only_own_definitions(self, user, other_user):
         """GET 列表仅返回当前用户的定义"""
         mine = RecurringTaskService.create(
-            user, '我的提醒', 'every 3 days', start_date=date(2026, 1, 1)
+            user, 'every 3 days', start_date=date(2026, 1, 1)
         )
         RecurringTaskService.create(
-            other_user, '别人的提醒', 'every 3 days', start_date=date(2026, 1, 1)
+            other_user, 'every 3 days', start_date=date(2026, 1, 1)
         )
 
         client = APIClient()
@@ -130,7 +125,7 @@ class TestRecurringTaskViewSet:
     def test_retrieve_other_user_definition_404(self, user, other_user):
         """用户 A 检索用户 B 的定义返回 404"""
         other = RecurringTaskService.create(
-            other_user, '别人的提醒', 'every 3 days', start_date=date(2026, 1, 1)
+            other_user, 'every 3 days', start_date=date(2026, 1, 1)
         )
 
         client = APIClient()
@@ -156,7 +151,7 @@ class TestRecurringTaskViewSet:
         """DELETE 定义后其待执行实例变为 cancelled"""
         today = date.today()
         defn = RecurringTaskService.create(
-            user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+            user, 'every 3 days', start_date=today - timedelta(days=1)
         )
         RecurringTaskService.generate_due(today=today)
         task = ScheduledTask.objects.get(
@@ -183,7 +178,7 @@ class TestScheduledTaskComplete:
         """POST /api/reconciliation/tasks/{id}/complete/ 完成循环实例返回 completed/next_date"""
         today = date.today()
         defn = RecurringTaskService.create(
-            user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+            user, 'every 3 days', start_date=today - timedelta(days=1)
         )
         RecurringTaskService.generate_due(today=today)
         task = ScheduledTask.objects.get(
@@ -205,7 +200,7 @@ class TestScheduledTaskComplete:
         """PATCH /api/reconciliation/tasks/{id}/ 允许用户修改循环实例的执行日期"""
         today = date.today()
         defn = RecurringTaskService.create(
-            user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+            user, 'every 3 days', start_date=today - timedelta(days=1)
         )
         RecurringTaskService.generate_due(today=today)
         task = ScheduledTask.objects.get(
@@ -227,7 +222,7 @@ class TestScheduledTaskComplete:
 
         today = date.today()
         tomorrow = today + timedelta(days=1)
-        defn = RecurringTaskService.create(user, '喝水', 'every month', start_date=today)
+        defn = RecurringTaskService.create(user, 'every month', start_date=today)
         task = ScheduledTask.objects.get(
             task_type='recurring', object_id=defn.id, status='pending'
         )
@@ -262,11 +257,11 @@ class TestScheduledTaskComplete:
         assert '该待办不是循环待办' in str(response.data)
 
     def test_list_tasks_filter_recurring_isolation_and_title(self, user, other_user):
-        """GET /api/reconciliation/tasks/?task_type=recurring 仅返回本人循环实例且 recurring_title 填充"""
+        """GET /api/reconciliation/tasks/?task_type=recurring 仅返回本人循环实例且 recurring_label 填充"""
         ct = ContentType.objects.get_for_model(RecurringTask)
 
         defn = RecurringTaskService.create(
-            user, '喝水提醒', 'every 3 days', start_date=date.today()
+            user, 'every 3 days', start_date=date.today()
         )
         mine = ScheduledTask.objects.create(
             task_type='recurring',
@@ -277,7 +272,7 @@ class TestScheduledTaskComplete:
         )
 
         other_defn = RecurringTaskService.create(
-            other_user, '别人的提醒', 'every 3 days', start_date=date.today()
+            other_user, 'every 3 days', start_date=date.today()
         )
         other = ScheduledTask.objects.create(
             task_type='recurring',
@@ -298,4 +293,4 @@ class TestScheduledTaskComplete:
         assert other.id not in ids
 
         row = next(item for item in data if item['id'] == mine.id)
-        assert row['recurring_title'] == '喝水提醒'
+        assert row['recurring_label'] == '每 3 天'

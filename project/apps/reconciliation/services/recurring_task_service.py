@@ -19,7 +19,7 @@ class RecurringTaskService:
     # ---- 定义管理 ----
 
     @staticmethod
-    def create(user, title, rule_text, note='', start_date=None, basis=None,
+    def create(user, rule_text, note='', start_date=None, basis=None,
                kind='notify', template='') -> RecurringTask:
         """创建循环待办定义；规则无法解析时抛出 RecurrenceParseError"""
         spec = RecurrenceParser.parse(rule_text)
@@ -28,7 +28,6 @@ class RecurringTaskService:
         start_date = start_date or date.today()
         defn = RecurringTask.objects.create(
             user=user,
-            title=title,
             note=note,
             kind=kind or 'notify',
             template=template or '',
@@ -44,9 +43,7 @@ class RecurringTaskService:
 
     @staticmethod
     def update(defn, **fields) -> RecurringTask:
-        """更新循环待办定义（允许 title/note/kind/template/rule_text/start_date/recurrence_basis）"""
-        if 'title' in fields:
-            defn.title = fields['title']
+        """更新循环待办定义（允许 note/kind/template/rule_text/start_date/recurrence_basis）"""
         if 'note' in fields:
             defn.note = fields['note']
         if fields.get('kind'):
@@ -87,6 +84,24 @@ class RecurringTaskService:
                 status='pending',
             ).update(status='cancelled')
         defn.delete()
+
+    # ---- 展示标签 ----
+
+    @staticmethod
+    def label(defn) -> str:
+        """定义的展示标签（卡片/审核条目文本单一来源）
+
+        依次取 note / template 的首个非空行（截断 128 字符）；
+        都为空时回退规则中文描述，解析失败返回「循环待办」。
+        """
+        for text in (defn.note, defn.template):
+            stripped = (text or '').strip()
+            if stripped:
+                return stripped.splitlines()[0][:128]
+        try:
+            return RecurrenceParser.parse(defn.rule_text).describe()
+        except Exception:
+            return '循环待办'
 
     # ---- 预览 ----
 

@@ -146,7 +146,6 @@ class RecurringTask(BaseModel):
         db_index=True,
         verbose_name='属主'
     )
-    title = models.CharField(max_length=128, verbose_name='标题')
     note = models.TextField(blank=True, default='', verbose_name='备注')
     kind = models.CharField(
         max_length=16,
@@ -190,4 +189,4 @@ class RecurringTask(BaseModel):
         ]
 
     def __str__(self):
-        return f'{self.title} ({self.get_status_display()})'
+        return f'{self.rule_text} ({self.get_status_display()})'

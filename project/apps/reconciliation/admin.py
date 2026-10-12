@@ -144,6 +144,6 @@ class ScheduledTaskAdmin(admin.ModelAdmin):
 @admin.register(RecurringTask)
 class RecurringTaskAdmin(admin.ModelAdmin):
     """RecurringTask 管理界面"""
-    list_display = ['id', 'user', 'title', 'rule_text', 'rrule', 'start_date', 'status', 'generated_count']
+    list_display = ['id', 'user', 'rule_text', 'kind', 'rrule', 'start_date', 'status', 'generated_count']
     list_filter = ['status', 'recurrence_basis']
-    search_fields = ['title', 'rule_text']
+    search_fields = ['rule_text', 'note', 'template']

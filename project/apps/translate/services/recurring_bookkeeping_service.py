@@ -107,6 +107,8 @@ class RecurringBookkeepingService:
     @classmethod
     def build_entry(cls, defn, due_date: date) -> Dict[str, Any]:
         """把定义模板原样包装成审核条目（无占位符、无替换、不校验语法）。"""
+        from project.apps.reconciliation.services import RecurringTaskService
+
         text = (defn.template or '').rstrip()
         return {
             'uuid': uuid_lib.uuid4().hex,
@@ -118,7 +120,7 @@ class RecurringBookkeepingService:
             'installment_period': None,
             'tag_details': [],
             'tag_overrides': ParseReviewService.default_tag_overrides(),
-            'file_name': defn.title,
+            'file_name': RecurringTaskService.label(defn),
             # 仅作元数据，不改写模板正文中的日期
             'date': due_date.isoformat(),
         }

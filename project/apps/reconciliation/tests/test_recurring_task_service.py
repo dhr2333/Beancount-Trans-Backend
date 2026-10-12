@@ -18,7 +18,7 @@ from project.apps.reconciliation.services.recurring_task_service import Recurrin
 def test_create_normalizes_rule(user):
     """有效规则：rrule 归一化、状态 active"""
     start = date(2026, 1, 1)
-    defn = RecurringTaskService.create(user, '喝水', 'every 3 days', start_date=start)
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=start)
 
     assert defn.user == user
     assert defn.rule_text == 'every 3 days'
@@ -31,7 +31,7 @@ def test_create_normalizes_rule(user):
 def test_create_invalid_rule_raises_and_creates_nothing(user):
     """无效规则：抛出 RecurrenceParseError 且不落库"""
     with pytest.raises(RecurrenceParseError):
-        RecurringTaskService.create(user, '喝水', 'foo bar')
+        RecurringTaskService.create(user, 'foo bar')
 
     assert RecurringTask.objects.count() == 0
 
@@ -39,7 +39,7 @@ def test_create_invalid_rule_raises_and_creates_nothing(user):
 @pytest.mark.django_db
 def test_create_explicit_basis_override(user):
     """显式 basis 覆盖解析结果"""
-    defn = RecurringTaskService.create(user, '喝水', 'every 3 days', basis='completed')
+    defn = RecurringTaskService.create(user, 'every 3 days', basis='completed')
     assert defn.recurrence_basis == 'completed'
 
 
@@ -47,21 +47,20 @@ def test_create_explicit_basis_override(user):
 
 @pytest.mark.django_db
 def test_update_reparses_rule(user):
-    defn = RecurringTaskService.create(user, '旧标题', 'every 3 days', start_date=date(2026, 1, 1))
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=date(2026, 1, 1))
 
     RecurringTaskService.update(
-        defn, title='新标题', rule_text='every week on Tuesday'
+        defn, rule_text='every week on Tuesday'
     )
     defn.refresh_from_db()
 
-    assert defn.title == '新标题'
     assert defn.rule_text == 'every week on Tuesday'
     assert defn.rrule.startswith('FREQ=WEEKLY')
 
 
 @pytest.mark.django_db
 def test_update_start_date(user):
-    defn = RecurringTaskService.create(user, '喝水', 'every 3 days', start_date=date(2026, 1, 1))
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=date(2026, 1, 1))
 
     RecurringTaskService.update(defn, start_date=date(2026, 2, 1))
     defn.refresh_from_db()
@@ -73,7 +72,7 @@ def test_update_start_date(user):
 def test_delete_cancels_pending(user):
     today = date.today()
     defn = RecurringTaskService.create(
-        user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+        user, 'every 3 days', start_date=today - timedelta(days=1)
     )
     RecurringTaskService.generate_due(today=today)
     defn_id = defn.id
@@ -92,7 +91,6 @@ def _make_active_definition(user, rule_text, rrule, start_date):
     """直接落库定义（绕过 create 的即时对齐），用于测试定时扫描"""
     return RecurringTask.objects.create(
         user=user,
-        title='喝水',
         rule_text=rule_text,
         rrule=rrule,
         recurrence_basis='scheduled',
@@ -174,7 +172,7 @@ def test_generate_due_marks_ended_when_rule_exhausted(user):
 @pytest.mark.django_db
 def test_complete_instance_scheduled_basis_returns_next_date(user):
     """按计划基准：完成后返回「上一次待办日期 + rrule」"""
-    defn = RecurringTaskService.create(user, '交房租', 'every 3 days', start_date=date(2026, 1, 1))
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=date(2026, 1, 1))
 
     RecurringTaskService.generate_due(today=date(2026, 1, 2))
     task = ScheduledTask.objects.get(task_type='recurring', object_id=defn.id)
@@ -188,7 +186,7 @@ def test_complete_instance_scheduled_basis_returns_next_date(user):
 def test_complete_instance_completed_basis_advances_from_completion(user):
     """按完成基准（when done）：以完成日期为锚点重新起算下一次发生"""
     start = date(2026, 1, 1)
-    defn = RecurringTaskService.create(user, '健身', 'every 10 days when done', start_date=start)
+    defn = RecurringTaskService.create(user, 'every 10 days when done', start_date=start)
     assert defn.recurrence_basis == 'completed'
 
     RecurringTaskService.generate_due(today=date(2026, 1, 5))
@@ -209,7 +207,7 @@ def test_next_run_date_not_generated_is_first_occurrence(user):
     from project.apps.reconciliation.serializers import RecurringTaskSerializer
 
     defn = RecurringTaskService.create(
-        user, '复核', 'every month on the 1st', start_date=date(2027, 3, 20)
+        user, 'every month on the 1st', start_date=date(2027, 3, 20)
     )
 
     data = RecurringTaskSerializer(defn).data
@@ -223,7 +221,7 @@ def test_next_run_date_pending_scheduled_uses_fixed_grid(user):
     from project.apps.reconciliation.serializers import RecurringTaskSerializer
 
     defn = RecurringTaskService.create(
-        user, '复核', 'every month on the 1st', start_date=date(2026, 1, 1)
+        user, 'every month on the 1st', start_date=date(2026, 1, 1)
     )
     ScheduledTask.objects.create(
         task_type='recurring',
@@ -246,7 +244,7 @@ def test_next_run_date_pending_completed_anchors_today(user):
 
     today = date.today()
     defn = RecurringTaskService.create(
-        user, '复核', 'every month when done', start_date=date(2026, 1, 1)
+        user, 'every month when done', start_date=date(2026, 1, 1)
     )
     ScheduledTask.objects.create(
         task_type='recurring',
@@ -268,7 +266,7 @@ def test_create_with_default_date_generates_instance(user):
     from project.apps.reconciliation.serializers import RecurringTaskSerializer
 
     today = date.today()
-    defn = RecurringTaskService.create(user, '复核', 'every month')
+    defn = RecurringTaskService.create(user, 'every month')
 
     data = RecurringTaskSerializer(defn).data
     assert data['has_pending'] is True
@@ -288,7 +286,7 @@ def test_update_start_to_past_scheduled_generates_and_advances(user):
     today = date.today()
     first_of_month = date(today.year, today.month, 1)
     defn = RecurringTaskService.create(
-        user, '复核', 'every month', start_date=today + timedelta(days=3)
+        user, 'every month', start_date=today + timedelta(days=3)
     )
     assert RecurringTaskService.has_pending(defn) is False
 
@@ -314,7 +312,7 @@ def test_update_start_to_past_when_done_anchors_today(user):
     today = date.today()
     first_of_month = date(today.year, today.month, 1)
     defn = RecurringTaskService.create(
-        user, '复核', 'every month when done', start_date=today + timedelta(days=3)
+        user, 'every month when done', start_date=today + timedelta(days=3)
     )
     assert RecurringTaskService.has_pending(defn) is False
 
@@ -334,7 +332,7 @@ def test_update_start_to_future_cancels_pending_and_shows_start(user):
 
     today = date.today()
     tomorrow = today + timedelta(days=1)
-    defn = RecurringTaskService.create(user, '复核', 'every month', start_date=today)
+    defn = RecurringTaskService.create(user, 'every month', start_date=today)
     assert RecurringTaskService.has_pending(defn) is True
 
     RecurringTaskService.update(defn, start_date=tomorrow)
@@ -372,7 +370,7 @@ def test_ended_definition_is_skipped(user):
     """非 active 的定义不生成实例"""
     today = date.today()
     defn = RecurringTaskService.create(
-        user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+        user, 'every 3 days', start_date=today - timedelta(days=1)
     )
 
     defn.status = 'ended'
@@ -385,7 +383,7 @@ def test_ended_definition_is_skipped(user):
 
 @pytest.mark.django_db
 def test_preview_returns_increasing_dates(user):
-    defn = RecurringTaskService.create(user, '喝水', 'every 3 days', start_date=date(2026, 1, 1))
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=date(2026, 1, 1))
 
     dates = RecurringTaskService.preview(defn, count=3, after=date(2026, 1, 1))
 

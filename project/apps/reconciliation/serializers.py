@@ -41,8 +41,8 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     # 待审核条目数量（条目审核待办）
     entry_count = serializers.SerializerMethodField()
 
-    # 循环待办标题（循环待办实例）
-    recurring_title = serializers.SerializerMethodField()
+    # 循环待办展示标签（循环待办实例）
+    recurring_label = serializers.SerializerMethodField()
 
     class Meta:
         model = ScheduledTask
@@ -52,7 +52,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'account_name', 'account_type',
             'review_expires_at', 'entry_count',
-            'recurring_title',
+            'recurring_label',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -86,10 +86,11 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             return len(EntryReviewQueueService.list_refs(obj.object_id))
         return None
 
-    def get_recurring_title(self, obj):
-        """获取循环待办定义标题（仅循环待办实例返回，否则为 None）"""
+    def get_recurring_label(self, obj):
+        """获取循环待办定义的展示标签（仅循环待办实例返回，否则为 None）"""
         if isinstance(obj.content_object, RecurringTask):
-            return obj.content_object.title
+            from .services import RecurringTaskService
+            return RecurringTaskService.label(obj.content_object)
         return None
 
 
@@ -125,7 +126,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecurringTask
         fields = [
-            'id', 'title', 'note', 'kind', 'template',
+            'id', 'note', 'kind', 'template',
             'rule_text', 'rrule',
             'recurrence_basis', 'start_date', 'next_run_date', 'has_pending', 'status',
             'generated_count', 'next_occurrences', 'describe',
@@ -191,7 +192,6 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         return RecurringTaskService.create(
             user=user,
-            title=validated_data['title'],
             rule_text=validated_data['rule_text'],
             note=validated_data.get('note', ''),
             start_date=validated_data.get('start_date'),
@@ -204,7 +204,7 @@ class RecurringTaskSerializer(serializers.ModelSerializer):
         """通过服务更新循环待办定义（仅允许白名单字段）"""
         from .services import RecurringTaskService
         kwargs = {}
-        for key in ('title', 'note', 'kind', 'template', 'rule_text',
+        for key in ('note', 'kind', 'template', 'rule_text',
                     'start_date', 'recurrence_basis'):
             if key in validated_data:
                 kwargs[key] = validated_data[key]

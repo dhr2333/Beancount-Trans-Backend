@@ -49,8 +49,8 @@ def _make_review_kind_definition(user):
     """创建一个到期的 generate_review 定义（模板固定文本）。"""
     return RecurringTaskService.create(
         user,
-        '模板标题',
         'every month',
+        note='模板标题',
         start_date=date.today() - timedelta(days=1),
         kind='generate_review',
         template=TEMPLATE,
