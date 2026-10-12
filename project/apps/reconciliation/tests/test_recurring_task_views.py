@@ -23,43 +23,27 @@ class TestRecurringTaskViewSet:
     """循环待办定义 API 测试"""
 
     def test_create_definition(self, user):
-        """POST /api/reconciliation/recurring-tasks/ 创建定义：rrule 归一化、状态 active"""
+        """POST /api/reconciliation/recurring-tasks/ 创建定义：rrule 归一化、状态 active
+
+        start_date 取未来日期，避免创建时即时对齐生成待办实例。
+        """
         client = APIClient()
         client.force_authenticate(user=user)
 
         response = client.post(RECURRING_URL, {
             'title': '喝水',
             'rule_text': 'every 3 days',
-            'start_date': '2030-01-01',
+            'start_date': '2099-01-01',
         }, format='json')
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['rrule'] == 'FREQ=DAILY;INTERVAL=3'
-        assert response.data['start_date'] == '2030-01-01'
+        assert response.data['start_date'] == '2099-01-01'
         assert response.data['has_pending'] is False
 
         defn = RecurringTask.objects.get(id=response.data['id'])
         assert defn.user == user
         assert defn.status == 'active'
-
-    def test_create_with_past_start_date_generates_instance(self, user):
-        """POST 首次日期为今天之前：立即生成待办（has_pending=True）"""
-        today = date.today()
-        client = APIClient()
-        client.force_authenticate(user=user)
-
-        response = client.post(RECURRING_URL, {
-            'title': '每日复核',
-            'rule_text': 'every day',
-            'start_date': (today - timedelta(days=1)).isoformat(),
-        }, format='json')
-
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['has_pending'] is True
-        defn = RecurringTask.objects.get(id=response.data['id'])
-        assert ScheduledTask.objects.filter(
-            task_type='recurring', object_id=defn.id, status='pending'
-        ).count() == 1
 
     def test_create_allows_null_optional_fields(self, user):
         """POST 传 null 的可选字段（start_date/recurrence_basis）应成功并归一化"""
@@ -135,29 +119,6 @@ class TestRecurringTaskViewSet:
         assert response.data['describe'] == '每 3 天'
         assert len(response.data['next_occurrences']) == 5
 
-    def test_update_start_date_to_past_generates_instance(self, user):
-        """PATCH start_date 到今天（含）之前：立即生成待办，展示日期推进到下一次"""
-        from dateutil.relativedelta import relativedelta
-
-        today = date.today()
-        defn = RecurringTaskService.create(
-            user, '月复核', 'every month on the 1st', start_date=today + timedelta(days=10)
-        )
-        past = date(today.year, today.month, 1)
-
-        client = APIClient()
-        client.force_authenticate(user=user)
-        response = client.patch(
-            f'{RECURRING_URL}{defn.id}/', {'start_date': past.isoformat()}, format='json'
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data['has_pending'] is True
-        assert response.data['next_run_date'] == (past + relativedelta(months=1)).isoformat()
-        assert ScheduledTask.objects.filter(
-            task_type='recurring', object_id=defn.id, status='pending'
-        ).count() == 1
-
     def test_delete_cancels_pending_instances(self, user):
         """DELETE 定义后其待执行实例变为 cancelled"""
         today = date.today()
@@ -226,6 +187,36 @@ class TestScheduledTaskComplete:
         assert response.status_code == status.HTTP_200_OK
         task.refresh_from_db()
         assert task.scheduled_date == new_date
+
+    def test_update_recurring_instance_date_postpones_definition(self, user):
+        """循环卡片改期到未来：取消旧实例、定义顺延；管理页显示新日期且可编辑"""
+        from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        defn = RecurringTaskService.create(user, '喝水', 'every month', start_date=today)
+        task = ScheduledTask.objects.get(
+            task_type='recurring', object_id=defn.id, status='pending'
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.patch(
+            f'{TASKS_URL}{task.id}/', {'scheduled_date': tomorrow.isoformat()}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        defn.refresh_from_db()
+        assert defn.start_date == tomorrow
+        assert RecurringTaskService.has_pending(defn) is False
+
+        task.refresh_from_db()
+        assert task.status == 'cancelled'
+
+        data = RecurringTaskSerializer(defn).data
+        assert data['has_pending'] is False
+        assert data['next_run_date'] == tomorrow.isoformat()
 
     def test_complete_reconciliation_instance_returns_400(self, user, account, scheduled_task_pending):
         """对非循环（reconciliation）实例调用 complete 返回 400"""

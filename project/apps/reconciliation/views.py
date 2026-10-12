@@ -62,6 +62,21 @@ class ScheduledTaskViewSet(ModelViewSet):
         elif self.action == 'execute':
             return ReconciliationExecuteSerializer
         return ScheduledTaskSerializer
+
+    def perform_update(self, serializer):
+        """更新待办；循环待办改期时顺延其定义（取消旧实例并按新日期对齐）"""
+        task = serializer.instance
+        new_date = serializer.validated_data.get('scheduled_date')
+        serializer.save()
+
+        defn = task.content_object
+        if (
+            new_date is not None
+            and task.task_type == 'recurring'
+            and isinstance(defn, RecurringTask)
+            and defn.status == 'active'
+        ):
+            RecurringTaskService.reschedule(defn, new_date)
     
     def get_queryset(self):
         """获取查询集
@@ -316,18 +331,6 @@ class RecurringTaskViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         """删除定义，同时取消其所有待执行的实例"""
         RecurringTaskService.delete(instance, cancel_pending=True)
-
-    def perform_create(self, serializer):
-        """创建后立即对该定义做一次到期检查：首次日期为今天（含）之前时立刻生成待办"""
-        instance = serializer.save()
-        RecurringTaskService.generate_due_for(instance)
-        return instance
-
-    def perform_update(self, serializer):
-        """更新后立即对该定义做一次到期检查：日期改为今天（含）之前时立刻生成待办"""
-        instance = serializer.save()
-        RecurringTaskService.generate_due_for(instance)
-        return instance
 
     @action(detail=False, methods=['post'], url_path='preview')
     def preview_rule(self, request):

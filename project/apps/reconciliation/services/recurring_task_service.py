@@ -25,7 +25,7 @@ class RecurringTaskService:
         if basis is not None:
             spec.basis = basis
         start_date = start_date or date.today()
-        return RecurringTask.objects.create(
+        defn = RecurringTask.objects.create(
             user=user,
             title=title,
             note=note,
@@ -35,6 +35,9 @@ class RecurringTaskService:
             start_date=start_date,
             status='active',
         )
+        # 立即对齐：默认 start_date=today 时通常会立刻生成待执行实例
+        RecurringTaskService._align_schedule(defn)
+        return defn
 
     @staticmethod
     def update(defn, **fields) -> RecurringTask:
@@ -55,10 +58,14 @@ class RecurringTaskService:
         if fields.get('recurrence_basis'):
             defn.recurrence_basis = fields['recurrence_basis']
 
-        if fields.get('start_date'):
+        start_date_changed = bool(fields.get('start_date'))
+        if start_date_changed:
             defn.start_date = fields['start_date']
 
         defn.save()
+        # 修改 start_date 后立即对齐：取消旧实例，必要时按新日期重新生成
+        if start_date_changed:
+            RecurringTaskService._align_schedule(defn)
         return defn
 
     @staticmethod
@@ -111,8 +118,11 @@ class RecurringTaskService:
 
     @staticmethod
     def latest_instance(defn):
-        """最近一次已生成的实例（按 scheduled_date 取最新），无则 None"""
-        return RecurringTaskService._instances(defn).first()
+        """最近一次已生成的「未取消」实例（按 scheduled_date 取最新），无则 None
+
+        已取消实例不参与锚点计算，避免把锚点固定在已作废的日期上。
+        """
+        return RecurringTaskService._instances(defn).exclude(status='cancelled').first()
 
     @staticmethod
     def has_pending(defn) -> bool:
@@ -164,50 +174,97 @@ class RecurringTaskService:
             )
         return RecurrenceCalculator.next_occurrence(spec, today, today)
 
-    # ---- 实例生成 / 完成 ----
+    # ---- 即时对齐 ----
 
     @staticmethod
-    def generate_due_for(defn, today=None) -> bool:
-        """对单个定义做一次到期检查：无待执行实例且候选日期已到 → 生成实例
+    def _align_schedule(defn, today=None) -> None:
+        """按当前 start_date / rrule 立即对齐待办实例
 
-        返回是否生成了实例。定义非 active / 已有待执行实例 / 候选日期未到均不生成。
+        创建定义或修改 start_date 后调用：
+        1. 取消该定义下所有待执行实例（置 cancelled，保留历史不删除）
+        2. 以新的 start_date 从零推算下一次生成日期（锚点仅取未取消实例）
+        3. 若该日期 <= 今天，则立即生成一个待执行实例
         """
         today = today or date.today()
-        if defn.status != 'active':
-            return False
-        # 已存在待执行实例：等待用户完成，不再生成（同时只允许一个未完成实例）
-        if RecurringTaskService.has_pending(defn):
-            return False
+        ct = ContentType.objects.get_for_model(RecurringTask)
+
+        ScheduledTask.objects.filter(
+            task_type='recurring',
+            content_type=ct,
+            object_id=defn.id,
+            status='pending',
+        ).update(status='cancelled')
 
         cand = RecurringTaskService.next_generation_date(defn)
         if cand is None:
-            # 规则耗尽（如每月 30 日遇到 2 月），结束定义
-            defn.status = 'ended'
-            defn.save()
-            return False
+            # 规则耗尽：结束定义
+            if defn.status == 'active':
+                defn.status = 'ended'
+                defn.save(update_fields=['status'])
+            return
+
         if cand > today:
-            return False
+            return
 
         task = ScheduledTask.objects.create(
             task_type='recurring',
-            content_type=ContentType.objects.get_for_model(RecurringTask),
+            content_type=ct,
             object_id=defn.id,
             scheduled_date=cand,
             status='pending',
         )
         defn.last_generated_task = task
         defn.generated_count += 1
-        defn.save()
-        return True
+        defn.save(update_fields=['last_generated_task', 'generated_count'])
+
+    @staticmethod
+    def reschedule(defn, new_start_date, today=None) -> RecurringTask:
+        """顺延定义：把 start_date 改为 new_start_date 并立即对齐
+
+        用于用户在「循环」待办卡片上修改执行日期：等价于把该循环顺延到新日期，
+        旧实例被取消；若新日期已到期则立即生成新实例。
+        """
+        defn.start_date = new_start_date
+        defn.save(update_fields=['start_date'])
+        RecurringTaskService._align_schedule(defn, today=today)
+        return defn
+
+    # ---- 实例生成 / 完成 ----
 
     @staticmethod
     def generate_due(today=None) -> int:
         """扫描活跃定义并生成到期实例，返回本次生成的实例数"""
         today = today or date.today()
+        ct = ContentType.objects.get_for_model(RecurringTask)
         created = 0
+
         for defn in RecurringTask.objects.filter(status='active'):
-            if RecurringTaskService.generate_due_for(defn, today=today):
-                created += 1
+            # 已存在待执行实例：等待用户完成，不再生成（同时只允许一个未完成实例）
+            if RecurringTaskService.has_pending(defn):
+                continue
+
+            cand = RecurringTaskService.next_generation_date(defn)
+            if cand is None:
+                # 规则耗尽（如每月 30 日遇到 2 月），结束定义
+                defn.status = 'ended'
+                defn.save()
+                continue
+
+            if cand > today:
+                continue
+
+            task = ScheduledTask.objects.create(
+                task_type='recurring',
+                content_type=ct,
+                object_id=defn.id,
+                scheduled_date=cand,
+                status='pending',
+            )
+            defn.last_generated_task = task
+            defn.generated_count += 1
+            defn.save()
+            created += 1
+
         return created
 
     @staticmethod

@@ -88,11 +88,24 @@ def test_delete_cancels_pending(user):
 
 # ---- generate_due ----
 
+def _make_active_definition(user, rule_text, rrule, start_date):
+    """直接落库定义（绕过 create 的即时对齐），用于测试定时扫描"""
+    return RecurringTask.objects.create(
+        user=user,
+        title='喝水',
+        rule_text=rule_text,
+        rrule=rrule,
+        recurrence_basis='scheduled',
+        start_date=start_date,
+        status='active',
+    )
+
+
 @pytest.mark.django_db
 def test_generate_due_creates_one_instance(user):
     today = date.today()
-    defn = RecurringTaskService.create(
-        user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+    defn = _make_active_definition(
+        user, 'every 3 days', 'FREQ=DAILY;INTERVAL=3', today - timedelta(days=1)
     )
 
     created = RecurringTaskService.generate_due(today=today)
@@ -110,8 +123,8 @@ def test_generate_due_creates_one_instance(user):
 @pytest.mark.django_db
 def test_generate_due_skips_when_pending_exists(user):
     today = date.today()
-    defn = RecurringTaskService.create(
-        user, '喝水', 'every 3 days', start_date=today - timedelta(days=1)
+    defn = _make_active_definition(
+        user, 'every 3 days', 'FREQ=DAILY;INTERVAL=3', today - timedelta(days=1)
     )
 
     assert RecurringTaskService.generate_due(today=today) == 1
@@ -126,8 +139,8 @@ def test_generate_due_skips_when_pending_exists(user):
 def test_generate_due_creates_at_most_one_pending(user):
     """同时只保留一个待执行实例：再次运行不再生成（逐期推进，不堆积）"""
     today = date.today()
-    defn = RecurringTaskService.create(
-        user, '喝水', 'every 3 days', start_date=today - timedelta(days=30)
+    defn = _make_active_definition(
+        user, 'every 3 days', 'FREQ=DAILY;INTERVAL=3', today - timedelta(days=30)
     )
 
     assert RecurringTaskService.generate_due(today=today) == 1
@@ -141,8 +154,11 @@ def test_generate_due_creates_at_most_one_pending(user):
 def test_generate_due_marks_ended_when_rule_exhausted(user):
     """规则不可满足（2 月 30 日）：不生成实例并把定义置为已结束"""
     today = date.today()
-    defn = RecurringTaskService.create(
-        user, '不存在', 'every February on the 30th', start_date=today - timedelta(days=1)
+    defn = _make_active_definition(
+        user,
+        'every February on the 30th',
+        'FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30',
+        today - timedelta(days=1),
     )
 
     created = RecurringTaskService.generate_due(today=today)
@@ -243,6 +259,94 @@ def test_next_run_date_pending_completed_anchors_today(user):
     data = RecurringTaskSerializer(defn).data
     assert data['has_pending'] is True
     assert data['next_run_date'] == (today + relativedelta(months=1)).isoformat()
+
+
+@pytest.mark.django_db
+def test_create_with_default_date_generates_instance(user):
+    """默认日期（today）新建：立即生成待办，展示完成后下一次日期（需求 1）"""
+    from dateutil.relativedelta import relativedelta
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    today = date.today()
+    defn = RecurringTaskService.create(user, '复核', 'every month')
+
+    data = RecurringTaskSerializer(defn).data
+    assert data['has_pending'] is True
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert task.scheduled_date == today
+    assert data['next_run_date'] == (today + relativedelta(months=1)).isoformat()
+
+
+@pytest.mark.django_db
+def test_update_start_to_past_scheduled_generates_and_advances(user):
+    """every month：start 改到过去 → 立即生成，展示下一次待办开始日期（需求 2.1/3.2）"""
+    from dateutil.relativedelta import relativedelta
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    today = date.today()
+    first_of_month = date(today.year, today.month, 1)
+    defn = RecurringTaskService.create(
+        user, '复核', 'every month', start_date=today + timedelta(days=3)
+    )
+    assert RecurringTaskService.has_pending(defn) is False
+
+    RecurringTaskService.update(defn, start_date=first_of_month)
+    defn.refresh_from_db()
+
+    assert RecurringTaskService.has_pending(defn) is True
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert task.scheduled_date == first_of_month
+    assert RecurringTaskSerializer(defn).data['next_run_date'] == (
+        first_of_month + relativedelta(months=1)
+    ).isoformat()
+
+
+@pytest.mark.django_db
+def test_update_start_to_past_when_done_anchors_today(user):
+    """every month when done：start 改到过去 → 立即生成，展示今天 + rrule（需求 2.2/3.1）"""
+    from dateutil.relativedelta import relativedelta
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    today = date.today()
+    first_of_month = date(today.year, today.month, 1)
+    defn = RecurringTaskService.create(
+        user, '复核', 'every month when done', start_date=today + timedelta(days=3)
+    )
+    assert RecurringTaskService.has_pending(defn) is False
+
+    RecurringTaskService.update(defn, start_date=first_of_month)
+    defn.refresh_from_db()
+
+    assert RecurringTaskService.has_pending(defn) is True
+    assert RecurringTaskSerializer(defn).data['next_run_date'] == (
+        today + relativedelta(months=1)
+    ).isoformat()
+
+
+@pytest.mark.django_db
+def test_update_start_to_future_cancels_pending_and_shows_start(user):
+    """start 改到未来：取消待办，日期回到可修改的下一次生成日期（=start）（需求 2.3）"""
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    defn = RecurringTaskService.create(user, '复核', 'every month', start_date=today)
+    assert RecurringTaskService.has_pending(defn) is True
+
+    RecurringTaskService.update(defn, start_date=tomorrow)
+    defn.refresh_from_db()
+
+    assert RecurringTaskService.has_pending(defn) is False
+    assert not ScheduledTask.objects.filter(
+        task_type='recurring', object_id=defn.id, status='pending'
+    ).exists()
+    data = RecurringTaskSerializer(defn).data
+    assert data['has_pending'] is False
+    assert data['next_run_date'] == tomorrow.isoformat()
 
 
 @pytest.mark.django_db
