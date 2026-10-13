@@ -139,14 +139,6 @@ class RecurringTaskService:
         ).order_by('-scheduled_date', '-id')
 
     @staticmethod
-    def latest_instance(defn):
-        """最近一次已生成的「未取消」实例（按 scheduled_date 取最新），无则 None
-
-        已取消实例不参与锚点计算，避免把锚点固定在已作废的日期上。
-        """
-        return RecurringTaskService._instances(defn).exclude(status='cancelled').first()
-
-    @staticmethod
     def has_pending(defn) -> bool:
         """是否存在待执行实例"""
         ct = ContentType.objects.get_for_model(RecurringTask)
@@ -159,21 +151,24 @@ class RecurringTaskService:
 
     @staticmethod
     def next_generation_date(defn, today=None) -> date | None:
-        """下一次生成待办的日期（由「最近一次待办日期」结合 rrule 动态推算，不入库）
+        """下一次生成待办的日期（动态推算，不入库）
 
-        - 从未生成：以 start_date 为种子取首个发生日
-        - scheduled 基准：上一次待办日期之后的下一次发生
-        - completed（when done）基准：上一次完成日期之后的下一次发生
+        各实例之间不相互关联，只依据「定义的下一次预期日期 start_date」与
+        「当前待执行实例的预期日期」推算，不参考任何已完成/已取消的历史实例，
+        以免历史实例把日期锚死（导致无法把日期往更早调整）：
+        - 无待执行实例：以 start_date 起算的首个发生日（即定义的下一次预期日期）
+        - scheduled 基准：待执行实例日期之后的下一次发生
+        - completed（when done）基准：以待执行实例日期重新起算的下一次发生
         """
         spec = RecurrenceParser.parse(defn.rule_text)
-        latest = RecurringTaskService.latest_instance(defn)
-        if latest is None:
+        pending = RecurringTaskService._instances(defn).filter(status='pending').first()
+        if pending is None:
             return RecurrenceCalculator.first_on_or_after(spec, defn.start_date)
         if defn.recurrence_basis == 'scheduled':
             return RecurrenceCalculator.next_occurrence(
-                spec, defn.start_date, latest.scheduled_date
+                spec, defn.start_date, pending.scheduled_date
             )
-        anchor = latest.completed_date or latest.scheduled_date
+        anchor = pending.completed_date or pending.scheduled_date
         return RecurrenceCalculator.next_occurrence(spec, anchor, anchor)
 
     @staticmethod
@@ -200,11 +195,12 @@ class RecurringTaskService:
 
     @staticmethod
     def _generate_instance(defn, due_date):
-        """按到期产出类型生成本期实例，返回用于排期锚定的 ScheduledTask
+        """按到期产出类型生成本期实例，返回本期实例
 
-        - kind='notify'：创建 pending 循环卡片（现状行为）
-        - kind='generate_review'：把固定模板并入统一审核队列，并创建一个
-          已完成实例作为排期锚点（对用户不可见，仅供 next_generation_date 推进）
+        - kind='notify'：创建 pending 循环卡片（现状行为），待用户完成后推进
+        - kind='generate_review'：把固定模板并入统一审核队列，并创建一个已完成
+          实例作为历史记录；由于没有 pending 可等待完成，生成即把定义的下一次
+          预期日期推进到下一周期
         """
         ct = ContentType.objects.get_for_model(RecurringTask)
         if defn.kind == 'generate_review':
@@ -221,6 +217,11 @@ class RecurringTaskService:
                 completed_date=due_date,
                 status='completed',
             )
+            # 生成即推进：下一周期只依据「定义的下一次预期日期 + DSL」前移
+            spec = RecurrenceParser.parse(defn.rule_text)
+            nxt = RecurrenceCalculator.next_occurrence(spec, defn.start_date, due_date)
+            if nxt is not None:
+                defn.start_date = nxt
         else:
             task = ScheduledTask.objects.create(
                 task_type='recurring',
@@ -231,7 +232,7 @@ class RecurringTaskService:
             )
         defn.last_generated_task = task
         defn.generated_count += 1
-        defn.save(update_fields=['last_generated_task', 'generated_count'])
+        defn.save(update_fields=['last_generated_task', 'generated_count', 'start_date'])
         return task
 
     @staticmethod
@@ -240,7 +241,7 @@ class RecurringTaskService:
 
         创建定义或修改 start_date 后调用：
         1. 取消该定义下所有待执行实例（置 cancelled，保留历史不删除）
-        2. 以新的 start_date 从零推算下一次生成日期（锚点仅取未取消实例）
+        2. 仅依据新的 start_date 推算下一次生成日期（不参考任何历史实例）
         3. 若该日期 <= 今天，则立即生成一个待执行实例
         """
         today = today or date.today()
@@ -308,7 +309,14 @@ class RecurringTaskService:
 
     @staticmethod
     def complete_instance(task, completed_date=None) -> dict:
-        """完成循环待办实例；返回下一次生成日期（动态推算，不落库）"""
+        """完成循环待办实例：把定义的下一次预期日期推进到下一周期
+
+        各实例之间不相互关联，只依据「本次实例的预期日期 / 完成日期 + DSL」推进：
+        - scheduled 基准：以定义预期日期为 dtstart，取本次实例预期日期之后的下一次
+        - completed（when done）基准：以本次完成日期为锚点重新起算下一次
+        完成后若下一期已到期（<= 完成日期），立即生成下一期待办，使其立刻出现在
+        待办列表，而不必等待定时扫描。
+        """
         if task.task_type != 'recurring':
             raise ValueError('该待办不是循环待办')
 
@@ -321,11 +329,28 @@ class RecurringTaskService:
         if not isinstance(defn, RecurringTask):
             return {'completed': task.id, 'next_date': None}
 
-        nxt = RecurringTaskService.next_generation_date(defn)
-        if nxt is None and defn.status == 'active':
-            defn.status = 'ended'
-            defn.save()
+        spec = RecurrenceParser.parse(defn.rule_text)
+        if defn.recurrence_basis == 'scheduled':
+            nxt = RecurrenceCalculator.next_occurrence(
+                spec, defn.start_date, task.scheduled_date
+            )
+        else:
+            nxt = RecurrenceCalculator.next_occurrence(
+                spec, completed_date, completed_date
+            )
+
+        if nxt is None:
+            if defn.status == 'active':
+                defn.status = 'ended'
+                defn.save(update_fields=['status'])
+            return {'completed': task.id, 'next_date': None}
+
+        defn.start_date = nxt
+        defn.save(update_fields=['start_date'])
+        if nxt <= completed_date:
+            # 到期即生成：完成本期后立即推进下一期
+            RecurringTaskService._generate_instance(defn, nxt)
         return {
             'completed': task.id,
-            'next_date': nxt.isoformat() if nxt else None,
+            'next_date': nxt.isoformat(),
         }

@@ -199,6 +199,48 @@ def test_complete_instance_completed_basis_advances_from_completion(user):
     assert defn.status == 'active'
 
 
+@pytest.mark.django_db
+def test_complete_instance_generates_next_when_due(user):
+    """完成后下一期已到期：立即生成下一期待办（every day）"""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    defn = RecurringTaskService.create(user, 'every day', start_date=yesterday)
+
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert task.scheduled_date == yesterday
+
+    result = RecurringTaskService.complete_instance(task, completed_date=today)
+
+    # 下一期（今天）已到期：立即生成新的 pending，无需等定时扫描
+    assert result == {'completed': task.id, 'next_date': today.isoformat()}
+    task.refresh_from_db()
+    assert task.status == 'completed'
+    next_task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert next_task.scheduled_date == today
+
+
+@pytest.mark.django_db
+def test_complete_instance_does_not_generate_before_due(user):
+    """完成后下一期未到期：不提前生成待办"""
+    today = date.today()
+    defn = RecurringTaskService.create(user, 'every month', start_date=today)
+
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+
+    result = RecurringTaskService.complete_instance(task, completed_date=today)
+
+    assert result['next_date'] is not None
+    assert not ScheduledTask.objects.filter(
+        task_type='recurring', object_id=defn.id, status='pending'
+    ).exists()
+
+
 # ---- next_run_date（管理页展示的下一次执行日期） ----
 
 @pytest.mark.django_db
@@ -345,6 +387,58 @@ def test_update_start_to_future_cancels_pending_and_shows_start(user):
     data = RecurringTaskSerializer(defn).data
     assert data['has_pending'] is False
     assert data['next_run_date'] == tomorrow.isoformat()
+
+
+@pytest.mark.django_db
+def test_complete_then_move_start_earlier(user):
+    """完成昨日实例后，仍可把定义日期调早并立即生成新待办（历史实例不得锚死日期）"""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    defn = RecurringTaskService.create(user, 'every 3 days', start_date=yesterday)
+
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert task.scheduled_date == yesterday
+
+    RecurringTaskService.complete_instance(task, completed_date=today)
+    defn.refresh_from_db()
+    # 完成后仅按「本次预期日期 + DSL」推进，不参考已完成实例
+    assert defn.start_date == today + timedelta(days=2)
+    assert RecurringTaskService.has_pending(defn) is False
+
+    # 调到过去：应直接生效并立即生成新的待办
+    earlier = today - timedelta(days=10)
+    RecurringTaskService.update(defn, start_date=earlier)
+    defn.refresh_from_db()
+
+    assert defn.start_date == earlier
+    assert RecurringTaskService.has_pending(defn) is True
+    pending = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert pending.scheduled_date == earlier
+
+
+@pytest.mark.django_db
+def test_next_generation_date_ignores_completed_instances(user):
+    """next_generation_date 不参考已完成实例：只由定义预期日期 + DSL 决定"""
+    today = date.today()
+    defn = RecurringTaskService.create(
+        user, 'every 3 days', start_date=today + timedelta(days=5)
+    )
+    assert RecurringTaskService.next_generation_date(defn) == today + timedelta(days=5)
+
+    ScheduledTask.objects.create(
+        task_type='recurring',
+        content_type=ContentType.objects.get_for_model(RecurringTask),
+        object_id=defn.id,
+        scheduled_date=today - timedelta(days=100),
+        completed_date=today - timedelta(days=100),
+        status='completed',
+    )
+
+    assert RecurringTaskService.next_generation_date(defn) == today + timedelta(days=5)
 
 
 @pytest.mark.django_db
