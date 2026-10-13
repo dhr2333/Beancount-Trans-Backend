@@ -242,7 +242,8 @@ class RecurringTaskService:
         创建定义或修改 start_date 后调用：
         1. 取消该定义下所有待执行实例（置 cancelled，保留历史不删除）
         2. 仅依据新的 start_date 推算下一次生成日期（不参考任何历史实例）
-        3. 若该日期 <= 今天，则立即生成一个待执行实例
+        3. 若该日期 <= 今天则生成实例；notify 只生成一个待执行实例即停止，
+           generate_review 则补齐所有已到期周期，最终让下一次预期日期落在未来
         """
         today = today or date.today()
         ct = ContentType.objects.get_for_model(RecurringTask)
@@ -255,17 +256,20 @@ class RecurringTaskService:
         ).update(status='cancelled')
 
         cand = RecurringTaskService.next_generation_date(defn)
+        while cand is not None and cand <= today:
+            RecurringTaskService._generate_instance(defn, cand)
+            # notify 生成一个待执行实例后即等待用户完成，不继续推进；
+            # generate_review 无待执行实例可等待，需补齐所有已到期周期，
+            # 使定义的下一次预期日期永远落在未来（否则会残留过期日期）
+            if defn.kind != 'generate_review':
+                break
+            cand = RecurringTaskService.next_generation_date(defn)
+
         if cand is None:
             # 规则耗尽：结束定义
             if defn.status == 'active':
                 defn.status = 'ended'
                 defn.save(update_fields=['status'])
-            return
-
-        if cand > today:
-            return
-
-        RecurringTaskService._generate_instance(defn, cand)
 
     @staticmethod
     def reschedule(defn, new_start_date, today=None) -> RecurringTask:
