@@ -113,18 +113,56 @@ class RecurringTaskService:
         return RecurrenceCalculator.next_occurrences(spec, defn.start_date, after, count)
 
     @staticmethod
-    def preview_text(rule_text, start_date=None, count=5, after=None) -> dict:
-        """预览未持久化规则的描述与后续发生日期（供前端即时预览）"""
+    def preview_text(rule_text, start_date=None, count=5, after=None,
+                     kind='notify', today=None) -> dict:
+        """预览未持久化规则的描述、后续发生日期，以及「创建后的即时后果」
+
+        后果（immediate_dates / next_expected_date）由 _simulate_alignment 无副作用地
+        模拟 _align_schedule 得出，供前端在提交前把不可逆副作用前置展示。
+        """
         start_date = start_date or date.today()
         after = after or date.today()
+        today = today or after
         spec = RecurrenceParser.parse(rule_text)
         occurrences = RecurrenceCalculator.next_occurrences(spec, start_date, after, count)
+        satisfiable = RecurrenceCalculator.first_on_or_after(spec, start_date) is not None
+        immediate, next_expected = RecurringTaskService._simulate_alignment(
+            spec, start_date, kind, today
+        )
         return {
             'rule_text': rule_text,
             'describe': spec.describe(),
             'basis': spec.basis,
             'next_occurrences': [d.isoformat() for d in occurrences],
+            'first_occurrence': start_date.isoformat() if satisfiable else None,
+            'immediate_dates': [d.isoformat() for d in immediate],
+            'next_expected_date': next_expected.isoformat() if next_expected else None,
+            'ended': not satisfiable,
         }
+
+    @staticmethod
+    def _simulate_alignment(spec, start_date, kind, today) -> tuple[list, date | None]:
+        """无副作用地模拟 _align_schedule，返回 (会立即生成的日期, 推进后的预期日期)
+
+        本期待办日期即 start_date：到期（start_date <= today）时生成该日期的实例。
+        - notify：只生成一个待执行实例后等待用户完成，不推进预期日期
+        - generate_review：补齐所有已到期周期，直到预期日期落在未来
+        """
+        if RecurrenceCalculator.first_on_or_after(spec, start_date) is None:
+            return [], None
+        immediate: list[date] = []
+        cursor_start = start_date
+        cand = start_date
+        while cand is not None and cand <= today:
+            immediate.append(cand)
+            if kind != 'generate_review':
+                return immediate, None
+            nxt = RecurrenceCalculator.next_occurrence(spec, cursor_start, cand)
+            if nxt is None:
+                return immediate, None
+            cursor_start = nxt
+            cand = nxt
+        return immediate, (cand if kind == 'generate_review' else None)
 
     # ---- 日期推算 ----
 
@@ -153,17 +191,22 @@ class RecurringTaskService:
     def next_generation_date(defn, today=None) -> date | None:
         """下一次生成待办的日期（动态推算，不入库）
 
-        各实例之间不相互关联，只依据「定义的下一次预期日期 start_date」与
+        各实例之间不相互关联，只依据「定义的本期待办日期 start_date」与
         「当前待执行实例的预期日期」推算，不参考任何已完成/已取消的历史实例，
         以免历史实例把日期锚死（导致无法把日期往更早调整）：
-        - 无待执行实例：以 start_date 起算的首个发生日（即定义的下一次预期日期）
+        - 无待执行实例：就是「本期待办日期」= start_date（不再向上取整到规则日，
+          否则 `every month on the 25th` 设 2026-10-13 会被取整成 2026-10-25 而不生成）；
+          规则不可满足（无任何发生日）时返回 None
         - scheduled 基准：待执行实例日期之后的下一次发生
         - completed（when done）基准：以待执行实例日期重新起算的下一次发生
         """
         spec = RecurrenceParser.parse(defn.rule_text)
         pending = RecurringTaskService._instances(defn).filter(status='pending').first()
         if pending is None:
-            return RecurrenceCalculator.first_on_or_after(spec, defn.start_date)
+            # 规则不可满足（如 every February on the 30th）→ 定义应结束
+            if RecurrenceCalculator.first_on_or_after(spec, defn.start_date) is None:
+                return None
+            return defn.start_date
         if defn.recurrence_basis == 'scheduled':
             return RecurrenceCalculator.next_occurrence(
                 spec, defn.start_date, pending.scheduled_date

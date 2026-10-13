@@ -44,6 +44,9 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
     # 循环待办展示标签（循环待办实例）
     recurring_label = serializers.SerializerMethodField()
 
+    # 循环待办「本次待办完成后的下一次待办生成日期」（循环待办实例）
+    next_run_date = serializers.SerializerMethodField()
+
     class Meta:
         model = ScheduledTask
         fields = [
@@ -52,7 +55,7 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'account_name', 'account_type',
             'review_expires_at', 'entry_count',
-            'recurring_label',
+            'recurring_label', 'next_run_date',
             'created', 'modified'
         ]
         read_only_fields = ['id', 'created', 'modified']
@@ -91,6 +94,14 @@ class ScheduledTaskListSerializer(serializers.ModelSerializer):
         if isinstance(obj.content_object, RecurringTask):
             from .services import RecurringTaskService
             return RecurringTaskService.label(obj.content_object)
+        return None
+
+    def get_next_run_date(self, obj):
+        """获取「本次待办完成后的下一次待办生成日期」（仅循环待办实例返回，否则为 None）"""
+        if isinstance(obj.content_object, RecurringTask):
+            from .services import RecurringTaskService
+            nxt = RecurringTaskService.display_next_date(obj.content_object)
+            return nxt.isoformat() if nxt else None
         return None
 
 

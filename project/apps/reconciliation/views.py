@@ -337,10 +337,12 @@ class RecurringTaskViewSet(ModelViewSet):
         """即时预览规则文本（未持久化的 DSL）"""
         rule_text = request.data.get('rule_text', '')
         start_date = request.data.get('start_date')
+        kind = request.data.get('kind', 'notify')
         try:
             result = RecurringTaskService.preview_text(
                 rule_text,
                 start_date=date.fromisoformat(start_date) if start_date else None,
+                kind=kind,
             )
         except RecurrenceParseError as e:
             return Response(

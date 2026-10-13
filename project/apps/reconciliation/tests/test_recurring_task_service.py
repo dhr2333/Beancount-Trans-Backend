@@ -244,8 +244,8 @@ def test_complete_instance_does_not_generate_before_due(user):
 # ---- next_run_date（管理页展示的下一次执行日期） ----
 
 @pytest.mark.django_db
-def test_next_run_date_not_generated_is_first_occurrence(user):
-    """未生成：返回首个不早于 start_date 的发生日（has_pending=False）"""
+def test_next_run_date_not_generated_is_start_date(user):
+    """未生成：管理页日期就是「本期待办日期」= start_date（has_pending=False）"""
     from project.apps.reconciliation.serializers import RecurringTaskSerializer
 
     defn = RecurringTaskService.create(
@@ -254,7 +254,41 @@ def test_next_run_date_not_generated_is_first_occurrence(user):
 
     data = RecurringTaskSerializer(defn).data
     assert data['has_pending'] is False
-    assert data['next_run_date'] == '2027-04-01'
+    assert data['next_run_date'] == '2027-03-20'
+
+
+@pytest.mark.django_db
+def test_off_rule_start_due_generates_at_start_date(user):
+    """every month on the 25th：基准日期到期 → 生成日期=基准日期本身（不再取整到 25 日）"""
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    today = date(2026, 10, 13)
+    defn = _make_active_definition(
+        user, 'every month on the 25th', 'FREQ=MONTHLY;BYMONTHDAY=25', today
+    )
+    RecurringTaskService._align_schedule(defn, today=today)
+    defn.refresh_from_db()
+
+    task = ScheduledTask.objects.get(
+        task_type='recurring', object_id=defn.id, status='pending'
+    )
+    assert task.scheduled_date == today
+    # 下一次 = 本期待办日期 + rrule（本月 25 日）
+    assert RecurringTaskSerializer(defn).data['next_run_date'] == '2026-10-25'
+
+
+@pytest.mark.django_db
+def test_off_rule_start_future_keeps_start_date(user):
+    """every month on the 25th：基准日期未到期 → 不生成，管理页显示基准日期本身"""
+    from project.apps.reconciliation.serializers import RecurringTaskSerializer
+
+    defn = _make_active_definition(
+        user, 'every month on the 25th', 'FREQ=MONTHLY;BYMONTHDAY=25', date(2026, 10, 26)
+    )
+
+    data = RecurringTaskSerializer(defn).data
+    assert data['has_pending'] is False
+    assert data['next_run_date'] == '2026-10-26'
 
 
 @pytest.mark.django_db
@@ -494,4 +528,41 @@ def test_preview_text_shape():
     assert result['describe'] == '每 3 天'
     assert result['basis'] == 'scheduled'
     assert result['next_occurrences'] == ['2026-01-04', '2026-01-07']
+
+
+def test_preview_text_notify_consequence():
+    """notify：到期只立即生成一条；未到期不生成；规则不可满足则 ended"""
+    today = date(2026, 10, 13)
+
+    due = RecurringTaskService.preview_text(
+        'every month', start_date=today, kind='notify', today=today
+    )
+    assert due['first_occurrence'] == '2026-10-13'
+    assert due['immediate_dates'] == ['2026-10-13']
+    assert due['next_expected_date'] is None
+    assert due['ended'] is False
+
+    future = RecurringTaskService.preview_text(
+        'every month', start_date=date(2026, 10, 15), kind='notify', today=today
+    )
+    assert future['immediate_dates'] == []
+    assert future['first_occurrence'] == '2026-10-15'
+
+    endless = RecurringTaskService.preview_text(
+        'every February on the 30th', start_date=today, kind='notify', today=today
+    )
+    assert endless['ended'] is True
+    assert endless['first_occurrence'] is None
+
+
+def test_preview_text_generate_review_backfills_all_due():
+    """generate_review：补齐所有已到期周期，并把预期日期推进到未来"""
+    today = date(2026, 10, 13)
+
+    result = RecurringTaskService.preview_text(
+        'every month', start_date=date(2026, 9, 1), kind='generate_review', today=today
+    )
+
+    assert result['immediate_dates'] == ['2026-09-01', '2026-10-01']
+    assert result['next_expected_date'] == '2026-11-01'
 
