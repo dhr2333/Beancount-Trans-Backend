@@ -6,11 +6,16 @@
 规则解析与日期计算复用 recurrence.py 中的 RecurrenceParser / RecurrenceCalculator。
 """
 from datetime import date
+import re
 
 from django.contrib.contenttypes.models import ContentType
 
 from project.apps.reconciliation.models import RecurringTask, ScheduledTask
 from .recurrence import RecurrenceParser, RecurrenceCalculator
+
+
+# 「完成后起算」后缀（generate_review 不适用，需剥离）
+_WHEN_DONE_SUFFIX_RE = re.compile(r'\s+when\s+done\s*$', re.IGNORECASE)
 
 
 class RecurringTaskService:
@@ -22,14 +27,19 @@ class RecurringTaskService:
     def create(user, rule_text, note='', start_date=None, basis=None,
                kind='notify', template='') -> RecurringTask:
         """创建循环待办定义；规则无法解析时抛出 RecurrenceParseError"""
+        kind = kind or 'notify'
+        rule_text = RecurringTaskService._normalize_review_rule(kind, rule_text)
         spec = RecurrenceParser.parse(rule_text)
-        if basis is not None:
+        # generate_review 无「完成后起算」语义（生成即推进，不存在完成锚点）
+        if kind == 'generate_review':
+            spec.basis = 'scheduled'
+        elif basis is not None:
             spec.basis = basis
         start_date = start_date or date.today()
         defn = RecurringTask.objects.create(
             user=user,
             note=note,
-            kind=kind or 'notify',
+            kind=kind,
             template=template or '',
             rule_text=rule_text,
             rrule=spec.to_rrule_string(),
@@ -44,16 +54,20 @@ class RecurringTaskService:
     @staticmethod
     def update(defn, **fields) -> RecurringTask:
         """更新循环待办定义（允许 note/kind/template/rule_text/start_date/recurrence_basis）"""
-        if 'note' in fields:
-            defn.note = fields['note']
+        kind = fields.get('kind') or getattr(defn, 'kind', 'notify')
         if fields.get('kind'):
             defn.kind = fields['kind']
+        if 'note' in fields:
+            defn.note = fields['note']
         if 'template' in fields:
             defn.template = fields['template'] or ''
 
         if fields.get('rule_text'):
-            spec = RecurrenceParser.parse(fields['rule_text'])
-            defn.rule_text = fields['rule_text']
+            rule_text = RecurringTaskService._normalize_review_rule(
+                kind, fields['rule_text']
+            )
+            spec = RecurrenceParser.parse(rule_text)
+            defn.rule_text = rule_text
             defn.rrule = spec.to_rrule_string()
             # 未显式指定基准时，采用规则解析出的基准
             if 'recurrence_basis' not in fields:
@@ -61,6 +75,13 @@ class RecurringTaskService:
 
         if fields.get('recurrence_basis'):
             defn.recurrence_basis = fields['recurrence_basis']
+
+        # generate_review 无「完成后起算」语义：剥离 when done 后缀并强制按计划日期
+        if defn.kind == 'generate_review':
+            defn.rule_text = RecurringTaskService._normalize_review_rule(
+                'generate_review', defn.rule_text
+            )
+            defn.recurrence_basis = 'scheduled'
 
         start_date_changed = bool(fields.get('start_date'))
         if start_date_changed:
@@ -71,6 +92,13 @@ class RecurringTaskService:
         if start_date_changed:
             RecurringTaskService._align_schedule(defn)
         return defn
+
+    @staticmethod
+    def _normalize_review_rule(kind, rule_text: str) -> str:
+        """generate_review 无「完成后起算（when done）」语义：剥离规则中的该后缀"""
+        if kind == 'generate_review':
+            return _WHEN_DONE_SUFFIX_RE.sub('', rule_text.strip())
+        return rule_text
 
     @staticmethod
     def delete(defn, cancel_pending=True) -> None:

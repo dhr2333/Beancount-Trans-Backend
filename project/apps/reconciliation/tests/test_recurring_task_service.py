@@ -566,3 +566,37 @@ def test_preview_text_generate_review_backfills_all_due():
     assert result['immediate_dates'] == ['2026-09-01', '2026-10-01']
     assert result['next_expected_date'] == '2026-11-01'
 
+
+# ---- generate_review 不支持「完成后起算」 ----
+
+@pytest.mark.django_db
+def test_create_generate_review_strips_when_done(user):
+    """generate_review：剥离 when done 后缀并归一化为按计划日期"""
+    defn = RecurringTaskService.create(
+        user,
+        'every month when done',
+        start_date=date(2099, 1, 1),
+        kind='generate_review',
+        template='2026-01-01 * "x"',
+    )
+
+    assert defn.rule_text == 'every month'
+    assert defn.recurrence_basis == 'scheduled'
+
+
+@pytest.mark.django_db
+def test_update_to_generate_review_clears_when_done(user):
+    """更新为 generate_review 时，既有 when done 语义被清除"""
+    defn = RecurringTaskService.create(
+        user, 'every month when done', start_date=date(2099, 1, 1)
+    )
+    assert defn.recurrence_basis == 'completed'
+
+    RecurringTaskService.update(
+        defn, kind='generate_review', template='2026-01-01 * "x"'
+    )
+    defn.refresh_from_db()
+
+    assert defn.rule_text == 'every month'
+    assert defn.recurrence_basis == 'scheduled'
+
