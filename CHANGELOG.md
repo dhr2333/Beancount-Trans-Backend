@@ -1,5 +1,30 @@
 # Changelog
 
+## [6.0.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.16.0...6.0.0) (2026-10-14)
+
+### ⚠ BREAKING CHANGES
+
+* **account:** Account/AccountTemplateItem 的 reconciliation_cycle_unit、
+reconciliation_cycle_interval 字段被移除，前端与移动端需改用 reconciliation_rule。
+
+### Features
+
+* **account:** 账户对账周期迁移为 rrule 规则 ([ced5921](https://github.com/dhr2333/Beancount-Trans-Backend/commit/ced5921b9330ed2ed8e456ec204e2587a4bb95b4))
+* **reconciliation:** 完善循环任务对齐补齐逻辑与文档 ([e4d4f35](https://github.com/dhr2333/Beancount-Trans-Backend/commit/e4d4f35d658f93bf2cef880035028ab2311a6486))
+* **reconciliation:** 循环待办支持生成审核待办（固定模板） ([d70d21d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d70d21dda0f0eb2fe9d57944d6443637c69a4a9d))
+* **reconciliation:** 循环待办新增到期产出类型 kind ([87be44d](https://github.com/dhr2333/Beancount-Trans-Backend/commit/87be44d0eca0d061d17dc45256ec7fa3fc53c3fe))
+* **reconciliation:** 循环待办日期即时对齐与卡片顺延 ([d0cf8a7](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d0cf8a7acae2637e328d2274360a6af2ed1d0516))
+* **reconciliation:** 新增基于 rrule 的循环待办 ([b746932](https://github.com/dhr2333/Beancount-Trans-Backend/commit/b746932acd2f558f08f9f771ad3090d48813f917))
+
+### Bug Fixes
+
+* **reconciliation:** 修复循环任务完成基准计算逻辑并新增管理页展示字段 ([27fcdd7](https://github.com/dhr2333/Beancount-Trans-Backend/commit/27fcdd77d83df1baa010a58a3b80a8d6f2e979f8))
+* **reconciliation:** 允许用户修改循环待办实例的执行日期 ([d9d2bd1](https://github.com/dhr2333/Beancount-Trans-Backend/commit/d9d2bd13271cfa4e1e39293b23040a4bfdea00d3))
+* **reconciliation:** 循环待办可选字段允许 null 并归一化为空串 ([822fdf8](https://github.com/dhr2333/Beancount-Trans-Backend/commit/822fdf8c2850db83585cf5ba57faf8023b52e347))
+* **reconciliation:** 循环待办基准日期即本期待办日期并前置预览创建后果 ([7412094](https://github.com/dhr2333/Beancount-Trans-Backend/commit/7412094ea14bb12c9fc7bc11b32b44595f5963b7))
+* **reconciliation:** 生成审核待办不再支持「完成后起算」 ([e90cbcc](https://github.com/dhr2333/Beancount-Trans-Backend/commit/e90cbccfe8a3f7e04abeed262e4b8f4bcf333c37))
+* **recurring_task:** 重构日期推算逻辑，修复历史锚点导致的日期锁定问题 ([8d13e47](https://github.com/dhr2333/Beancount-Trans-Backend/commit/8d13e47de5dc308a71fef437c4493d6e9f247ae4))
+
 ## [5.16.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.15.0...5.16.0) (2026-10-09)
 
 ### Features
