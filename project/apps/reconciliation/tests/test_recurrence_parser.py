@@ -113,6 +113,12 @@ DESCRIBE_CASES = [
     ('every 6 months on the 2nd Wednesday', '每 6 个月的第二个星期三'),
     ('every January on the 15th', '每年 1 月 15 日'),
     ('every April and December on the 1st and 24th', '每年 4 月 1 日、24 日与 12 月 1 日、24 日'),
+    ('every 2 years', '每 2 年'),
+    ('every 3 weeks on Monday, Tuesday, Wednesday, Thursday, Friday', '每 3 周的工作日'),
+    ('every January on the last Friday', '每年 1 月最后一个星期五'),
+    ('every month on the 1st and last', '每月 1 日、最后一天'),
+    ('every 2 months on the 1st', '每 2 个月的 1 日'),
+    ('every week when done', '每周（完成后起算）'),
 ]
 
 

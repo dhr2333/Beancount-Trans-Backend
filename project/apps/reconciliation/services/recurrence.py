@@ -50,6 +50,9 @@ _WEEKDAY_CN_LONG = {
     'FR': '星期五', 'SA': '星期六', 'SU': '星期日',
 }
 
+# 工作日集合（周一至周五）
+_WORKDAYS = ['MO', 'TU', 'WE', 'TH', 'FR']
+
 # 月份名 / 三字母缩写 → 数字
 _MONTH_NAMES = {
     'january': 1, 'jan': 1,
@@ -139,32 +142,25 @@ class RecurrenceSpec:
         return ';'.join(parts)
 
     def describe(self) -> str:
-        """生成人类可读的中文描述"""
+        """生成人类可读的中文描述（覆盖解析器可产出的全部字段）"""
         if self.freq == 'DAILY':
-            return '每天' if self.interval == 1 else f'每 {self.interval} 天'
-        if self.freq == 'WEEKLY':
-            return self._describe_weekly()
-        if self.freq == 'MONTHLY':
-            return self._describe_monthly()
-        return self._describe_yearly()
+            text = self._describe_daily()
+        elif self.freq == 'WEEKLY':
+            text = self._describe_weekly()
+        elif self.freq == 'MONTHLY':
+            text = self._describe_monthly()
+        else:
+            text = self._describe_yearly()
+        # when done 不改变 RRULE，但需在描述里体现「完成后起算」基准
+        if self.basis == 'completed':
+            text += '（完成后起算）'
+        return text
 
     # ---- describe 内部实现 ----
 
-    def _describe_weekly(self) -> str:
-        if self.byweekday == ['MO', 'TU', 'WE', 'TH', 'FR']:
-            return '每个工作日'
-        if self.interval == 1:
-            if self.byweekday:
-                return '每' + '、'.join(_WEEKDAY_CN_SHORT[d] for d in self.byweekday)
-            return '每周'
-        base = f'每 {self.interval} 周'
-        if self.byweekday:
-            base += '的' + '、'.join(_WEEKDAY_CN_SHORT[d] for d in self.byweekday)
-        return base
-
-    def _describe_monthly(self) -> str:
-        base = '每月' if self.interval == 1 else f'每 {self.interval} 个月'
-        if self.byweekday and self.bysetpos:
+    def _weekday_text(self) -> str:
+        """byweekday 的中文；带 bysetpos 时含位置，如「最后一个星期五」"""
+        if self.bysetpos:
             pos = self.bysetpos[0]
             if pos == -1:
                 pos_text = '最后一个'
@@ -172,30 +168,85 @@ class RecurrenceSpec:
                 pos_text = f'倒数第{_cn_num(-pos)}个'
             else:
                 pos_text = f'第{_cn_num(pos)}个'
-            wd = _WEEKDAY_CN_LONG[self.byweekday[0]]
-            # interval > 1 时用“的”连接，如“每 6 个月的第二个星期三”
-            return f'{base}{"" if self.interval == 1 else "的"}{pos_text}{wd}'
+            return pos_text + _WEEKDAY_CN_LONG[self.byweekday[0]]
+        return '、'.join(_WEEKDAY_CN_LONG[d] for d in self.byweekday)
+
+    def _bymonthday_text(self) -> str:
+        """bymonthday 的中文（-1 → 最后一天，其他负数 → 倒数第 N 天）"""
+        return '、'.join(
+            '最后一天' if d == -1 else (f'倒数第{_cn_num(-d)}天' if d < 0 else f'{d} 日')
+            for d in self.bymonthday
+        )
+
+    def _describe_daily(self) -> str:
+        base = '每天' if self.interval == 1 else f'每 {self.interval} 天'
+        # 单位驱动规则也可能挂 on 子句（如 every day on Monday）
+        extras = []
+        if self.byweekday:
+            extras.append(self._weekday_text())
         if self.bymonthday:
-            if self.bymonthday == [-1]:
-                return f'{base}{"" if self.interval == 1 else "的"}最后一天'
-            day_text = '、'.join(f'{d} 日' for d in self.bymonthday)
-            return f'{base}{" " if self.interval == 1 else "的"}{day_text}'
+            extras.append(self._bymonthday_text())
+        return f'{base}（{"、".join(extras)}）' if extras else base
+
+    def _describe_weekly(self) -> str:
+        if self.interval == 1:
+            if self.byweekday == _WORKDAYS:
+                base = '每个工作日'
+            elif self.byweekday:
+                base = '每' + '、'.join(_WEEKDAY_CN_SHORT[d] for d in self.byweekday)
+            else:
+                base = '每周'
+        else:
+            base = f'每 {self.interval} 周'
+            if self.byweekday == _WORKDAYS:
+                base += '的工作日'
+            elif self.byweekday:
+                base += '的' + '、'.join(_WEEKDAY_CN_SHORT[d] for d in self.byweekday)
+        # 周规则上挂的 bymonthday（如 every week on the last）
+        if self.bymonthday:
+            base += f'（每月{self._bymonthday_text()}）'
+        return base
+
+    def _describe_monthly(self) -> str:
+        base = '每月' if self.interval == 1 else f'每 {self.interval} 个月'
+        if self.byweekday:
+            if self.bysetpos:
+                # interval > 1 时用“的”连接，如“每 6 个月的第二个星期三”
+                return f'{base}{"" if self.interval == 1 else "的"}{self._weekday_text()}'
+            # 无位置：BYDAY 列表（如 every month on Monday）
+            wd = '、'.join(_WEEKDAY_CN_SHORT[d] for d in self.byweekday)
+            return f'{base}（{wd}）'
+        if self.bymonthday:
+            days = self._bymonthday_text()
+            if self.interval == 1:
+                # 「最后一天」前不加空格，「N 日」前加空格
+                sep = '' if days.startswith(('最后', '倒数')) else ' '
+                return f'{base}{sep}{days}'
+            sep = '的' if days.startswith(('最后', '倒数')) else '的 '
+            return f'{base}{sep}{days}'
         return base
 
     def _describe_yearly(self) -> str:
+        base = '每年' if self.interval == 1 else f'每 {self.interval} 年'
         if self.bymonth and self.bymonthday:
-            month_texts = []
-            for m in self.bymonth:
-                day_text = '、'.join(
-                    '最后一天' if d == -1 else f'{d} 日' for d in self.bymonthday
-                )
-                # “最后一天”前不加空格，“N 日”前加空格，如“2 月最后一天”“4 月 1 日”
-                sep = '' if day_text.startswith('最后') else ' '
-                month_texts.append(f'{m} 月{sep}{day_text}')
-            return '每年 ' + '与 '.join(month_texts)
+            days = self._bymonthday_text()
+            # “最后一天”前不加空格，“N 日”前加空格，如“2 月最后一天”“4 月 1 日”
+            sep = '' if days.startswith(('最后', '倒数')) else ' '
+            month_texts = [f'{m} 月{sep}{days}' for m in self.bymonth]
+            return f'{base} ' + '与 '.join(month_texts)
+        if self.bymonth and self.byweekday:
+            wd = self._weekday_text()
+            month_texts = [f'{m} 月{wd}' for m in self.bymonth]
+            return f'{base} ' + '与 '.join(month_texts)
         if self.bymonth:
-            return '每年 ' + '、'.join(f'{m} 月' for m in self.bymonth)
-        return '每年'
+            return f'{base} ' + '、'.join(f'{m} 月' for m in self.bymonth)
+        # 无月份：规则直接挂在 year 上（如 every year on Monday / on the 15th）
+        extras = []
+        if self.byweekday:
+            extras.append(self._weekday_text())
+        if self.bymonthday:
+            extras.append(self._bymonthday_text())
+        return f'{base}（{"、".join(extras)}）' if extras else base
 
 
 class RecurrenceParser:
