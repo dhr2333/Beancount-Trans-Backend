@@ -35,6 +35,7 @@ from project.apps.authentication.serializers import (
     UsernameLoginByPasswordSerializer,
     PersonalAccessTokenSerializer,
     PersonalAccessTokenCreateSerializer,
+    PersonalAccessTokenUpdateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -1224,6 +1225,20 @@ class PersonalAccessTokenViewSet(viewsets.GenericViewSet):
         payload = PersonalAccessTokenSerializer(token).data
         payload['token'] = raw_token
         return Response(payload, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        """修改令牌用途说明"""
+        token = self.get_object()
+        serializer = PersonalAccessTokenUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        token.name = serializer.validated_data['name']
+        token.save()
+        logger.info(f"用户 {request.user.username} 更新访问令牌 {token.prefix}… 用途为 {token.name}")
+        return Response(
+            PersonalAccessTokenSerializer(token).data, status=status.HTTP_200_OK
+        )
 
     def destroy(self, request, pk=None):
         """删除访问令牌（硬删除；绑定的共享账本会随之一并失效）"""

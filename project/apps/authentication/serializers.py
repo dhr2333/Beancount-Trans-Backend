@@ -95,6 +95,17 @@ class PersonalAccessTokenCreateSerializer(serializers.Serializer):
         return name
 
 
+class PersonalAccessTokenUpdateSerializer(serializers.Serializer):
+    """个人访问令牌更新序列化器（目前仅支持修改用途说明）"""
+    name = serializers.CharField(max_length=64, help_text='用途说明，如 Claude Code')
+
+    def validate_name(self, value):
+        name = (value or '').strip()
+        if not name:
+            raise serializers.ValidationError('名称不能为空')
+        return name
+
+
 class PhoneRegisterSerializer(serializers.Serializer):
     """手机号注册序列化器（用户名和密码自动生成）"""
     phone_number = PhoneNumberField(
