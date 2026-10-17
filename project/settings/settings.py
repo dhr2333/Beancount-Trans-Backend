@@ -81,6 +81,7 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
     'rest_framework',
     'rest_framework_simplejwt',
     'drf_spectacular',
+    'drf_spectacular_sidecar',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -113,7 +114,6 @@ INSTALLED_APPS = [  # 项目中使用的 Django 应用程序
 # 根据 DEBUG 模式决定是否包含开发专用应用
 if DEBUG:
     INSTALLED_APPS.extend([
-        # 'drf_spectacular_sidecar',
         # 'project.apps.users',
     ])
 
@@ -422,6 +422,7 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/',
+    'REDOC_DIST': 'SIDECAR',  # 使用本地静态资源，避免 CDN 版本漂移
     'REDOC_UI_SETTINGS': {
         'hideDownloadButton': False,
         'hideHostname': False,
