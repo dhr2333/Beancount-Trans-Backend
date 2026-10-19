@@ -1,7 +1,6 @@
 """共享账本绑定服务层测试：令牌校验、绑定增删、可用性解析与账本选项。"""
 import logging
 from datetime import timedelta
-from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -18,6 +17,7 @@ from project.apps.assistant.services.shared_ledger import (
     filter_client_visible_queries,
     has_usable_shared_ledger,
     resolve_shared_ledgers,
+    touch_usage,
     unbind,
     usable_binding_ids,
 )
@@ -525,26 +525,17 @@ class TestResolveSharedLedgers:
         assert len(ledgers) == 1
         assert ledgers[0]['aliases'] in (['账本一'], ['账本二'])
 
-    def test_last_used_at_updated_with_throttle(self, user, owner):
-        _token, raw_token = _issue(owner)
+    def test_does_not_update_last_used_at(self, user, owner):
+        token, raw_token = _issue(owner)
         binding = bind_by_token(user, raw_token, ['家庭账本'])
 
         resolve_shared_ledgers(user, [binding.id])
-        binding.refresh_from_db()
-        first_used = binding.last_used_at
-        assert first_used is not None
-
-        # 60 秒内的第二次解析不应刷新
         resolve_shared_ledgers(user, [binding.id])
-        binding.refresh_from_db()
-        assert binding.last_used_at == first_used
 
-        # 人为把 last_used_at 调到 60 秒前，应再次刷新
-        old_used = timezone.now() - timedelta(seconds=120)
-        SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=old_used)
-        resolve_shared_ledgers(user, [binding.id])
         binding.refresh_from_db()
-        assert binding.last_used_at > old_used
+        token.refresh_from_db()
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
 
     def test_item_exposes_aliases_binding_id_and_owner(self, user, owner):
         other = User.objects.create_user(username='otheruser', password='x')
@@ -632,20 +623,60 @@ class TestBuildLedgerOptions:
             o['label'] == f'备用账本（{other.username}）' for o in options
         )
 
-    def test_touches_each_binding_once(self, user, owner, assets_dir):
+    def test_does_not_touch_last_used_at(self, user, owner, assets_dir):
         other = User.objects.create_user(username='otheruser', password='x')
-        _token1, raw1 = _issue(owner)
-        _token2, raw2 = _issue(other)
+        token1, raw1 = _issue(owner)
+        token2, raw2 = _issue(other)
         binding1 = bind_by_token(user, raw1, ['家庭账本'])
         binding2 = bind_by_token(user, raw2, ['备用账本'])
 
-        with patch(
-            'project.apps.assistant.services.shared_ledger._touch_last_used'
-        ) as spy:
-            options = build_ledger_options(user, [binding1.id, binding2.id])
+        options = build_ledger_options(user, [binding1.id, binding2.id])
 
         assert len(options) == 3
-        assert spy.call_count == 2
+        binding1.refresh_from_db()
+        binding2.refresh_from_db()
+        token1.refresh_from_db()
+        token2.refresh_from_db()
+        assert binding1.last_used_at is None
+        assert binding2.last_used_at is None
+        assert token1.last_used_at is None
+        assert token2.last_used_at is None
+
+
+@pytest.mark.django_db
+class TestTouchUsage:
+    def test_updates_binding_and_token(self, user, owner):
+        token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
+
+        touch_usage(binding)
+
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is not None
+        assert token.last_used_at is not None
+
+    def test_binding_throttled_within_60_seconds(self, user, owner):
+        _token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['家庭账本'])
+
+        touch_usage(binding)
+        binding.refresh_from_db()
+        first_used = binding.last_used_at
+        assert first_used is not None
+
+        touch_usage(binding)
+        binding.refresh_from_db()
+        assert binding.last_used_at == first_used
+
+        old_used = timezone.now() - timedelta(seconds=120)
+        SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=old_used)
+        binding.refresh_from_db()
+        touch_usage(binding)
+        binding.refresh_from_db()
+        assert binding.last_used_at > old_used
 
 
 class TestFilterClientVisibleQueries:

@@ -7,7 +7,11 @@ from mcp.server.mcpserver.exceptions import ResourceError
 from project.apps.assistant.services.bql_reference import build_bql_capability_reference
 from project.apps.assistant.services.metadata_catalog import load_account_catalog, load_tag_catalog
 
-from .identity import IdentityError, get_current_user
+from .identity import (
+    IdentityError,
+    get_current_user,
+    touch_current_personal_access_token,
+)
 from .ledger_files import LedgerFileError, read_ledger_file
 
 ACCOUNTS_URI = 'ledger://accounts'
@@ -43,6 +47,7 @@ def register(server: MCPServer) -> None:
             lines.extend(f'  {entry.account} → {entry.description or "（无描述）"}' for entry in entries)
         else:
             lines.append('  （暂无已启用账户）')
+        touch_current_personal_access_token()
         return '\n'.join(lines)
 
     @server.resource(
@@ -59,6 +64,7 @@ def register(server: MCPServer) -> None:
             lines.extend(f'  {entry.full_path} → {entry.description or "（无描述）"}' for entry in entries)
         else:
             lines.append('  （暂无已启用标签）')
+        touch_current_personal_access_token()
         return '\n'.join(lines)
 
     @server.resource(
@@ -80,6 +86,8 @@ def register(server: MCPServer) -> None:
     )
     def main_bean_resource() -> str:
         try:
-            return read_ledger_file(_current_user(), 'main.bean').content
+            content = read_ledger_file(_current_user(), 'main.bean').content
         except LedgerFileError as exc:
             raise ResourceError(str(exc)) from exc
+        touch_current_personal_access_token()
+        return content

@@ -1,4 +1,7 @@
-"""MCP 鉴权：校验平台签发的访问令牌（个人访问令牌 / OAuth 2.1 访问令牌）。"""
+"""MCP 鉴权：校验平台签发的访问令牌（个人访问令牌 / OAuth 2.1 访问令牌）。
+
+鉴权只负责身份校验；令牌的 last_used_at 由实际读取账本数据的工具/资源记录。
+"""
 from __future__ import annotations
 
 import logging
@@ -17,7 +20,6 @@ def _verify_pat(raw_token: str) -> AccessToken | None:
     if token is None:
         return None
 
-    token.touch()
     logger.info('MCP 请求认证通过（PAT）: user=%s token=%s…', token.user.username, token.prefix)
     return AccessToken(
         token=raw_token,

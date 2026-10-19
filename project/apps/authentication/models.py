@@ -310,7 +310,11 @@ class PersonalAccessToken(BaseModel):
         return hmac.compare_digest(self.token_hash, self.hash_token(raw_token))
 
     def touch(self, *, min_interval_seconds: int | None = None) -> None:
-        """记录最后使用时间（默认按间隔节流，避免每次调用都写库）。"""
+        """记录一次实际使用（默认按间隔节流）。
+
+        调用方必须在真正读取了该令牌所授权的用户数据后调用；
+        令牌鉴权、绑定、仅纳入请求等动作不应调用。
+        """
         interval = self.LAST_USED_THROTTLE_SECONDS if min_interval_seconds is None else min_interval_seconds
         now = timezone.now()
         if self.last_used_at and (now - self.last_used_at).total_seconds() < interval:

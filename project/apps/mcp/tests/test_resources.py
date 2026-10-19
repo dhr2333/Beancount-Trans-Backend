@@ -1,5 +1,6 @@
 """MCP Resources 的注册信息与读取行为测试。"""
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
@@ -46,22 +47,78 @@ class TestResourceContent:
     def test_accounts_catalog_without_metadata(self, mcp_server, ledger_files):
         assert '暂无已启用账户' in _read(mcp_server, ACCOUNTS_URI)
 
+    def test_accounts_catalog_records_usage(self, mcp_server, ledger_files, platform_metadata):
+        with patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            _read(mcp_server, ACCOUNTS_URI)
+
+        touch.assert_called_once_with()
+
+    def test_accounts_catalog_failure_does_not_record_usage(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.resources.load_account_catalog',
+            side_effect=RuntimeError('boom'),
+        ), patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            with pytest.raises(Exception, match='Error reading resource'):
+                _read(mcp_server, ACCOUNTS_URI)
+
+        touch.assert_not_called()
+
     def test_tags_catalog(self, mcp_server, ledger_files, platform_metadata):
         text = _read(mcp_server, TAGS_URI)
         assert 'Discretionary' in text
         assert '非必要支出' in text
 
+    def test_tags_catalog_records_usage(self, mcp_server, ledger_files, platform_metadata):
+        with patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            _read(mcp_server, TAGS_URI)
+
+        touch.assert_called_once_with()
+
     def test_bql_reference(self, mcp_server, ledger_files):
         text = _read(mcp_server, BQL_REFERENCE_URI)
         assert 'sum(units(position))' in text
 
+    def test_bql_reference_does_not_record_usage(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            _read(mcp_server, BQL_REFERENCE_URI)
+
+        touch.assert_not_called()
+
     def test_main_bean(self, mcp_server, ledger_files):
         assert _read(mcp_server, MAIN_BEAN_URI) == SAMPLE_BEAN
+
+    def test_main_bean_records_usage(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            _read(mcp_server, MAIN_BEAN_URI)
+
+        touch.assert_called_once_with()
 
     def test_main_bean_missing(self, mcp_server, tmp_path, settings, monkeypatch):
         monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path / 'nonexistent')
         with pytest.raises(Exception, match='文件不存在'):
             _read(mcp_server, MAIN_BEAN_URI)
+
+    def test_main_bean_missing_does_not_record_usage(
+        self, mcp_server, tmp_path, settings, monkeypatch,
+    ):
+        monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path / 'nonexistent')
+        with patch(
+            'project.apps.mcp.resources.touch_current_personal_access_token'
+        ) as touch:
+            with pytest.raises(Exception, match='文件不存在'):
+                _read(mcp_server, MAIN_BEAN_URI)
+
+        touch.assert_not_called()
 
     def test_unknown_uri(self, mcp_server, ledger_files):
         with pytest.raises(Exception):

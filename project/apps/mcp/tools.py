@@ -14,7 +14,11 @@ from project.apps.assistant.services.bql_validator import BQLValidationError
 from project.apps.assistant.services.ledger_query import LedgerNotFoundError, LedgerQueryService
 from project.apps.assistant.services.schema_provider import get_ledger_context
 
-from .identity import IdentityError, get_current_user
+from .identity import (
+    IdentityError,
+    get_current_user,
+    touch_current_personal_access_token,
+)
 from .ledger_files import LedgerFileError, read_ledger_file
 
 logger = logging.getLogger(__name__)
@@ -74,7 +78,9 @@ def register(server: MCPServer) -> None:
 
     @server.tool(name='get_ledger_context', description=GET_LEDGER_CONTEXT_DESCRIPTION)
     def get_ledger_context_tool() -> str:
-        return get_ledger_context(_current_user())
+        context = get_ledger_context(_current_user())
+        touch_current_personal_access_token()
+        return context
 
     @server.tool(name='run_bql', description=RUN_BQL_DESCRIPTION)
     def run_bql_tool(query: str) -> BqlQueryResult:
@@ -87,6 +93,7 @@ def register(server: MCPServer) -> None:
             raise ToolError(f'账本不可用：{exc}') from exc
         except ValueError as exc:
             raise ToolError(f'BQL 执行失败：{exc}') from exc
+        touch_current_personal_access_token()
         return BqlQueryResult(
             bql=result.bql,
             result_text=result.result_text,
@@ -100,6 +107,7 @@ def register(server: MCPServer) -> None:
             ledger_file = read_ledger_file(_current_user(), path)
         except LedgerFileError as exc:
             raise ToolError(str(exc)) from exc
+        touch_current_personal_access_token()
         return LedgerFileContent(
             path=ledger_file.path,
             size_bytes=ledger_file.size_bytes,

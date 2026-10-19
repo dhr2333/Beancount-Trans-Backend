@@ -222,16 +222,17 @@ def bindings_with_usability(recipient: User) -> list[dict]:
 
 
 def resolve_shared_ledgers(recipient: User, binding_ids) -> list[dict]:
-    """把绑定的 id 列表解析成可用的共享账本（去重保序，忽略非法 id）。"""
+    """把绑定的 id 列表解析成可用的共享账本（去重保序，忽略非法 id）。
+
+    只做可用性解析，不更新 last_used_at；使用记录由实际执行查询的调用方写入。
+    """
     bindings = _usable_bindings(recipient, binding_ids)
     if not bindings:
         return []
 
-    now = timezone.now()
     ledgers: list[dict] = []
     seen: set[int] = set()
     for binding in bindings:
-        _touch_last_used(binding, now)
         owner = binding.token.user
         if owner.id in seen:
             continue
@@ -298,11 +299,15 @@ def _usable_bindings(recipient: User, binding_ids) -> list[SharedLedgerBinding]:
     return [binding for binding in bindings if binding.is_usable()]
 
 
-def _touch_last_used(binding: SharedLedgerBinding, now=None) -> None:
-    """按 60 秒节流更新绑定的 last_used_at。"""
+def touch_usage(binding: SharedLedgerBinding, now=None) -> None:
+    """记录一次真实的共享账本消费。
+
+    同时更新绑定与来源令牌的最后使用时间；两边各自按 60 秒节流。
+    仅在真正执行了账本查询后调用。
+    """
     now = now or timezone.now()
     last_used = binding.last_used_at
-    if last_used is not None and (now - last_used).total_seconds() < LAST_USED_THROTTLE_SECONDS:
-        return
-    SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=now)
-    binding.last_used_at = now
+    if last_used is None or (now - last_used).total_seconds() >= LAST_USED_THROTTLE_SECONDS:
+        SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=now)
+        binding.last_used_at = now
+    binding.token.touch(min_interval_seconds=LAST_USED_THROTTLE_SECONDS)

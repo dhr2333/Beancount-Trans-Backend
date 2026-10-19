@@ -9,6 +9,8 @@ from django.test import override_settings
 
 from project.apps.assistant.models import ChatMessage, ChatSession
 from project.apps.assistant.services.api_key_resolver import DEFAULT_ASSISTANT_MODEL
+from project.apps.assistant.services.shared_ledger import bind_by_token
+from project.apps.authentication.models import PersonalAccessToken
 from project.apps.assistant.services.assistant_service import (
     AssistantService,
     QueryRecord,
@@ -150,6 +152,12 @@ def _install_fake_ledger_query(
         FakeLedgerQueryService,
     )
     return constructed
+
+
+def _issue_shared_binding(user, owner, aliases=None):
+    token, raw_token = PersonalAccessToken.issue(owner, '共享账本令牌')
+    binding = bind_by_token(user, raw_token, aliases or ['家庭账本'])
+    return token, binding
 
 
 @pytest.mark.django_db
@@ -1241,4 +1249,185 @@ class TestSharedLedgerAssistantService:
 
         assert result == 'self-context'
         assert mock_ctx.call_args[0][0] == user
+
+    def test_constructing_service_does_not_touch_usage(self, monkeypatch, user):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(monkeypatch)
+
+        AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
+
+    def test_dispatch_run_bql_shared_records_usage(self, monkeypatch, user):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+        queries: list = []
+
+        result = service._dispatch_tool(
+            'run_bql', {'query': 'SELECT 1', 'ledger': '家庭账本'}, queries
+        )
+
+        assert result == '结果:SELECT 1'
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is not None
+        assert token.last_used_at is not None
+
+    def test_dispatch_run_bql_self_does_not_record_usage(self, monkeypatch, user):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+        queries: list = []
+
+        service._dispatch_tool('run_bql', {'query': 'SELECT 1'}, queries)
+
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
+
+    def test_dispatch_run_bql_shared_failure_does_not_record_usage(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+
+        def _raise(_query):
+            raise ValueError('查询失败')
+
+        monkeypatch.setattr(service.ledger_queries['家庭账本'], 'execute', _raise)
+        result = service._dispatch_tool(
+            'run_bql', {'query': 'SELECT 1', 'ledger': '家庭账本'}, []
+        )
+
+        assert '查询失败' in result
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
+
+    def test_dispatch_get_ledger_context_shared_records_usage(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+
+        with patch(
+            'project.apps.assistant.services.assistant_service.get_ledger_context'
+        ) as mock_ctx:
+            mock_ctx.return_value = 'shared-context'
+            result = service._dispatch_tool(
+                'get_ledger_context', {'ledger': '家庭账本'}, []
+            )
+
+        assert result == 'shared-context'
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is not None
+        assert token.last_used_at is not None
+
+    def test_dispatch_get_ledger_context_missing_shared_ledger_does_not_record_usage(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner)
+        _install_fake_ledger_query(
+            monkeypatch,
+            exists_map={user.username: True, owner.username: False},
+            default_exists=True,
+        )
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['家庭账本'],
+                'owner': owner,
+            }],
+        )
+
+        with patch(
+            'project.apps.assistant.services.assistant_service.get_ledger_context'
+        ) as mock_ctx:
+            mock_ctx.return_value = 'missing-context'
+            result = service._dispatch_tool(
+                'get_ledger_context', {'ledger': '家庭账本'}, []
+            )
+
+        assert result == 'missing-context'
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is None
+        assert token.last_used_at is None
+
+    def test_dispatch_run_bql_any_alias_records_same_binding(
+        self, monkeypatch, user,
+    ):
+        owner = User.objects.create_user(username='wife', password='x')
+        token, binding = _issue_shared_binding(user, owner, ['老婆的账本', '老婆'])
+        _install_fake_ledger_query(monkeypatch)
+        service = AssistantService(
+            user,
+            shared_ledgers=[{
+                'binding_id': binding.id,
+                'aliases': ['老婆的账本', '老婆'],
+                'owner': owner,
+            }],
+        )
+        queries: list = []
+
+        result = service._dispatch_tool(
+            'run_bql', {'query': 'SELECT 1', 'ledger': '老婆'}, queries
+        )
+
+        assert result == '结果:SELECT 1'
+        binding.refresh_from_db()
+        token.refresh_from_db()
+        assert binding.last_used_at is not None
+        assert token.last_used_at is not None
 

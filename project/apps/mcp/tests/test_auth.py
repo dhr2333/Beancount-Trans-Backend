@@ -1,14 +1,20 @@
 """MCP 令牌校验器测试：个人访问令牌（PAT）与 OAuth 2.1 访问令牌双通道。"""
 import asyncio
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from django.utils import timezone
+from mcp.server.auth.provider import AccessToken as McpAccessToken
 from oauth2_provider.models import AccessToken as OAuthAccessToken
 from oauth2_provider.models import Application
 
 from project.apps.authentication.models import PersonalAccessToken
 from project.apps.mcp.auth import PlatformTokenVerifier
+from project.apps.mcp.identity import (
+    get_current_personal_access_token,
+    touch_current_personal_access_token,
+)
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
@@ -55,12 +61,12 @@ class TestPersonalAccessTokenChannel:
         assert token.scopes == ['ledger:read']
         assert token.expires_at is None
 
-    def test_records_last_used_at(self, pat):
+    def test_does_not_record_last_used_at_on_verification(self, pat):
         record, raw_token = pat
         assert record.last_used_at is None
         _verify(raw_token)
         record.refresh_from_db()
-        assert record.last_used_at is not None
+        assert record.last_used_at is None
 
     def test_rejects_revoked_token(self, pat):
         record, raw_token = pat
@@ -128,3 +134,47 @@ class TestUnknownTokens:
     )
     def test_rejects_unknown_format(self, raw_token):
         assert _verify(raw_token) is None
+
+
+class TestCurrentPersonalAccessToken:
+    def _access_token(self, record, raw_token, client_id='pat'):
+        return McpAccessToken(
+            token=raw_token,
+            client_id=client_id,
+            scopes=['ledger:read'],
+            expires_at=None,
+            subject=str(record.user_id),
+        )
+
+    def test_resolves_pat_from_current_access_token(self, pat):
+        record, raw_token = pat
+        access_token = self._access_token(record, raw_token)
+
+        with patch(
+            'project.apps.mcp.identity.get_access_token', return_value=access_token
+        ):
+            resolved = get_current_personal_access_token()
+
+        assert resolved is not None
+        assert resolved.pk == record.pk
+
+    def test_ignores_non_pat_client(self, pat):
+        record, raw_token = pat
+        access_token = self._access_token(record, raw_token, client_id='oauth-app')
+
+        with patch(
+            'project.apps.mcp.identity.get_access_token', return_value=access_token
+        ):
+            assert get_current_personal_access_token() is None
+
+    def test_touch_updates_last_used_at(self, pat):
+        record, raw_token = pat
+        access_token = self._access_token(record, raw_token)
+
+        with patch(
+            'project.apps.mcp.identity.get_access_token', return_value=access_token
+        ):
+            touch_current_personal_access_token()
+
+        record.refresh_from_db()
+        assert record.last_used_at is not None

@@ -1,5 +1,6 @@
 """MCP Tools 的注册信息与调用行为测试。"""
 import asyncio
+from unittest.mock import patch
 
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
@@ -47,6 +48,14 @@ class TestGetLedgerContext:
         result = asyncio.run(mcp_server.call_tool('get_ledger_context', {}))
         assert '餐饮' in result.content[0].text
 
+    def test_records_usage_after_success(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            asyncio.run(mcp_server.call_tool('get_ledger_context', {}))
+
+        touch.assert_called_once_with()
+
 
 class TestRunBql:
     def test_returns_structured_result(self, mcp_server, ledger_files):
@@ -70,6 +79,40 @@ class TestRunBql:
             )
         )
         assert '餐饮（Expenses:Food）' in result.structured_content['result_text']
+
+    def test_records_usage_after_success(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            asyncio.run(
+                mcp_server.call_tool(
+                    'run_bql',
+                    {'query': "SELECT account, sum(position) WHERE account ~ 'Expenses' GROUP BY account"},
+                )
+            )
+
+        touch.assert_called_once_with()
+
+    def test_does_not_record_usage_when_validation_fails(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            with pytest.raises(ToolError, match='BQL 校验失败'):
+                _call(mcp_server, 'run_bql', {'query': 'INSERT INTO foo VALUES (1)'})
+
+        touch.assert_not_called()
+
+    def test_does_not_record_usage_when_ledger_missing(
+        self, mcp_server, settings, monkeypatch, tmp_path,
+    ):
+        monkeypatch.setattr(settings, 'ASSETS_BASE_PATH', tmp_path / 'nonexistent')
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            with pytest.raises(ToolError, match='账本不可用'):
+                _call(mcp_server, 'run_bql', {'query': 'SELECT account'})
+
+        touch.assert_not_called()
 
     def test_rejects_write_statement(self, mcp_server, ledger_files):
         with pytest.raises(ToolError, match='BQL 校验失败'):
@@ -107,6 +150,23 @@ class TestReadLedgerFile:
         assert payload['path'] == 'main.bean'
         assert payload['content'] == SAMPLE_BEAN
         assert payload['size_bytes'] == len(SAMPLE_BEAN.encode('utf-8'))
+
+    def test_records_usage_after_success(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            asyncio.run(mcp_server.call_tool('read_ledger_file', {'path': 'main.bean'}))
+
+        touch.assert_called_once_with()
+
+    def test_does_not_record_usage_when_path_invalid(self, mcp_server, ledger_files):
+        with patch(
+            'project.apps.mcp.tools.touch_current_personal_access_token'
+        ) as touch:
+            with pytest.raises(ToolError, match='只允许读取自己账本目录内的文件'):
+                _call(mcp_server, 'read_ledger_file', {'path': '../outside.bean'})
+
+        touch.assert_not_called()
 
     def test_blocks_path_traversal(self, mcp_server, ledger_files):
         with pytest.raises(ToolError, match='只允许读取自己账本目录内的文件'):

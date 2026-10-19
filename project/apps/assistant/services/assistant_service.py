@@ -10,6 +10,8 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from openai import OpenAI
 
+from project.apps.assistant.models import SharedLedgerBinding
+
 from .api_key_resolver import LlmProvider, resolve_llm_provider
 from .thinking_params import build_completion_extras, is_thinking_enabled
 from .bql_reference import build_bql_capability_reference
@@ -37,6 +39,7 @@ from .schema_provider import (
     get_ledger_context,
     ledger_keys_for,
 )
+from .shared_ledger import touch_usage
 
 logger = logging.getLogger(__name__)
 
@@ -450,10 +453,27 @@ class AssistantService:
             item['owner'].username for item in (shared_ledgers or [])
         ]
         self.ledger_queries: dict[str, LedgerQueryService] = {'self': self.ledger_query}
+        self.ledger_bindings: dict[str, SharedLedgerBinding] = {}
+        binding_ids = [
+            item['binding_id']
+            for item in (shared_ledgers or [])
+            if item.get('binding_id') is not None
+        ]
+        binding_by_id: dict[int, SharedLedgerBinding] = {}
+        if binding_ids:
+            bindings = (
+                SharedLedgerBinding.objects
+                .filter(id__in=binding_ids, recipient=user)
+                .select_related('token')
+            )
+            binding_by_id = {binding.id: binding for binding in bindings}
         for item in (shared_ledgers or []):
             shared_service = LedgerQueryService(item['owner'])
+            binding = binding_by_id.get(item.get('binding_id'))
             for key in ledger_keys_for(item):
                 self.ledger_queries.setdefault(key, shared_service)
+                if binding is not None:
+                    self.ledger_bindings.setdefault(key, binding)
         self.has_any_ledger = any(
             svc.ledger_exists() for svc in self.ledger_queries.values()
         )
@@ -503,7 +523,11 @@ class AssistantService:
             guard_message = self._self_ledger_missing_message(ledger)
             if guard_message is not None:
                 return guard_message
-            return get_ledger_context(service.user, reference_date=self.reference_date)
+            context = get_ledger_context(service.user, reference_date=self.reference_date)
+            binding = self.ledger_bindings.get(ledger)
+            if binding is not None and service.ledger_exists():
+                touch_usage(binding)
+            return context
 
         if name == 'run_bql':
             ledger = arguments.get('ledger') or 'self'
@@ -523,6 +547,9 @@ class AssistantService:
             query = arguments.get('query', '')
             try:
                 result = service.execute(query)
+                binding = self.ledger_bindings.get(ledger)
+                if binding is not None:
+                    touch_usage(binding)
                 if ledger == 'self':
                     fava_fields = query_record_fava_fields(self.user, result.bql)
                     queries.append(QueryRecord(
