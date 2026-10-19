@@ -1,5 +1,13 @@
 # Changelog
 
+## [6.0.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/6.0.0...6.0.1) (2026-10-19)
+
+### Bug Fixes
+
+* **assistant:** 为长助手任务添加 SSE 流式传输支持 ([b7a9ff1](https://github.com/dhr2333/Beancount-Trans-Backend/commit/b7a9ff1b87939f7fd4f37d2ea99c256a79dc3de3))
+* **assistant:** 保留删除访问令牌后的共享账本绑定与所有者信息 ([6a46bef](https://github.com/dhr2333/Beancount-Trans-Backend/commit/6a46bef27608ca9a5fa1df53cb932be97fd6020b))
+* **访问令牌:** 统一按实际读取数据更新最后使用时间 ([10c218a](https://github.com/dhr2333/Beancount-Trans-Backend/commit/10c218a209f44d2fec5b4c2cd89960d00154b813))
+
 ## [6.0.0](https://github.com/dhr2333/Beancount-Trans-Backend/compare/5.16.0...6.0.0) (2026-10-14)
 
 ### ⚠ BREAKING CHANGES
