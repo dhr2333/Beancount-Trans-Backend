@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.auth import get_user_model
 
 from project.apps.assistant.models import ChatMessage, ChatSession
@@ -101,7 +102,7 @@ def _finalize_cancelled(message: ChatMessage, accumulator: StreamAccumulator) ->
     publish(message.id, 'error', {'detail': '已停止生成'})
 
 
-@shared_task(bind=True, max_retries=0, time_limit=600)
+@shared_task(bind=True, max_retries=0, soft_time_limit=900, time_limit=930)
 def run_assistant_chat(
     self,
     user_id: int,
@@ -185,6 +186,9 @@ def run_assistant_chat(
                 return
 
         _finalize_error(message, '助手响应未完成，请重试')
+    except SoftTimeLimitExceeded:
+        logger.warning('Assistant task exceeded soft time limit')
+        _finalize_error(message, '生成耗时过长，已中断，请缩小问题范围后重试')
     except (ValueError, LedgerNotFoundError) as exc:
         _finalize_error(message, str(exc))
     except Exception as exc:
