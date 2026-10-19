@@ -136,9 +136,24 @@ class SharedLedgerBinding(BaseModel):
     )
     token = models.ForeignKey(
         'authentication.PersonalAccessToken',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='ledger_bindings',
         verbose_name='访问令牌',
+        help_text='令牌被删除后置空，绑定保留但不可用',
+    )
+    owner_user_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='来源用户 ID',
+        help_text='绑定时令牌所属用户的快照，令牌删除后仍可用于展示与去重',
+    )
+    owner_username = models.CharField(
+        max_length=150,
+        blank=True,
+        default='',
+        verbose_name='来源用户名',
     )
     aliases = models.JSONField(
         default=list,
@@ -167,7 +182,18 @@ class SharedLedgerBinding(BaseModel):
 
     @property
     def owner(self):
-        return self.token.user
+        return self.token.user if self.token_id else None
+
+    @property
+    def owner_name(self) -> str:
+        """来源用户名：优先取令牌所属用户，令牌已删除时用绑定时快照。"""
+        if self.token_id:
+            return self.token.user.username
+        return self.owner_username or '未知用户'
 
     def is_usable(self) -> bool:
-        return self.token.is_usable() and self.token.user.is_active
+        return (
+            self.token_id is not None
+            and self.token.is_usable()
+            and self.token.user.is_active
+        )

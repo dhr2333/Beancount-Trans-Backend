@@ -1241,7 +1241,7 @@ class PersonalAccessTokenViewSet(viewsets.GenericViewSet):
         )
 
     def destroy(self, request, pk=None):
-        """删除访问令牌（硬删除；绑定的共享账本会随之一并失效）"""
+        """删除访问令牌（硬删除；对方的共享账本绑定保留但显示为已失效）"""
         token = self.get_object()
         prefix = token.prefix
         token.delete()

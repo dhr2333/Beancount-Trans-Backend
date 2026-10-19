@@ -345,6 +345,36 @@ class TestBindingsWithUsability:
         assert [row['id'] for row in rows] == [binding.id]
         assert rows[0]['usable'] is False
 
+    def test_deleted_token_keeps_binding_but_unusable(self, user, owner):
+        token, raw_token = _issue(owner)
+        binding = bind_by_token(user, raw_token, ['共享'])
+
+        token.delete()
+        binding.refresh_from_db()
+
+        assert binding.token_id is None
+        assert binding.owner_user_id == owner.id
+        assert binding.owner_username == owner.username
+        assert binding.is_usable() is False
+
+        rows = bindings_with_usability(user)
+
+        assert [row['id'] for row in rows] == [binding.id]
+        assert rows[0]['owner_username'] == owner.username
+        assert rows[0]['usable'] is False
+        assert rows[0]['expires_at'] is None
+
+    def test_rebind_same_owner_after_token_deleted(self, user, owner):
+        token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['共享'])
+        token.delete()
+
+        _new_token, new_raw_token = _issue(owner, '新令牌')
+        rebinding = bind_by_token(user, new_raw_token, [])
+
+        assert rebinding.is_usable() is True
+        assert rebinding.owner_user_id == owner.id
+
 
 @pytest.mark.django_db
 class TestHasUsableSharedLedger:
@@ -375,6 +405,13 @@ class TestHasUsableSharedLedger:
         bind_by_token(user, raw_token, ['家庭账本'])
         owner.is_active = False
         owner.save(update_fields=['is_active'])
+
+        assert has_usable_shared_ledger(user) is False
+
+    def test_false_when_token_deleted(self, user, owner):
+        token, raw_token = _issue(owner)
+        bind_by_token(user, raw_token, ['家庭账本'])
+        token.delete()
 
         assert has_usable_shared_ledger(user) is False
 

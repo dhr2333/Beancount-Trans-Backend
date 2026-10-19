@@ -196,10 +196,10 @@ def _shared_binding_payload(binding: SharedLedgerBinding) -> dict:
     """单个共享账本绑定的响应体（字段与列表接口保持一致）。"""
     return {
         'id': binding.id,
-        'owner_username': binding.token.user.username,
+        'owner_username': binding.owner_name,
         'aliases': binding.aliases,
         'usable': binding.is_usable(),
-        'expires_at': binding.token.expires_at,
+        'expires_at': binding.token.expires_at if binding.token_id else None,
         'last_used_at': binding.last_used_at,
         'created': binding.created,
     }

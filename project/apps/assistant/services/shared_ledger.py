@@ -5,7 +5,7 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from project.apps.assistant.models import SharedLedgerBinding
@@ -78,9 +78,11 @@ def bind_by_token(
     if token.user_id == recipient.id:
         raise TokenInvalidError('不能绑定自己的账本')
 
+    owner_id = token.user_id
     existing_bindings = (
         SharedLedgerBinding.objects
-        .filter(recipient=recipient, token__user_id=token.user_id)
+        .filter(recipient=recipient)
+        .filter(Q(token__user_id=owner_id) | Q(owner_user_id=owner_id))
         .select_related('token', 'token__user')
     )
     for binding in existing_bindings:
@@ -88,17 +90,19 @@ def bind_by_token(
             raise TokenInvalidError('已绑定该用户的账本，无需重复添加')
 
     existing_owner_ids = {
-        binding.token.user_id
-        for binding in SharedLedgerBinding.objects
-        .filter(recipient=recipient)
-        .select_related('token')
+        owner_user_id
+        for binding in SharedLedgerBinding.objects.filter(recipient=recipient)
+        for owner_user_id in [_binding_owner_user_id(binding)]
+        if owner_user_id is not None
     }
-    if token.user_id not in existing_owner_ids:
+    if owner_id not in existing_owner_ids:
         max_n = get_max_shared_ledgers()
         usable_owners = {
-            binding.token.user_id
+            owner_user_id
             for binding in list_bindings(recipient)
             if binding.is_usable()
+            for owner_user_id in [_binding_owner_user_id(binding)]
+            if owner_user_id is not None
         }
         if len(usable_owners) >= max_n:
             raise TokenInvalidError(f'最多绑定 {max_n} 个共享账本，请先解除一个')
@@ -109,28 +113,46 @@ def bind_by_token(
     binding, created = SharedLedgerBinding.objects.get_or_create(
         recipient=recipient,
         token=token,
-        defaults={'aliases': alias_list},
+        defaults={
+            'aliases': alias_list,
+            'owner_user_id': owner_id,
+            'owner_username': token.user.username,
+        },
     )
     if not created:
         binding.aliases = alias_list
-        binding.save(update_fields=['aliases'])
+        binding.owner_user_id = owner_id
+        binding.owner_username = token.user.username
+        binding.save(update_fields=['aliases', 'owner_user_id', 'owner_username'])
     return binding
+
+
+def _binding_owner_user_id(binding: SharedLedgerBinding) -> int | None:
+    """绑定的来源用户 ID：优先快照，兼容尚未回填快照的历史数据。"""
+    if binding.owner_user_id is not None:
+        return binding.owner_user_id
+    if binding.token_id is not None:
+        return binding.token.user_id
+    return None
 
 
 def _ensure_aliases_available(
     recipient: User,
     aliases: list[str],
     exclude_token_id=None,
+    exclude_binding_id=None,
 ) -> None:
     """校验别名未被 recipient 的其他共享账本占用（大小写不敏感）。
 
-    [exclude_token_id] 用于跳过当前正在编辑的绑定对应的令牌。
+    [exclude_token_id] / [exclude_binding_id] 用于跳过当前正在编辑的绑定。
     """
     if not aliases:
         return
     queryset = SharedLedgerBinding.objects.filter(recipient=recipient)
     if exclude_token_id is not None:
         queryset = queryset.exclude(token_id=exclude_token_id)
+    if exclude_binding_id is not None:
+        queryset = queryset.exclude(id=exclude_binding_id)
     for binding in queryset:
         existing_aliases = {str(a).lower() for a in (binding.aliases or [])}
         for alias in aliases:
@@ -157,7 +179,7 @@ def update_aliases(recipient: User, binding_id, aliases) -> SharedLedgerBinding:
         .get(id=binding_id, recipient=recipient)
     )
     alias_list = normalize_aliases(aliases)
-    _ensure_aliases_available(recipient, alias_list, exclude_token_id=binding.token_id)
+    _ensure_aliases_available(recipient, alias_list, exclude_binding_id=binding.id)
     binding.aliases = alias_list
     binding.save(update_fields=['aliases'])
     return binding
@@ -211,10 +233,10 @@ def bindings_with_usability(recipient: User) -> list[dict]:
     for binding in list_bindings(recipient):
         rows.append({
             'id': binding.id,
-            'owner_username': binding.token.user.username,
+            'owner_username': binding.owner_name,
             'aliases': list(binding.aliases or []),
             'usable': binding.is_usable(),
-            'expires_at': binding.token.expires_at,
+            'expires_at': binding.token.expires_at if binding.token_id else None,
             'last_used_at': binding.last_used_at,
             'created': binding.created,
         })
@@ -233,7 +255,9 @@ def resolve_shared_ledgers(recipient: User, binding_ids) -> list[dict]:
     ledgers: list[dict] = []
     seen: set[int] = set()
     for binding in bindings:
-        owner = binding.token.user
+        owner = binding.owner
+        if owner is None:
+            continue
         if owner.id in seen:
             continue
         seen.add(owner.id)
@@ -310,4 +334,5 @@ def touch_usage(binding: SharedLedgerBinding, now=None) -> None:
     if last_used is None or (now - last_used).total_seconds() >= LAST_USED_THROTTLE_SECONDS:
         SharedLedgerBinding.objects.filter(pk=binding.pk).update(last_used_at=now)
         binding.last_used_at = now
-    binding.token.touch(min_interval_seconds=LAST_USED_THROTTLE_SECONDS)
+    if binding.token_id:
+        binding.token.touch(min_interval_seconds=LAST_USED_THROTTLE_SECONDS)
