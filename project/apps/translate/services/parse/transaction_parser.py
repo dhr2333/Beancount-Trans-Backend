@@ -5,7 +5,8 @@ from project.apps.translate.services.handlers import AccountHandler, ExpenseHand
 from project.apps.translate.services.ledger_uuid_index import RefundPeerSnapshot
 from project.apps.translate.services.handlers import get_shouzhi, get_uuid, get_status, get_amount, get_note, get_tag, get_balance, get_commission, get_discount
 from project.apps.translate.services.tag_merger import merge_tags_with_details
-from project.apps.translate.services.parse_api_key import resolve_parse_deepseek_api_key
+from project.apps.translate.services.parse_api_key import resolve_parse_llm
+from project.apps.translate.services.similarity import build_similarity_model
 from project.apps.translate.utils import get_fallback_account
 
 
@@ -15,6 +16,7 @@ def single_parse_transaction(
     config: Dict,
     selected_key: str,
     refund_peer: Optional[RefundPeerSnapshot] = None,
+    similarity_model=None,
 ) -> Dict:
     """解析单条交易记录
 
@@ -22,15 +24,21 @@ def single_parse_transaction(
         row (Dict): 单条初始化后的交易记录
         owner_id (int): 使用该用户的Map映射记录
         config (Dict): 用户配置信息
+        similarity_model: 可选的共享相似度模型；未传入时按配置现场构建
 
     Returns:
         Dict: 解析后的交易记录
     """
     try:
+        if similarity_model is None:
+            similarity_model = build_similarity_model(
+                getattr(config, 'ai_model', None),
+                resolve_parse_llm(config),
+            )
         expense_handler = ExpenseHandler(
             row,
             model=config.ai_model,
-            api_key=resolve_parse_deepseek_api_key(config),
+            similarity_model=similarity_model,
             selected_key=selected_key,
             refund_peer=refund_peer,
         )

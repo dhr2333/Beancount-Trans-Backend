@@ -1,26 +1,153 @@
 from types import SimpleNamespace
 
 import pytest
+from django.test import override_settings
 
 from project.apps.translate.models import FormatConfig
 from project.apps.translate.serializers import FormatConfigSerializer
-from project.apps.translate.services.parse_api_key import resolve_parse_deepseek_api_key
+from project.apps.translate.services.parse_api_key import (
+    ParseLlmConfig,
+    resolve_parse_llm,
+)
+from project.apps.translate.services.similarity import (
+    BertSimilarity,
+    FallbackSimilarity,
+    build_similarity_model,
+)
 
 
-class TestResolveParseDeepseekApiKey:
-    def test_empty_assistant_key_does_not_use_legacy_or_platform_fields(self):
+class TestResolveParseLlm:
+    @override_settings(
+        ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test',
+        ASSISTANT_BASE_URL='https://api.deepseek.com/',
+        ASSISTANT_MODEL='deepseek-v4-flash',
+    )
+    def test_platform_engine_uses_platform_key(self):
         config = SimpleNamespace(
-            assistant_api_key='',
-            deepseek_apikey='legacy-sk',
+            ai_model='Platform',
+            assistant_api_key='user-sk-test',
+            assistant_base_url='http://127.0.0.1:11434/v1',
+            assistant_model='llama3.1',
         )
-        assert resolve_parse_deepseek_api_key(config) == ''
 
-    def test_filled_assistant_key_is_used_for_parse(self):
+        llm = resolve_parse_llm(config)
+
+        assert llm.api_key == 'platform-sk-test'
+        assert llm.base_url == 'https://api.deepseek.com'
+        assert llm.model == 'deepseek-v4-flash'
+        assert llm.source == 'platform'
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='')
+    def test_platform_engine_without_platform_key_returns_none(self):
+        config = SimpleNamespace(ai_model='Platform')
+
+        assert resolve_parse_llm(config) is None
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    def test_deepseek_engine_uses_user_key(self):
         config = SimpleNamespace(
+            ai_model='DeepSeek',
             assistant_api_key=' user-sk-test ',
-            deepseek_apikey='legacy-sk',
+            assistant_base_url='https://custom.example.com/',
+            assistant_model='custom-model',
         )
-        assert resolve_parse_deepseek_api_key(config) == 'user-sk-test'
+
+        llm = resolve_parse_llm(config)
+
+        assert llm.api_key == 'user-sk-test'
+        assert llm.base_url == 'https://custom.example.com'
+        assert llm.model == 'custom-model'
+        assert llm.source == 'user'
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    def test_deepseek_engine_without_user_key_falls_back_to_platform(self):
+        config = SimpleNamespace(
+            ai_model='DeepSeek',
+            assistant_api_key='',
+            assistant_base_url='',
+            assistant_model='',
+        )
+
+        llm = resolve_parse_llm(config)
+
+        assert llm.api_key == 'platform-sk-test'
+        assert llm.source == 'platform'
+
+    @pytest.mark.parametrize('engine', ['BERT', 'None', 'spaCy'])
+    def test_local_engines_do_not_resolve_llm(self, engine):
+        config = SimpleNamespace(ai_model=engine)
+
+        assert resolve_parse_llm(config) is None
+
+    @override_settings(ASSISTANT_DEEPSEEK_API_KEY='platform-sk-test')
+    def test_empty_engine_defaults_to_platform(self):
+        config = SimpleNamespace(ai_model='')
+
+        llm = resolve_parse_llm(config)
+
+        assert llm.source == 'platform'
+
+
+class TestAnonymousEngine:
+    def test_anonymous_request_is_forced_to_platform(self):
+        from project.apps.translate.views.views import _apply_anonymous_engine
+
+        config = SimpleNamespace(ai_model='BERT')
+        request = SimpleNamespace(headers={})
+
+        assert _apply_anonymous_engine(config, request).ai_model == 'Platform'
+
+
+class _FailingPrimary:
+    def __init__(self):
+        self.calls = 0
+
+    def calculate_similarity(self, text, candidates):
+        self.calls += 1
+        raise ValueError('primary unavailable')
+
+
+class _RecordingFallback:
+    def __init__(self):
+        self.calls = 0
+
+    def calculate_similarity(self, text, candidates):
+        self.calls += 1
+        return {'best_match': candidates[0], 'scores': {candidates[0]: 1.0}}
+
+
+class TestFallbackSimilarity:
+    def test_primary_failure_switches_to_fallback_for_remaining_calls(self):
+        primary = _FailingPrimary()
+        fallback = _RecordingFallback()
+        model = FallbackSimilarity(primary, fallback)
+
+        first = model.calculate_similarity('first', ['a', 'b'])
+        second = model.calculate_similarity('second', ['c', 'd'])
+
+        assert first['best_match'] == 'a'
+        assert second['best_match'] == 'c'
+        assert primary.calls == 1
+        assert fallback.calls == 2
+
+    def test_build_platform_model_without_llm_falls_back_to_bert(self):
+        assert isinstance(build_similarity_model('Platform', None), BertSimilarity)
+
+    def test_build_none_engine_returns_none(self):
+        assert build_similarity_model('None', None) is None
+
+    def test_build_platform_model_with_llm_wraps_fallback(self):
+        llm = ParseLlmConfig(
+            api_key='platform-sk-test',
+            base_url='https://api.deepseek.com',
+            model='deepseek-v4-flash',
+            source='platform',
+        )
+
+        model = build_similarity_model('Platform', llm)
+
+        assert isinstance(model, FallbackSimilarity)
+        assert isinstance(model.fallback, BertSimilarity)
 
 
 @pytest.mark.django_db
@@ -34,6 +161,15 @@ class TestFormatConfigDeepSeekKey:
         )
         assert serializer.is_valid() is False
         assert 'ai_model' in serializer.errors
+
+    def test_platform_without_copilot_key_is_allowed(self, user):
+        config = FormatConfig.get_user_config(user)
+        serializer = FormatConfigSerializer(
+            config,
+            data={'ai_model': 'Platform', 'assistant_api_key': ''},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
 
     def test_deepseek_with_copilot_key_syncs_legacy_field(self, user):
         config = FormatConfig.get_user_config(user)

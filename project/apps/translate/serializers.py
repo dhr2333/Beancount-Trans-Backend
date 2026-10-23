@@ -32,9 +32,15 @@ class FormatConfigSerializer(serializers.ModelSerializer):
         return value
 
     def validate_ai_model(self, value):
-        """spaCy 已移除，自动迁移到 BERT"""
-        if value == 'spaCy':
+        """归一化解析引擎；spaCy 已移除，空值使用平台 LLM。"""
+        if not value:
+            return 'Platform'
+        if value.lower() == 'spacy':
             return 'BERT'
+        if value.lower() == 'bert':
+            return 'BERT'
+        if value not in {'Platform', 'DeepSeek', 'BERT', 'None'}:
+            raise serializers.ValidationError('不支持的解析引擎')
         return value
 
     def validate(self, attrs):
@@ -45,7 +51,7 @@ class FormatConfigSerializer(serializers.ModelSerializer):
         )
         if ai_model == 'DeepSeek' and not (assistant_key or '').strip():
             raise serializers.ValidationError({
-                'ai_model': '云端解析需要先在 Copilot 填写 API 密钥',
+                'ai_model': '自有 DeepSeek 解析需要先在 BYOK 填写 API 密钥',
             })
         return attrs
 

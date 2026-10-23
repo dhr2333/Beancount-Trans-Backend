@@ -2,9 +2,15 @@
 import torch
 import logging
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional, TYPE_CHECKING
+from django.conf import settings
 from transformers import BertTokenizer, BertModel
 from openai import OpenAI
+
+if TYPE_CHECKING:
+    from project.apps.translate.services.parse_api_key import ParseLlmConfig
+
+logger = logging.getLogger(__name__)
 
 
 class SimilarityModel:
@@ -82,25 +88,34 @@ class BertSimilarity(SimilarityModel):
 
 class DeepSeekSimilarity(SimilarityModel):
     """DeepSeek API相似度计算实现"""
-    def __init__(self, api_key: str, enable_realtime: bool = True):
+    def __init__(
+        self,
+        api_key: str,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        enable_realtime: bool = True,
+    ):
         self.api_key = api_key
+        self.base_url = (base_url or "https://api.deepseek.com").rstrip('/')
+        self.model = model or "deepseek-chat"
         self.enable_realtime = enable_realtime
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=timeout,
+        )
         logging.getLogger("httpx").setLevel(logging.WARNING)
 
     def calculate_similarity(self, text: str, candidates: List[str]) -> dict:
-        client = OpenAI(
-            api_key=self.api_key,
-            base_url="https://api.deepseek.com"
-        )
-
         prompt = f"""请从以下候选列表中选择最匹配文本的条目：
         文本内容：{text}
         候选列表：{", ".join(candidates)}
         只需返回最匹配的候选值，不要任何解释"""
 
         try:
-            response = client.chat.completions.create(
-                model="deepseek-chat",
+            response = self.client.chat.completions.create(
+                model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1
             )
@@ -111,3 +126,43 @@ class DeepSeekSimilarity(SimilarityModel):
             return {"best_match": best_match, "scores": scores}
         except Exception as e:
             raise ValueError(f"DeepSeek调用失败，请检查API密钥是否正确")
+
+
+class FallbackSimilarity(SimilarityModel):
+    """主模型失败后，本批剩余请求直接回退本地模型。"""
+
+    def __init__(self, primary: SimilarityModel, fallback: SimilarityModel):
+        self.primary = primary
+        self.fallback = fallback
+        self._primary_available = True
+
+    def calculate_similarity(self, text: str, candidates: List[str]) -> dict:
+        if self._primary_available:
+            try:
+                return self.primary.calculate_similarity(text, candidates)
+            except Exception as e:
+                self._primary_available = False
+                logger.warning("解析 LLM 调用失败，回退本地 BERT: %s", e)
+        return self.fallback.calculate_similarity(text, candidates)
+
+
+def build_similarity_model(
+    engine: Optional[str],
+    llm: Optional['ParseLlmConfig'],
+) -> Optional[SimilarityModel]:
+    """按解析引擎构建相似度模型；LLM 不可用时回退本地 BERT。"""
+    normalized = (engine or 'Platform').strip()
+    if normalized == 'None':
+        return None
+    if normalized in ('Platform', 'DeepSeek'):
+        if llm is None:
+            logger.warning("解析引擎 %s 未配置可用 LLM，回退本地 BERT", normalized)
+            return BertSimilarity()
+        primary = DeepSeekSimilarity(
+            llm.api_key,
+            base_url=llm.base_url,
+            model=llm.model,
+            timeout=getattr(settings, 'PARSE_LLM_TIMEOUT', 15.0),
+        )
+        return FallbackSimilarity(primary, BertSimilarity())
+    return BertSimilarity()

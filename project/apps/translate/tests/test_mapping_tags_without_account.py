@@ -149,7 +149,7 @@ class TestExpenseMappingTagsWithoutAccount:
         assert scores["十月"] == 1.0
 
     @patch("project.apps.translate.services.handlers.get_default_assets")
-    @patch("project.apps.translate.services.handlers.BertSimilarity")
+    @patch("project.apps.translate.services.similarity.BertSimilarity")
     def test_ai_conflict_excludes_no_account_from_similarity(self, mock_bert_cls, mock_assets, user):
         mock_assets.return_value = _default_assets()
         account = Account.objects.create(account="Expenses:Shopping", owner=user)

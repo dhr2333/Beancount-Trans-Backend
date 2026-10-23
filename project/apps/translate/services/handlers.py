@@ -11,7 +11,6 @@ from project.apps.translate.views.BOC_Debit import *
 from project.apps.translate.views.CMB_Credit import *
 from project.apps.translate.views.ICBC_Debit import *
 from project.apps.translate.views.CCB_Debit import *
-from project.apps.translate.services.similarity import BertSimilarity, DeepSeekSimilarity
 from project.apps.translate.services.mapping_provider import get_mapping_provider
 import logging
 
@@ -151,7 +150,7 @@ class ExpenseHandler:
         self,
         data: Dict,
         model: str,
-        api_key: Optional[str] = None,
+        similarity_model=None,
         selected_key: Optional[str] = None,
         refund_peer: Optional[RefundPeerSnapshot] = None,
     ):
@@ -178,15 +177,8 @@ class ExpenseHandler:
         self._income_mappings = []  # 缓存收入映射数据
         self._asset_mappings = []  # 缓存资产映射数据
 
-        # 初始化相似度计算模型
-        if model == "BERT" or model == "spaCy":
-            self.similarity_model = BertSimilarity()
-        elif model == "DeepSeek":
-            if not api_key:
-                raise ValueError("解析使用 DeepSeek 时需要在「输出配置 → Copilot」填写 API 密钥")
-            self.similarity_model = DeepSeekSimilarity(api_key)
-        else:
-            self.similarity_model = BertSimilarity()  # 默认使用BERT
+        # 相似度模型由解析入口按文件构建，避免每行重复初始化
+        self.similarity_model = similarity_model
 
     def find_asset_by_key(self, key: str):
         """根据 key 查找资产映射"""

@@ -78,3 +78,11 @@ def get_token_user_id(request):
         if 'error' not in payload:
             return payload.get('user_id', 1)
     return 1
+
+
+def has_valid_token(request):
+    """匿名解析入口未启用 DRF 认证，用 JWT 本身判断是否登录。"""
+    token = get_token(request)
+    if not token:
+        return False
+    return 'error' not in decode_token(token)

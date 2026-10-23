@@ -7,6 +7,8 @@ from project.apps.translate.services.init.bill_init_factory import InitFactory
 from project.apps.translate.services.parse.filters import TransactionFilter
 from project.apps.translate.services.parse.transaction_parser import single_parse_transaction
 from project.apps.translate.services.parse.link_resolver import assign_transaction_links
+from project.apps.translate.services.parse_api_key import resolve_parse_llm
+from project.apps.translate.services.similarity import build_similarity_model
 from project.apps.translate.services.parse.installment_expander import (
     collect_refund_parent_uuids,
     expand_parsed_entry,
@@ -147,8 +149,22 @@ class ParseStep(Step):
             seen_cache_keys: Dict[str, int] = {}
             refund_parent_uuids = collect_refund_parent_uuids(bill_data)
 
+            # 每个文件只构建一次，BERT 兜底状态在整批条目间共享
+            llm = resolve_parse_llm(config)
+            similarity_model = build_similarity_model(
+                getattr(config, 'ai_model', None),
+                llm,
+            )
+            logger.info(
+                "解析引擎: %s, LLM 来源: %s",
+                getattr(config, 'ai_model', None) or 'Platform',
+                llm.source if llm else 'none',
+            )
+
             def _lazy_parse_payment(payment_row: Dict) -> Dict:
-                entry = single_parse_transaction(payment_row, owner_id, config, None)
+                entry = single_parse_transaction(
+                    payment_row, owner_id, config, None, similarity_model=similarity_model
+                )
                 entry['_original_row'] = payment_row
                 expanded = expand_parsed_entry(entry, refund_parent_uuids)
                 for item in expanded:
@@ -189,7 +205,12 @@ class ParseStep(Step):
                 # 每条账单行独立解析。parse_cache 仅供退款关联原单，不可复用为当前行结果
                 # （组合支付会共享交易订单号，复用会导致金额/账户被覆盖并在审核页撞 uuid）。
                 parsed_entry = single_parse_transaction(
-                    row, owner_id, config, None, refund_peer=refund_peer
+                    row,
+                    owner_id,
+                    config,
+                    None,
+                    refund_peer=refund_peer,
+                    similarity_model=similarity_model,
                 )
                 parsed_entry['_original_row'] = row
                 expanded_entries = expand_parsed_entry(parsed_entry, refund_parent_uuids)
