@@ -104,12 +104,25 @@ def test_recurring_generate_review_full_chain(user, temp_assets):
     assert results.data['entries'][0]['source'] == 'recurring'
     assert results.data['review_expires_at'] is None
 
+    # 编辑循环条目：写回循环暂存区，不应报「文件不存在」
+    entry_uuid = results.data['entries'][0]['uuid']
+    edited_text = TEMPLATE.replace('固定模板', '编辑后的模板')
+    edit = client.put(
+        f'/api/translate/entry-review/entries/{entry_uuid}/edit',
+        {'source': 'recurring', 'file_id': None, 'edited_formatted': edited_text},
+        format='json',
+    )
+    assert edit.status_code == status.HTTP_200_OK
+    assert edit.data['source'] == 'recurring'
+    assert edit.data['file_id'] is None
+    assert RecurringBookkeepingService.get_entry(user.id, entry_uuid)['edited_formatted'] == edited_text
+
     confirm = client.post('/api/translate/entry-review/confirm')
     assert confirm.status_code == status.HTTP_200_OK
 
     collect_after = collect_path.read_text(encoding='utf-8')
     assert collect_after.startswith(collect_before)
-    assert TEMPLATE in collect_after
+    assert edited_text in collect_after
 
     assert RecurringBookkeepingService.has_staging(user.id) is False
     assert EntryReviewQueueService.list_refs(user.id) == []

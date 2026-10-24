@@ -772,7 +772,8 @@ class EntryReviewViewSet(APIView):
 
     SOURCE_FILE = 'file'
     SOURCE_COPILOT = 'copilot'
-    VALID_SOURCES = (SOURCE_FILE, SOURCE_COPILOT)
+    SOURCE_RECURRING = 'recurring'
+    VALID_SOURCES = (SOURCE_FILE, SOURCE_COPILOT, SOURCE_RECURRING)
 
     def get_review_task(self, request):
         """返回当前用户的统一条目审核待办（可能为 None）"""
@@ -837,15 +838,34 @@ class EntryReviewViewSet(APIView):
             )
         return None
 
+    def ensure_recurring_editable(self, request):
+        """校验循环待办暂存区可审核：待办 pending、暂存区存在；返回 error_response 或 None"""
+        from project.apps.translate.services.recurring_bookkeeping_service import (
+            RecurringBookkeepingService,
+        )
+
+        task = self.get_review_task(request)
+        if task is None or task.status != 'pending':
+            return Response({'error': '待办任务已完成或已取消'}, status=status.HTTP_400_BAD_REQUEST)
+        if not RecurringBookkeepingService.has_staging(request.user.id):
+            return Response(
+                {'error': '循环待办待审核条目不存在或已失效'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return None
+
     def resolve_source(self, request, data):
         """解析来源并完成对应校验，返回 (source, file_id, error_response)。
 
         - file：沿用 get_parse_file + ensure_editable（含 ParseFile 状态校验）
         - copilot：不查 ParseFile，仅校验待办 / 暂存区 / 是否过期，file_id 恒为 None
+        - recurring：不查 ParseFile，仅校验待办 / 循环暂存区，file_id 恒为 None
         """
         source = self.get_source(request, data)
         if source == self.SOURCE_COPILOT:
             return source, None, self.ensure_copilot_editable(request)
+        if source == self.SOURCE_RECURRING:
+            return source, None, self.ensure_recurring_editable(request)
 
         file_id = (data or {}).get('file_id')
         parse_file, error_response = self.get_parse_file(request, file_id)
@@ -864,6 +884,12 @@ class EntryReviewViewSet(APIView):
             )
 
             return CopilotBookkeepingService.staging_key(user.id)
+        if source == self.SOURCE_RECURRING:
+            from project.apps.translate.services.recurring_bookkeeping_service import (
+                RecurringBookkeepingService,
+            )
+
+            return RecurringBookkeepingService.staging_key(user.id)
         return file_id
 
 
@@ -1119,6 +1145,11 @@ class EntryReviewReparseView(EntryReviewViewSet):
                 {'error': 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if source == self.SOURCE_RECURRING:
+            return Response(
+                {'error': '循环待办条目不支持重新解析，请直接编辑条目文本'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         file_id = request.data.get('file_id')
         parse_file, error_response = self.get_parse_file(request, file_id)
@@ -1246,7 +1277,7 @@ class EntryReviewEditView(EntryReviewViewSet):
         """更新编辑内容
 
         PUT /api/translate/entry-review/entries/{uuid}/edit
-        Body: {"file_id": ..., "edited_formatted": "...", "source": "file|copilot"}
+        Body: {"file_id": ..., "edited_formatted": "...", "source": "file|copilot|recurring"}
         """
         source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
@@ -1317,7 +1348,7 @@ class EntryReviewTagsView(EntryReviewViewSet):
     def patch(self, request, uuid):
         """PATCH /api/translate/entry-review/entries/{uuid}/tags
 
-        Body: {"file_id": ..., "action": "add|remove", "tag_path": "Category/EDUCATION", "source": "file|copilot"}
+        Body: {"file_id": ..., "action": "add|remove", "tag_path": "Category/EDUCATION", "source": "file|copilot|recurring"}
         """
         source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
@@ -1371,7 +1402,7 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
     def put(self, request):
         """PUT /api/translate/entry-review/preview-sync
 
-        Body: {"file_id": ..., "entries": [{"uuid": "...", "edited_formatted": "..."}], "source": "file|copilot"}
+        Body: {"file_id": ..., "entries": [{"uuid": "...", "edited_formatted": "..."}], "source": "file|copilot|recurring"}
         """
         source, file_id, error_response = self.resolve_source(request, request.data)
         if error_response:
@@ -1749,6 +1780,11 @@ class EntryReviewReparseAllView(EntryReviewViewSet):
         if source == self.SOURCE_COPILOT:
             return Response(
                 {'error': 'Copilot 记账条目不支持重新解析，请直接编辑条目文本'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if source == self.SOURCE_RECURRING:
+            return Response(
+                {'error': '循环待办条目不支持重新解析，请直接编辑条目文本'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
