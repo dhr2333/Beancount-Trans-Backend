@@ -311,7 +311,7 @@ class ValidateEntryView(APIView):
 
         response_data = {'edited_formatted': edited_formatted}
         is_valid, validation_error = BeancountValidator.validate_single_entry(
-            edited_formatted or ''
+            edited_formatted or '', check_balance=True
         )
         if not is_valid and validation_error:
             response_data['validation_warning'] = validation_error
@@ -1335,7 +1335,9 @@ class EntryReviewEditView(EntryReviewViewSet):
             'file_id': file_id,
         }
         # 保存后对单条内容做校验，作为即时反馈（不阻断保存）
-        is_valid, validation_error = BeancountValidator.validate_single_entry(content_to_validate or '')
+        is_valid, validation_error = BeancountValidator.validate_single_entry(
+            content_to_validate or '', check_balance=True
+        )
         if not is_valid and validation_error:
             response_data['validation_warning'] = validation_error
 
@@ -1447,7 +1449,9 @@ class EntryReviewPreviewSyncView(EntryReviewViewSet):
         validation_warnings: Dict[str, str] = {}
         for entry in formatted_data:
             content = entry.get('edited_formatted') or ''
-            is_valid, validation_error = BeancountValidator.validate_single_entry(content)
+            is_valid, validation_error = BeancountValidator.validate_single_entry(
+                content, check_balance=True
+            )
             if not is_valid and validation_error:
                 entry_uuid = entry.get('uuid')
                 if entry_uuid:
@@ -1533,9 +1537,16 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 directives = [entry['formatted'].rstrip() for entry in final_entries]
                 formatted_text = '\n\n'.join(directives)
 
-                is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+                is_valid, error_message, _ = BeancountValidator.validate_entries(
+                    formatted_text, check_balance=True
+                )
                 if not is_valid:
-                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(directives)
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(
+                        directives, check_balance=True
+                    )
+                    if not error_entries_indices:
+                        # 整体校验失败但无法逐条定位时，指向首条，避免漏拦后继续写入
+                        error_entries_indices = [(0, error_message or '校验未通过')]
                     error_entries.extend([
                         {
                             'source': source,
@@ -1573,9 +1584,16 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 directives = [entry['formatted'].rstrip() for entry in final_entries]
                 formatted_text = '\n\n'.join(directives)
 
-                is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+                is_valid, error_message, _ = BeancountValidator.validate_entries(
+                    formatted_text, check_balance=True
+                )
                 if not is_valid:
-                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(directives)
+                    _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(
+                        directives, check_balance=True
+                    )
+                    if not error_entries_indices:
+                        # 整体校验失败但无法逐条定位时，指向首条，避免漏拦后继续写入
+                        error_entries_indices = [(0, error_message or '校验未通过')]
                     error_entries.extend([
                         {
                             'source': source,
@@ -1614,12 +1632,19 @@ class EntryReviewConfirmView(EntryReviewViewSet):
                 entry['formatted'].rstrip() for entry in final_entries
             ])
 
-            # 进行 Beancount 语法校验
-            is_valid, error_message, _ = BeancountValidator.validate_entries(formatted_text)
+            # 进行 Beancount 语法与金额校验
+            is_valid, error_message, _ = BeancountValidator.validate_entries(
+                formatted_text, check_balance=True
+            )
             if not is_valid:
                 # 逐条校验以定位错误条目
                 entries_list = [entry['formatted'].rstrip() for entry in final_entries]
-                _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(entries_list)
+                _, _, error_entries_indices = BeancountValidator.validate_multiple_entries(
+                    entries_list, check_balance=True
+                )
+                if not error_entries_indices:
+                    # 整体校验失败但无法逐条定位时，指向首条，避免漏拦后继续写入
+                    error_entries_indices = [(0, error_message or '校验未通过')]
                 error_entries.extend([
                     {
                         'source': source,
@@ -1644,7 +1669,7 @@ class EntryReviewConfirmView(EntryReviewViewSet):
         if error_entries:
             return Response(
                 {
-                    'error': f'Beancount 语法错误: 共 {len(error_entries)} 条格式有误',
+                    'error': f'Beancount 校验未通过: 共 {len(error_entries)} 条存在语法或金额错误',
                     'error_entries': error_entries,
                 },
                 status=status.HTTP_400_BAD_REQUEST

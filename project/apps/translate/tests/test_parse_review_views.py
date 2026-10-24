@@ -683,6 +683,33 @@ class TestEntryReviewPreviewSyncView:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert response.data['error'] == '无权访问该文件'
 
+    def test_preview_sync_returns_amount_validation_warning(
+        self, user, entry_review_task, parse_file
+    ):
+        """金额不平衡时按条目返回 validation_warnings（黄色提示，不阻断同步）"""
+        self.client.force_authenticate(user=user)
+
+        _save_review(parse_file.file_id, [_make_entry('entry-1')])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-1'}])
+
+        unbalanced = (
+            '2025-01-20 * "Bad" "Unbalanced"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test  -99.00 CNY'
+        )
+        response = self.client.put(
+            '/api/translate/entry-review/preview-sync',
+            {
+                'file_id': parse_file.file_id,
+                'entries': [{'uuid': 'entry-1', 'edited_formatted': unbalanced}],
+            },
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert '金额校验未通过' in response.data['validation_warnings']['entry-1']
+        assert response.data['formatted_data'][0]['edited_formatted'] == unbalanced
+
 
 @pytest.mark.django_db
 class TestEntryReviewEditView:
@@ -690,6 +717,33 @@ class TestEntryReviewEditView:
 
     def setup_method(self):
         self.client = APIClient()
+
+    def test_update_entry_edit_amount_warning(self, user, entry_review_task, parse_file):
+        """金额不平衡时返回 validation_warning，保存仍成功"""
+        self.client.force_authenticate(user=user)
+
+        _save_review(parse_file.file_id, [_make_entry('entry-1')])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-1'}])
+
+        unbalanced = (
+            '2025-01-20 * "Bad" "Unbalanced"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test  -99.00 CNY\n'
+        )
+        response = self.client.put(
+            '/api/translate/entry-review/entries/entry-1/edit',
+            {'file_id': parse_file.file_id, 'edited_formatted': unbalanced},
+            format='json',
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert '金额校验未通过' in response.data['validation_warning']
+
+        cached_data = ParseReviewService.get_parse_result(parse_file.file_id)
+        updated_entry = next(
+            (e for e in cached_data['formatted_data'] if e['uuid'] == 'entry-1'), None
+        )
+        assert updated_entry['edited_formatted'] == unbalanced
 
     def test_update_entry_edit_success(self, user, entry_review_task, parse_file, mock_parse_result_data):
         """成功更新编辑内容"""
@@ -887,7 +941,7 @@ class TestEntryReviewConfirmView:
         response = self.client.post('/api/translate/entry-review/confirm')
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Beancount 语法错误' in response.data['error']
+        assert 'Beancount 校验未通过' in response.data['error']
         assert 'error_entries' in response.data
         assert response.data['error_entries'][0]['uuid'] == 'entry-bad'
 
@@ -901,6 +955,69 @@ class TestEntryReviewConfirmView:
         assert EntryReviewQueueService.list_refs(user.id) == [
             {'file_id': parse_file.file_id, 'uuid': 'entry-bad'}
         ]
+
+    @patch('project.utils.file.BeanFileManager.get_bean_file_path')
+    def test_confirm_amount_unbalanced_blocks_write(
+        self, mock_get_bean_path, user, entry_review_task, parse_file, tmp_path,
+    ):
+        """金额不平衡时阻断写入，并定位到具体条目"""
+        self.client.force_authenticate(user=user)
+
+        unbalanced = (
+            '2025-01-20 * "Bad" "Unbalanced"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test  -99.00 CNY\n'
+        )
+        _save_review(parse_file.file_id, [
+            _make_entry('entry-bad', formatted=unbalanced),
+        ])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-bad'}])
+
+        bean_file = tmp_path / 'unbalanced.bean'
+        mock_get_bean_path.return_value = str(bean_file)
+
+        response = self.client.post('/api/translate/entry-review/confirm')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Beancount 校验未通过' in response.data['error']
+        error_entry = response.data['error_entries'][0]
+        assert error_entry['uuid'] == 'entry-bad'
+        assert '金额校验未通过' in error_entry['error_message']
+
+        # 未写盘，状态与队列不变
+        assert not bean_file.exists()
+        parse_file.refresh_from_db()
+        assert parse_file.status == 'pending_review'
+        entry_review_task.refresh_from_db()
+        assert entry_review_task.status == 'pending'
+        assert EntryReviewQueueService.list_refs(user.id) == [
+            {'file_id': parse_file.file_id, 'uuid': 'entry-bad'}
+        ]
+
+    @patch('project.utils.file.BeanFileManager.get_bean_file_path')
+    def test_confirm_one_empty_posting_writes_success(
+        self, mock_get_bean_path, user, entry_review_task, parse_file, tmp_path,
+    ):
+        """一条过账行金额留空由 Beancount 自动平衡，不应误报并应成功写入"""
+        self.client.force_authenticate(user=user)
+
+        one_empty = (
+            '2025-01-20 * "One" "Empty Posting"\n'
+            '    Expenses:Test  100.00 CNY\n'
+            '    Assets:Test\n'
+        )
+        _save_review(parse_file.file_id, [
+            _make_entry('entry-1', formatted=one_empty),
+        ])
+        _enqueue(user, [{'file_id': parse_file.file_id, 'uuid': 'entry-1'}])
+
+        bean_file = tmp_path / 'one_empty.bean'
+        mock_get_bean_path.return_value = str(bean_file)
+
+        response = self.client.post('/api/translate/entry-review/confirm')
+
+        assert response.status_code == status.HTTP_200_OK
+        assert one_empty.rstrip() in bean_file.read_text(encoding='utf-8')
 
     def test_confirm_write_empty_queue(self, user, entry_review_task):
         """队列为空时返回 400"""
@@ -1477,7 +1594,7 @@ class TestEntryReviewConfirmViewCopilot(_CopilotApiTestBase):
         response = self.client.post('/api/translate/entry-review/confirm')
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'Beancount 语法错误' in response.data['error']
+        assert 'Beancount 校验未通过' in response.data['error']
         error_entry = response.data['error_entries'][0]
         assert error_entry['source'] == 'copilot'
         assert error_entry['file_id'] is None

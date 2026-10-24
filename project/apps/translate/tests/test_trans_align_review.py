@@ -74,6 +74,51 @@ class TestValidateEntryView:
         assert response.status_code == 200
         assert response.data.get('validation_warning')
 
+    def test_unbalanced_entry_returns_amount_warning(self, api_client):
+        text = (
+            '2025-01-20 * "Shop" "Item"\n'
+            '    Expenses:Food  10.00 CNY\n'
+            '    Assets:Cash  -9.00 CNY\n'
+        )
+        response = api_client.post(
+            '/api/translate/validate-entry',
+            {'edited_formatted': text},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert '金额校验未通过' in response.data.get('validation_warning', '')
+        assert 'does not balance' in response.data.get('validation_warning', '')
+
+    def test_one_empty_posting_is_valid(self, api_client):
+        """一条过账行金额留空由 Beancount 自动平衡，不应产生 warning"""
+        text = (
+            '2025-01-20 * "Shop" "Item"\n'
+            '    Expenses:Food  10.00 CNY\n'
+            '    Assets:Cash\n'
+        )
+        response = api_client.post(
+            '/api/translate/validate-entry',
+            {'edited_formatted': text},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert 'validation_warning' not in response.data
+
+    def test_price_conversion_entry_is_valid(self, api_client):
+        """带 @ 价格的多币种交易可正常换算，不应产生 warning"""
+        text = (
+            '2025-01-20 * "Shop" "Item"\n'
+            '    Expenses:Food  10.00 USD @ 7.00 CNY\n'
+            '    Assets:Cash  -70.00 CNY\n'
+        )
+        response = api_client.post(
+            '/api/translate/validate-entry',
+            {'edited_formatted': text},
+            format='json',
+        )
+        assert response.status_code == 200
+        assert 'validation_warning' not in response.data
+
 
 class TestFormatStepEnrichedFields:
     def test_format_step_includes_review_fields(self):
