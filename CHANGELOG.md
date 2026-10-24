@@ -1,5 +1,12 @@
 # Changelog
 
+## [6.0.2](https://github.com/dhr2333/Beancount-Trans-Backend/compare/6.0.1...6.0.2) (2026-10-24)
+
+### Bug Fixes
+
+* **entry-review:** 增加金额不平衡提示并阻断确认写入 ([17b6836](https://github.com/dhr2333/Beancount-Trans-Backend/commit/17b6836b158fa38edba3040658135e20b2d07f67))
+* 修复循环待办生成的条目不可编辑的缺陷 ([4502242](https://github.com/dhr2333/Beancount-Trans-Backend/commit/4502242a4d051abd0ce1816008ee0ba1a0cf92a0))
+
 ## [6.0.1](https://github.com/dhr2333/Beancount-Trans-Backend/compare/6.0.0...6.0.1) (2026-10-19)
 
 ### Bug Fixes
